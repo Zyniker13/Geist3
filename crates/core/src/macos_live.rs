@@ -12,6 +12,7 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use crate::collector::{CollectError, Collector};
 use crate::macos::{core_times, parse_hostinfo, parse_processes, sample_from_parts};
+use crate::macos_power::MacOsPower;
 use crate::model::{CpuTimes, Sample};
 
 /// Reads the live macOS host through Mach, libproc and sysctl.
@@ -25,6 +26,7 @@ use crate::model::{CpuTimes, Sample};
 pub struct MacOsCollector {
     prev: Option<Prev>,
     hostname: Option<String>,
+    power: MacOsPower,
 }
 
 /// State from the previous sample needed for rates.
@@ -100,6 +102,7 @@ impl Collector for MacOsCollector {
                 origin: source.origin,
                 what: source.what,
             })?;
+        self.power.sample(&mut sample.sensors);
         for process in &mut sample.processes {
             if let Some(cpu) = cpu_by_pid.get(&process.pid) {
                 process.cpu_percent = *cpu;

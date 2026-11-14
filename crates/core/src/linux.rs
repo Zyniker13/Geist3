@@ -863,6 +863,10 @@ mod live {
                     temps,
                     fans,
                     battery,
+                    // No unprivileged GPU/system power source is wired up on
+                    // Linux yet; hwmon power inputs are future work.
+                    gpu_watts: Metric::unavailable(Unit::Watts),
+                    system_watts: Metric::unavailable(Unit::Watts),
                 },
             })
         }

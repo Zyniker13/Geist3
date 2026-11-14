@@ -464,6 +464,8 @@ mod tests {
                 temps: Vec::new(),
                 fans: Vec::new(),
                 battery: None,
+                gpu_watts: Metric::unavailable(Unit::Watts),
+                system_watts: Metric::unavailable(Unit::Watts),
             },
         }
     }

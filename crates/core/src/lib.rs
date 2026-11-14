@@ -15,6 +15,8 @@ pub mod linux;
 pub mod macos;
 #[cfg(target_os = "macos")]
 pub mod macos_live;
+#[cfg(target_os = "macos")]
+pub mod macos_power;
 pub mod model;
 pub mod power;
 
