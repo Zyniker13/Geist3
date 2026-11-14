@@ -3,13 +3,15 @@
 Updated after every working session.
 
 - **Current milestone:** M3 (Full TUI Parity).
-- **Last done:** Fixture replay now carries the recorded io totals (`7aea746`): the per-pid entry whitelist admits `io`, replayed samples get read/write byte totals with rates unset, and the render test asserts rates stay unset instead of assuming fixtures have no io.
-- **Next step:** M3 batch 7 — setup screens, mouse, Apple Silicon screen with charts, config file, disk/network/thermal panels; leftover parity items (`k` opens the signal menu, `-p` PID filter).
-- **Blocked on:** nothing.
+|- **Last done:** M3 batch 7a (`f3b9ad5`): the `-p` pid filter (`ztop -p 7,42`) narrows the table in flat and tree view, the status line shows `pids:N`, and `K` opens the signal menu alongside F9 (`k` stays cursor-up per decision 0012). Six tests; gate plus both cross-target clippies green.
+|- **Next step:** M3 batch 7b — Apple Silicon screen with charts.
+|- **Blocked on:** nothing.
 
 ## Log
 
 Newest first. One or two lines per session: what changed, what is next.
+
+|- 2026-11-14: M3 batch 7a (`f3b9ad5`): the `-p` pid filter (`ztop -p 7,42`) narrows the table in flat and tree view, the status line shows `pids:N`, and `K` opens the signal menu alongside F9 (`k` stays cursor-up per decision 0012). Six tests; gate plus both cross-target clippies green.
 
 - 2026-11-14: io replay fix (`7aea746`): the fixture replay whitelist admits `io`, so replayed samples carry the recorded `/proc/<pid>/io` totals with rates unset; the render test now asserts rates stay unset instead of assuming fixtures carry no io, and the integration test tolerates io entries whose process left before the recording's per-pid pass. Gate plus both cross-target clippies green. Next: setup screens, mouse, Apple Silicon screen, config file.
 
