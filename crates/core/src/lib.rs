@@ -10,6 +10,7 @@ pub mod capture;
 #[cfg(target_os = "macos")]
 mod capture_macos;
 pub mod collector;
+pub mod control;
 pub mod fixture;
 pub mod linux;
 pub mod macos;

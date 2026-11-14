@@ -24,6 +24,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Cell, Gauge, Paragraph, Row, Table};
 
 use ztop_core::collector::{CollectError, Collector};
+use ztop_core::control::{self, Control, Plan};
 use ztop_core::model::{Memory, Metric, Process, Sample, Unit};
 
 /// How often the event loop samples and redraws when no key is pressed.
@@ -96,9 +97,14 @@ pub struct Ui {
     /// Incremental search prompt. `Some` means the prompt is open; the
     /// cursor follows the next row whose name matches the pattern.
     pub search: Option<String>,
-    /// Pids tagged with Space (and `c` for children). Actions in later
-    /// milestones apply to every tagged process at once.
+    /// Pids tagged with Space (and `c` for children). Actions apply to
+    /// every tagged process at once.
     pub tags: std::collections::BTreeSet<u32>,
+    /// The open signal menu's selected row index, when the menu is open.
+    pub menu: Option<usize>,
+    /// The last control action's outcome, shown in the status line until
+    /// the next sample arrives.
+    pub notice: Option<String>,
 }
 
 impl Default for Ui {
@@ -116,6 +122,8 @@ impl Default for Ui {
             collapsed: std::collections::BTreeSet::new(),
             search: None,
             tags: std::collections::BTreeSet::new(),
+            menu: None,
+            notice: None,
         }
     }
 }
@@ -283,6 +291,71 @@ impl Ui {
     /// Clear every tag (`U`).
     pub fn untag_all(&mut self) {
         self.tags.clear();
+    }
+
+    /// Every pid a control action applies to: the tagged set when any
+    /// process is tagged, otherwise the cursor's process.
+    fn targets(&self) -> Vec<u32> {
+        if !self.tags.is_empty() {
+            self.tags.iter().copied().collect()
+        } else {
+            self.cursor.iter().copied().collect()
+        }
+    }
+
+    /// Open the signal menu (F9) over the tag set, or the cursor's process
+    /// when nothing is tagged. Any open prompt closes first; without a
+    /// target the menu stays closed.
+    pub fn open_menu(&mut self) {
+        self.filter = None;
+        self.search = None;
+        if !self.targets().is_empty() {
+            self.menu = Some(0);
+        }
+    }
+
+    /// Close the signal menu without acting (Esc).
+    pub fn close_menu(&mut self) {
+        self.menu = None;
+    }
+
+    /// Move the menu selection down, wrapping at the end.
+    pub fn menu_next(&mut self) {
+        if let Some(selected) = self.menu {
+            let count = control::common_signals().len();
+            self.menu = Some((selected + 1) % count);
+        }
+    }
+
+    /// Move the menu selection up, wrapping at the top.
+    pub fn menu_prev(&mut self) {
+        if let Some(selected) = self.menu {
+            let count = control::common_signals().len();
+            self.menu = Some((selected + count - 1) % count);
+        }
+    }
+
+    /// Turn the menu's selection into a signal plan over the targets and
+    /// close the menu; `None` when the menu is closed or the targets
+    /// vanished while it was open.
+    pub fn confirm_menu(&mut self) -> Option<Plan> {
+        let selected = self.menu.take()?;
+        let (_, sig) = control::common_signals()[selected];
+        let pids = self.targets();
+        (!pids.is_empty()).then_some(Plan {
+            pids,
+            action: Control::Signal(sig),
+        })
+    }
+
+    /// A plan to shift every target's nice value by `delta` (F7 raises
+    /// priority, F8 lowers it); `None` when there is no target.
+    pub fn renice_plan(&self, delta: i32) -> Option<Plan> {
+        let pids = self.targets();
+        (!pids.is_empty()).then_some(Plan {
+            pids,
+            action: Control::Renice(delta),
+        })
     }
 
     /// Cycle the user filter through the users present in the current
@@ -546,6 +619,8 @@ impl Ui {
                 }
                 self.sample = Some(sample);
                 self.error = None;
+                // A control notice lives for exactly one refresh.
+                self.notice = None;
             }
             Err(err) => self.error = Some(err.to_string()),
         }
@@ -624,6 +699,17 @@ fn event_loop(terminal: &mut Tui, collector: &mut dyn Collector) -> io::Result<(
                         KeyCode::F(3) if ui.search.is_some() => ui.search_next(),
                         KeyCode::Enter if ui.search.is_some() => ui.close_search(),
                         KeyCode::Char(c) if ui.search.is_some() => ui.search_push(c),
+                        // While the signal menu is open the keys drive it:
+                        // Esc closes, j/k move, Enter sends to the targets.
+                        KeyCode::Esc if ui.menu.is_some() => ui.close_menu(),
+                        KeyCode::Char('j') | KeyCode::Down if ui.menu.is_some() => ui.menu_next(),
+                        KeyCode::Char('k') | KeyCode::Up if ui.menu.is_some() => ui.menu_prev(),
+                        KeyCode::Enter if ui.menu.is_some() => {
+                            if let Some(plan) = ui.confirm_menu() {
+                                run_plan(&mut ui, &plan);
+                            }
+                        }
+                        _ if ui.menu.is_some() => {}
                         KeyCode::Char('q') | KeyCode::Esc => return Ok(()),
                         KeyCode::Char('i') => ui.toggle_direction(),
                         KeyCode::F(3) => ui.toggle_search(),
@@ -632,6 +718,17 @@ fn event_loop(terminal: &mut Tui, collector: &mut dyn Collector) -> io::Result<(
                         KeyCode::Char(' ') => ui.toggle_tag(),
                         KeyCode::Char('c') => ui.tag_children(),
                         KeyCode::Char('U') => ui.untag_all(),
+                        KeyCode::F(9) => ui.open_menu(),
+                        KeyCode::F(7) => {
+                            if let Some(plan) = ui.renice_plan(-1) {
+                                run_plan(&mut ui, &plan);
+                            }
+                        }
+                        KeyCode::F(8) => {
+                            if let Some(plan) = ui.renice_plan(1) {
+                                run_plan(&mut ui, &plan);
+                            }
+                        }
                         KeyCode::Char('f') | KeyCode::Char('F') => ui.toggle_follow(),
                         KeyCode::F(5) => ui.toggle_tree(),
                         KeyCode::Enter => ui.toggle_collapse(),
@@ -645,6 +742,31 @@ fn event_loop(terminal: &mut Tui, collector: &mut dyn Collector) -> io::Result<(
             ui.apply(collector.sample());
         }
     }
+}
+
+/// Execute a control plan against the real processes and record the
+/// outcome in the status line for one refresh.
+fn run_plan(ui: &mut Ui, plan: &Plan) {
+    let results = control::execute(plan);
+    let ok = results.iter().filter(|(_, result)| result.is_ok()).count();
+    let failed = results.len() - ok;
+    let label = match plan.action {
+        Control::Signal(sig) => format!("signal {}", control::signal_name(sig)),
+        Control::Renice(delta) => format!("renice {delta:+}"),
+    };
+    ui.notice = Some(if failed == 0 {
+        format!("{label}: {ok} pid(s)")
+    } else {
+        let mut notice = format!("{label}: {ok} ok, {failed} failed");
+        if let Some(first) = results
+            .into_iter()
+            .filter_map(|(_, result)| result.err())
+            .next()
+        {
+            notice.push_str(&format!(": {first}"));
+        }
+        notice
+    });
 }
 
 /// Render `ui` into `width` x `height` lines of text, exactly as a real
@@ -676,6 +798,34 @@ pub fn draw(frame: &mut Frame, ui: &Ui) {
     let areas = Layout::vertical([header, Constraint::Min(1)]).split(frame.area());
     draw_header(frame, ui, areas[0]);
     draw_processes(frame, ui, areas[1]);
+    if ui.menu.is_some() {
+        draw_menu(frame, ui, frame.area());
+    }
+}
+
+/// The signal menu: a bordered popup centered over the screen, one row per
+/// signal with `>` marking the selection. Enter sends, Esc cancels.
+fn draw_menu(frame: &mut Frame, ui: &Ui, area: ratatui::layout::Rect) {
+    let signals = control::common_signals();
+    let width = 44.min(area.width);
+    let height = (signals.len() as u16 + 3).min(area.height);
+    let x = area.x + area.width.saturating_sub(width) / 2;
+    let y = area.y + area.height.saturating_sub(height) / 2;
+    let rect = ratatui::layout::Rect {
+        x,
+        y,
+        width,
+        height,
+    };
+    frame.render_widget(ratatui::widgets::Clear, rect);
+    let selected = ui.menu.unwrap_or(0);
+    let mut lines = vec![Line::from("Send signal (Enter sends, Esc cancels)").bold()];
+    for (index, (name, number)) in signals.iter().enumerate() {
+        let marker = if index == selected { "> " } else { "  " };
+        lines.push(Line::from(format!("{marker}{name} ({number})")));
+    }
+    let menu = Paragraph::new(lines).block(Block::new().borders(Borders::ALL));
+    frame.render_widget(menu, rect);
 }
 
 /// True when the sample carries any sensor reading worth a header row.
@@ -898,8 +1048,11 @@ fn status_line(ui: &Ui) -> Line<'static> {
         if tagged > 0 {
             parts.push(format!("tagged:{tagged}"));
         }
+        if let Some(notice) = &ui.notice {
+            parts.push(notice.clone());
+        }
         parts.push(format!(
-            "q: quit · tab: sort {} · i: reverse · f3: search · f4: filter · u: user · space: tag · j/k: select · f: follow · f5: tree · enter: fold",
+            "q: quit · tab: sort {} · i: reverse · f3: search · f4: filter · u: user · space: tag · j/k: select · f: follow · f5: tree · enter: fold · f9: signal · f7/f8: renice",
             sort_label(ui.sort, ui.descending)
         ));
         Line::from(parts.join(" · "))
@@ -1586,6 +1739,121 @@ mod tests {
     }
 
     #[test]
+    fn the_signal_menu_targets_the_tag_set_or_the_cursor() {
+        let mut ui = ui_with(Some(sample()), None);
+        // Nothing tagged and nothing selected: the menu stays closed.
+        ui.open_menu();
+        assert!(ui.menu.is_none());
+        // Opening over a process offers the signals from the top.
+        ui.cursor = Some(4);
+        ui.open_menu();
+        assert_eq!(ui.menu, Some(0));
+        // Enter turns the selection into a plan over the cursor's process.
+        ui.menu_next();
+        ui.menu_next();
+        assert_eq!(ui.menu, Some(2));
+        let plan = ui.confirm_menu().expect("plan");
+        assert_eq!(plan.pids, vec![4]);
+        assert_eq!(plan.action, Control::Signal(3), "the third entry is QUIT");
+        assert!(ui.menu.is_none(), "Enter closes the menu");
+        // The tag set takes over from the cursor, in pid order.
+        ui.tags.insert(2);
+        ui.tags.insert(3);
+        ui.open_menu();
+        let plan = ui.confirm_menu().expect("plan");
+        assert_eq!(plan.pids, vec![2, 3]);
+    }
+
+    #[test]
+    fn the_menu_wraps_and_cancels() {
+        let mut ui = ui_with(Some(sample()), None);
+        ui.cursor = Some(1);
+        ui.open_menu();
+        let count = control::common_signals().len();
+        ui.menu_prev();
+        assert_eq!(ui.menu, Some(count - 1), "wraps upward");
+        ui.menu_next();
+        assert_eq!(ui.menu, Some(0), "wraps back down");
+        ui.close_menu();
+        assert!(ui.confirm_menu().is_none(), "a closed menu never acts");
+    }
+
+    #[test]
+    fn renice_plans_target_the_tags_or_the_cursor() {
+        let mut ui = ui_with(Some(sample()), None);
+        assert!(ui.renice_plan(-1).is_none(), "no target, no plan");
+        ui.cursor = Some(4);
+        assert_eq!(
+            ui.renice_plan(-1),
+            Some(Plan {
+                pids: vec![4],
+                action: Control::Renice(-1),
+            })
+        );
+        // The tag set wins over the cursor, in pid order.
+        ui.tags.insert(3);
+        ui.tags.insert(2);
+        assert_eq!(
+            ui.renice_plan(1),
+            Some(Plan {
+                pids: vec![2, 3],
+                action: Control::Renice(1),
+            })
+        );
+    }
+
+    #[test]
+    fn a_plan_reports_its_outcome_in_the_notice() {
+        let mut ui = ui_with(Some(sample()), None);
+        // Signal 0 performs the permission check but sends nothing, so the
+        // real plan path runs without disturbing anything.
+        run_plan(
+            &mut ui,
+            &Plan {
+                pids: vec![std::process::id()],
+                action: Control::Signal(0),
+            },
+        );
+        let notice = ui.notice.clone().expect("notice");
+        assert!(notice.contains("signal SIG0"), "{notice}");
+        assert!(notice.contains("1 pid(s)"), "{notice}");
+        // A pid that cannot be acted on is reported with the first failure.
+        run_plan(
+            &mut ui,
+            &Plan {
+                pids: vec![399_999_999],
+                action: Control::Renice(-1),
+            },
+        );
+        let notice = ui.notice.clone().expect("notice");
+        assert!(notice.contains("renice -1"), "{notice}");
+        assert!(notice.contains("0 ok, 1 failed"), "{notice}");
+        // The notice clears with the next sample.
+        ui.apply(Ok(sample()));
+        assert!(ui.notice.is_none());
+    }
+
+    #[test]
+    fn the_menu_renders_as_a_centered_popup() {
+        let mut ui = ui_with(Some(sample()), None);
+        ui.cursor = Some(1);
+        ui.menu = Some(5);
+        let rows = render(&ui, 80, 24);
+        assert!(
+            rows.iter().any(|row| row.contains("Send signal")),
+            "the popup title shows: {rows:?}"
+        );
+        assert!(
+            rows.iter().any(|row| row.contains("> TERM")),
+            "the selection marker shows: {rows:?}"
+        );
+        assert!(
+            rows.iter().any(|row| row.contains("  KILL (9)")),
+            "unselected rows keep the two-space indent: {rows:?}"
+        );
+    }
+
+    #[test]
     fn apply_keeps_the_last_good_sample_on_error() {
         let mut ui = Ui::new();
         ui.apply(Err(CollectError::Unavailable {
@@ -1645,6 +1913,18 @@ mod tests {
             ui.filter_push(c);
         }
         println!("---- cursor on pid 5, follow on, filter prompt open ----");
+        for (index, row) in render(&ui, 80, 24).iter().enumerate() {
+            println!("{index:2}|{row}");
+        }
+        // A third frame with the signal menu open over two tagged processes.
+        let mut ui = ui_with(Some(sample()), None);
+        ui.tags.insert(4);
+        ui.tags.insert(5);
+        ui.open_menu();
+        for _ in 0..4 {
+            ui.menu_next();
+        }
+        println!("---- tags on 4+5, signal menu open, KILL selected ----");
         for (index, row) in render(&ui, 80, 24).iter().enumerate() {
             println!("{index:2}|{row}");
         }
