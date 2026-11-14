@@ -7,62 +7,71 @@ on:
       - '.github/workflows/record.yml'
       - 'crates/core/src/capture.rs'
       - 'crates/core/src/fixture.rs'
+      - 'scripts/scrub-fixture.py'
 permissions:
   contents: read
 jobs:
   record-linux-x86_64:
     name: Record fixture (x86_64)
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          fetch-depth: 0
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         with:
           toolchain: stable
       - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
-      - name: Build and record a fixture
+      - name: Build, record, scrub
         run: |
           cargo build -p ztop
           ./target/debug/ztop capture --out "$RUNNER_TEMP/fixture"
-          tar -czf - -C "$RUNNER_TEMP/fixture" . | base64 -w 76 > "$RUNNER_TEMP/fixture.b64"
-          echo "entries: $(ls "$RUNNER_TEMP/fixture/data" | wc -l)"
-          echo "b64 bytes: $(wc -c < "$RUNNER_TEMP/fixture.b64")"
-          sha256sum "$RUNNER_TEMP/fixture.b64"
-      - name: Publish the fixture to the job summary
+          python3 scripts/scrub-fixture.py "$RUNNER_TEMP/fixture" "$RUNNER_TEMP/scrubbed" --procs 12
+          echo "raw entries: $(ls "$RUNNER_TEMP/fixture/data" | wc -l)"
+          echo "kept entries: $(ls "$RUNNER_TEMP/scrubbed/data" | wc -l)"
+          rm -rf tests/fixtures/linux-x86_64
+          mkdir -p tests/fixtures
+          cp -R "$RUNNER_TEMP/scrubbed" tests/fixtures/linux-x86_64
+          find tests/fixtures/linux-x86_64 -type f | sort | xargs sha256sum | sha256sum
+      - name: Commit the fixture
         run: |
-          {
-            echo "## ztop fixture (x86_64)"
-            echo
-            echo "base64 of tar.gz; decode with: base64 -d | tar -xzf -"
-            echo
-            echo '```'
-            cat "$RUNNER_TEMP/fixture.b64"
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add tests/fixtures/linux-x86_64
+          git commit -m "Record the Linux x86_64 fixture from CI"
+          git push origin main
   record-linux-aarch64:
     name: Record fixture (aarch64)
+    needs: record-linux-x86_64
     runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          fetch-depth: 0
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         with:
           toolchain: stable
       - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
-      - name: Build and record a fixture
+      - name: Build, record, scrub
         run: |
           cargo build -p ztop
           ./target/debug/ztop capture --out "$RUNNER_TEMP/fixture"
-          tar -czf - -C "$RUNNER_TEMP/fixture" . | base64 -w 76 > "$RUNNER_TEMP/fixture.b64"
-          echo "entries: $(ls "$RUNNER_TEMP/fixture/data" | wc -l)"
-          echo "b64 bytes: $(wc -c < "$RUNNER_TEMP/fixture.b64")"
-          sha256sum "$RUNNER_TEMP/fixture.b64"
-      - name: Publish the fixture to the job summary
+          python3 scripts/scrub-fixture.py "$RUNNER_TEMP/fixture" "$RUNNER_TEMP/scrubbed" --procs 12
+          echo "raw entries: $(ls "$RUNNER_TEMP/fixture/data" | wc -l)"
+          echo "kept entries: $(ls "$RUNNER_TEMP/scrubbed/data" | wc -l)"
+          rm -rf tests/fixtures/linux-aarch64
+          mkdir -p tests/fixtures
+          cp -R "$RUNNER_TEMP/scrubbed" tests/fixtures/linux-aarch64
+          find tests/fixtures/linux-aarch64 -type f | sort | xargs sha256sum | sha256sum
+      - name: Commit the fixture
         run: |
-          {
-            echo "## ztop fixture (aarch64)"
-            echo
-            echo "base64 of tar.gz; decode with: base64 -d | tar -xzf -"
-            echo
-            echo '```'
-            cat "$RUNNER_TEMP/fixture.b64"
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add tests/fixtures/linux-aarch64
+          git commit -m "Record the Linux aarch64 fixture from CI"
+          git pull --rebase origin main
+          git push origin main
