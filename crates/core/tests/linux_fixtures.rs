@@ -3,8 +3,11 @@
 //! Per-field checks of the Linux parsers against the recorded fixtures.
 //!
 //! The fixtures under `tests/fixtures/` are verbatim captures of real
-//! Linux hosts with per-process names scrubbed (decision 0007), so every
-//! parsed field can be pinned to the recorded bytes. These tests run on
+//! Linux hosts with per-process names scrubbed (decision 0007). Each
+//! expected value is re-derived from the raw `/proc` text inside the
+//! fixture itself, so the checks hold for any re-recorded capture while
+//! still catching parser drift: a wrong column or unit shows up as a
+//! mismatch against the test's independent parse. These tests run on
 //! every machine, not just Linux.
 
 use std::collections::HashSet;
@@ -19,6 +22,128 @@ fn fixture_dir(name: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/fixtures")
         .join(name)
+}
+
+/// Reads one recorded `/proc` entry from the fixture's `data` directory.
+fn data(dir: &Path, entry: &str) -> String {
+    std::fs::read_to_string(dir.join("data").join(entry)).unwrap()
+}
+
+/// The tick columns of one `cpuN` line of `/proc/stat`, with its core
+/// index. Returns `None` for the aggregate `cpu` line, which has no
+/// digits after the prefix.
+fn cpu_line_ticks(line: &str) -> Option<(usize, Vec<f64>)> {
+    let rest = line.strip_prefix("cpu")?;
+    let digits = rest.chars().take_while(char::is_ascii_digit).count();
+    if digits == 0 {
+        return None;
+    }
+    let index: usize = rest[..digits].parse().ok()?;
+    let ticks = rest[digits..]
+        .split_whitespace()
+        .map(|tick| tick.parse::<f64>().ok())
+        .collect::<Option<Vec<f64>>>()?;
+    Some((index, ticks))
+}
+
+/// [`CpuTimes`] from the nine tick columns: the kernel's `USER_HZ` is a
+/// fixed 100 ticks per second, so seconds are ticks divided by 100.
+fn times_from_ticks(ticks: &[f64]) -> CpuTimes {
+    let seconds = |column: usize| ticks[column] / 100.0;
+    CpuTimes {
+        user: seconds(0),
+        nice: seconds(1),
+        system: seconds(2),
+        idle: seconds(3),
+        io_wait: seconds(4),
+        irq: seconds(5),
+        soft_irq: seconds(6),
+        steal: seconds(7),
+        guest: seconds(8),
+    }
+}
+
+/// One numeric `meminfo` value, in KiB as recorded.
+fn meminfo_kib(meminfo: &str, key: &str) -> u64 {
+    for line in meminfo.lines() {
+        if let Some((field, value)) = line.split_once(':') {
+            if field.trim() == key {
+                let kib = value
+                    .split_whitespace()
+                    .next()
+                    .unwrap_or_else(|| panic!("meminfo: {key} has no value"));
+                return kib.parse().unwrap_or_else(|_| panic!("meminfo: {key}"));
+            }
+        }
+    }
+    panic!("meminfo is missing {key}");
+}
+
+/// The trimmed value of one `key:` line of a `status` file.
+fn status_field<'a>(status: &'a str, key: &str) -> Option<&'a str> {
+    status.lines().find_map(|line| {
+        let (field, value) = line.split_once(':')?;
+        (field.trim() == key).then_some(value.trim())
+    })
+}
+
+/// A `status` memory value like `   25700 kB`, converted to bytes.
+fn kib_field(value: &str) -> u64 {
+    value
+        .split_whitespace()
+        .next()
+        .unwrap_or_else(|| panic!("status memory value has no number"))
+        .parse::<u64>()
+        .unwrap_or_else(|_| panic!("status memory value is not a number"))
+        * 1024
+}
+
+/// The first three fields of `/proc/loadavg`.
+fn load_values(text: &str) -> [f64; 3] {
+    let mut fields = text.split_whitespace();
+    [
+        fields.next().unwrap().parse().unwrap(),
+        fields.next().unwrap().parse().unwrap(),
+        fields.next().unwrap().parse().unwrap(),
+    ]
+}
+
+/// One `diskstats` line as the documented layout defines it: the device
+/// name in the third field and counters after it, of which the third
+/// and seventh are the 512-byte sectors read and written. Lines that do
+/// not follow the layout are skipped, exactly like the collector does.
+fn disk_line(line: &str) -> Option<(String, u64, u64)> {
+    let mut fields = line.split_whitespace();
+    let name = fields.nth(2)?.to_string();
+    let counters = fields
+        .map(|field| field.parse::<u64>().ok())
+        .collect::<Option<Vec<u64>>>()?;
+    if counters.len() < 7 {
+        return None;
+    }
+    Some((name, counters[2], counters[6]))
+}
+
+/// One `net/dev` data line (the two header lines must already be
+/// removed): interface name, then receive bytes, receive packets, send
+/// bytes and send packets. Malformed lines are skipped, like the
+/// collector does.
+fn net_line(line: &str) -> Option<(String, u64, u64, u64, u64)> {
+    let (name, counters) = line.split_once(':')?;
+    let counters: Vec<u64> = counters
+        .split_whitespace()
+        .map_while(|field| field.parse().ok())
+        .collect();
+    if counters.len() < 10 {
+        return None;
+    }
+    Some((
+        name.trim().to_string(),
+        counters[0],
+        counters[1],
+        counters[8],
+        counters[9],
+    ))
 }
 
 #[test]
@@ -82,151 +207,186 @@ fn core_times_fit_inside_the_machine_uptime() {
 }
 
 #[test]
-fn x86_64_fixture_fields_match_the_recording() {
-    let sample = sample_from_fixture(&fixture_dir("linux-x86_64")).unwrap();
+fn fields_match_the_recording_for_each_arch() {
+    for name in ARCHES {
+        let dir = fixture_dir(name);
+        let sample = sample_from_fixture(&dir).unwrap();
 
-    assert_eq!(
-        sample.cpu.cores[0],
-        CpuTimes {
-            user: 14.57,
-            nice: 0.0,
-            system: 6.65,
-            idle: 38.11,
-            io_wait: 0.98,
-            irq: 0.0,
-            soft_irq: 0.14,
-            steal: 0.0,
-            guest: 0.0,
+        // CPU: every core's times re-derived from the raw tick columns.
+        let stat = data(&dir, "proc-stat");
+        let core_times: Vec<CpuTimes> = stat
+            .lines()
+            .filter_map(|line| cpu_line_ticks(line).map(|(_, ticks)| times_from_ticks(&ticks)))
+            .collect();
+        assert_eq!(sample.cpu.cores, core_times, "{name}: cpu times");
+
+        // Memory, straight from `meminfo` in its recorded KiB.
+        let meminfo = data(&dir, "proc-meminfo");
+        let bytes = |key: &str| meminfo_kib(&meminfo, key) as f64 * 1024.0;
+        let total = bytes("MemTotal");
+        assert_eq!(
+            sample.memory.total,
+            Metric::available(total, Unit::Bytes),
+            "{name}"
+        );
+        assert_eq!(
+            sample.memory.used,
+            Metric::available(total - bytes("MemAvailable"), Unit::Bytes),
+            "{name}: used is total minus available"
+        );
+        assert_eq!(
+            sample.memory.free,
+            Metric::available(bytes("MemFree"), Unit::Bytes),
+            "{name}"
+        );
+        assert_eq!(
+            sample.memory.swap_total,
+            Metric::available(bytes("SwapTotal"), Unit::Bytes),
+            "{name}"
+        );
+        assert_eq!(
+            sample.memory.swap_used,
+            Metric::available(bytes("SwapTotal") - bytes("SwapFree"), Unit::Bytes),
+            "{name}"
+        );
+        assert_eq!(
+            sample.memory.compressed,
+            Metric::unavailable(Unit::Bytes),
+            "{name}: compressed memory is a macOS concept"
+        );
+
+        // Load and uptime, as recorded.
+        assert_eq!(
+            sample.load_avg,
+            load_values(&data(&dir, "proc-loadavg")),
+            "{name}"
+        );
+        let uptime: f64 = data(&dir, "proc-uptime")
+            .split_whitespace()
+            .next()
+            .unwrap()
+            .parse()
+            .unwrap();
+        assert_eq!(
+            sample.uptime,
+            Metric::available(uptime, Unit::Seconds),
+            "{name}"
+        );
+
+        // Disks: every well-formed `diskstats` line, sector counts in
+        // 512-byte units.
+        let diskstats = data(&dir, "proc-diskstats");
+        let disks: Vec<(String, u64, u64)> = diskstats.lines().filter_map(disk_line).collect();
+        assert_eq!(
+            sample.disks.len(),
+            disks.len(),
+            "{name}: every well-formed diskstats line is a disk"
+        );
+        for (disk_name, read_sectors, write_sectors) in &disks {
+            let disk = sample
+                .disks
+                .iter()
+                .find(|disk| &disk.name == disk_name)
+                .unwrap_or_else(|| panic!("{name}: disk {disk_name} missing"));
+            assert_eq!(
+                disk.read_bytes,
+                read_sectors * 512,
+                "{name}: {disk_name} reads"
+            );
+            assert_eq!(
+                disk.write_bytes,
+                write_sectors * 512,
+                "{name}: {disk_name} writes"
+            );
         }
-    );
 
-    assert_eq!(
-        sample.memory.total,
-        Metric::available(16366640.0 * 1024.0, Unit::Bytes)
-    );
-    assert_eq!(
-        sample.memory.used,
-        Metric::available(1417932.0 * 1024.0, Unit::Bytes)
-    );
-    assert_eq!(
-        sample.memory.free,
-        Metric::available(12997176.0 * 1024.0, Unit::Bytes)
-    );
-    assert_eq!(
-        sample.memory.swap_total,
-        Metric::available(3145724.0 * 1024.0, Unit::Bytes)
-    );
-    assert_eq!(sample.memory.swap_used, Metric::available(0.0, Unit::Bytes));
-    assert_eq!(
-        sample.memory.compressed,
-        Metric::unavailable(Unit::Bytes),
-        "compressed memory is a macOS concept"
-    );
-
-    assert_eq!(sample.load_avg, [1.93, 0.57, 0.20]);
-    assert_eq!(sample.uptime, Metric::available(61.77, Unit::Seconds));
-
-    assert_eq!(sample.disks.len(), 13);
-    let sda = sample.disks.iter().find(|disk| disk.name == "sda").unwrap();
-    assert_eq!(sda.read_bytes, 1474182 * 512);
-    assert_eq!(sda.write_bytes, 7098027 * 512);
-
-    assert_eq!(sample.net.len(), 4);
-    let eth0 = sample
-        .net
-        .iter()
-        .find(|iface| iface.name == "eth0")
-        .unwrap();
-    assert_eq!(eth0.rx_bytes, 265744198);
-    assert_eq!(eth0.rx_packets, 29836);
-    assert_eq!(eth0.tx_bytes, 1193601);
-    assert_eq!(eth0.tx_packets, 10693);
-
-    let one = sample
-        .processes
-        .iter()
-        .find(|process| process.pid == 1)
-        .unwrap();
-    assert_eq!(one.name, "proc-a-1");
-    assert_eq!(one.state, "S");
-    assert_eq!(one.parent, Some(0));
-    assert_eq!(one.user, "0");
-    assert_eq!(one.virtual_bytes, 25700 * 1024);
-    assert_eq!(one.resident_bytes, 17044 * 1024);
-    assert_eq!(one.threads, 1);
-    assert_eq!(one.cpu_percent, 0.0);
-    let expected_mem_percent = 17044.0 / 16366640.0 * 100.0;
-    assert!((one.mem_percent - expected_mem_percent).abs() < 1e-9);
-}
-
-#[test]
-fn aarch64_fixture_fields_match_the_recording() {
-    let sample = sample_from_fixture(&fixture_dir("linux-aarch64")).unwrap();
-
-    assert_eq!(
-        sample.cpu.cores[0],
-        CpuTimes {
-            user: 17.38,
-            nice: 0.0,
-            system: 4.30,
-            idle: 58.82,
-            io_wait: 2.74,
-            irq: 0.0,
-            soft_irq: 0.07,
-            steal: 0.0,
-            guest: 0.0,
+        // Network: every well-formed `net/dev` line.
+        let netdev = data(&dir, "proc-net-dev");
+        let ifaces: Vec<(String, u64, u64, u64, u64)> =
+            netdev.lines().skip(2).filter_map(net_line).collect();
+        assert_eq!(
+            sample.net.len(),
+            ifaces.len(),
+            "{name}: every well-formed net/dev line is an interface"
+        );
+        for (iface_name, rx_bytes, rx_packets, tx_bytes, tx_packets) in &ifaces {
+            let iface = sample
+                .net
+                .iter()
+                .find(|iface| &iface.name == iface_name)
+                .unwrap_or_else(|| panic!("{name}: interface {iface_name} missing"));
+            assert_eq!(iface.rx_bytes, *rx_bytes, "{name}: {iface_name}");
+            assert_eq!(iface.rx_packets, *rx_packets, "{name}: {iface_name}");
+            assert_eq!(iface.tx_bytes, *tx_bytes, "{name}: {iface_name}");
+            assert_eq!(iface.tx_packets, *tx_packets, "{name}: {iface_name}");
         }
-    );
 
-    assert_eq!(
-        sample.memory.total,
-        Metric::available(16324144.0 * 1024.0, Unit::Bytes)
-    );
-    assert_eq!(
-        sample.memory.used,
-        Metric::available(1735104.0 * 1024.0, Unit::Bytes)
-    );
-    assert_eq!(
-        sample.memory.free,
-        Metric::available(12304432.0 * 1024.0, Unit::Bytes)
-    );
-    assert_eq!(
-        sample.memory.swap_total,
-        Metric::available(3145724.0 * 1024.0, Unit::Bytes)
-    );
-    assert_eq!(sample.memory.swap_used, Metric::available(0.0, Unit::Bytes));
-
-    assert_eq!(sample.load_avg, [1.01, 0.24, 0.08]);
-    assert_eq!(sample.uptime, Metric::available(83.95, Unit::Seconds));
-
-    assert_eq!(sample.disks.len(), 12);
-    let sda = sample.disks.iter().find(|disk| disk.name == "sda").unwrap();
-    assert_eq!(sda.read_bytes, 1454442 * 512);
-    assert_eq!(sda.write_bytes, 7042179 * 512);
-
-    assert_eq!(sample.net.len(), 4);
-    let eth0 = sample
-        .net
-        .iter()
-        .find(|iface| iface.name == "eth0")
-        .unwrap();
-    assert_eq!(eth0.rx_bytes, 243304026);
-    assert_eq!(eth0.rx_packets, 13834);
-    assert_eq!(eth0.tx_bytes, 1039944);
-    assert_eq!(eth0.tx_packets, 8508);
-
-    let one = sample
-        .processes
-        .iter()
-        .find(|process| process.pid == 1)
-        .unwrap();
-    assert_eq!(one.name, "proc-a-1");
-    assert_eq!(one.state, "S");
-    assert_eq!(one.parent, Some(0));
-    assert_eq!(one.user, "0");
-    assert_eq!(one.virtual_bytes, 22860 * 1024);
-    assert_eq!(one.resident_bytes, 13632 * 1024);
-    assert_eq!(one.threads, 1);
+        // Process 1: the full row, re-derived from the recorded `status`.
+        let status = data(&dir, "proc-1-status");
+        let one = sample
+            .processes
+            .iter()
+            .find(|process| process.pid == 1)
+            .unwrap();
+        // The scrubber names processes by their rank in pid order, so
+        // pid 1's letter comes from where it sits among the recorded
+        // pids (decision 0007).
+        let mut pids: Vec<u32> = sample.processes.iter().map(|p| p.pid).collect();
+        pids.sort_unstable();
+        let rank = pids.iter().position(|pid| *pid == 1).unwrap();
+        assert_eq!(
+            one.name,
+            format!("proc-{}-1", (b'a' + rank as u8) as char),
+            "{name}: pid 1 carries its scrubbed name"
+        );
+        assert_eq!(
+            one.state,
+            status_field(&status, "State")
+                .unwrap()
+                .split_whitespace()
+                .next()
+                .unwrap(),
+            "{name}"
+        );
+        assert_eq!(
+            one.parent,
+            status_field(&status, "PPid").unwrap().parse::<u32>().ok(),
+            "{name}"
+        );
+        assert_eq!(
+            one.user,
+            status_field(&status, "Uid")
+                .unwrap()
+                .split_whitespace()
+                .next()
+                .unwrap(),
+            "{name}: the user is the numeric uid"
+        );
+        assert_eq!(
+            one.virtual_bytes,
+            kib_field(status_field(&status, "VmSize").unwrap()),
+            "{name}"
+        );
+        assert_eq!(
+            one.resident_bytes,
+            kib_field(status_field(&status, "VmRSS").unwrap()),
+            "{name}"
+        );
+        assert_eq!(
+            one.threads,
+            status_field(&status, "Threads")
+                .unwrap()
+                .parse::<u32>()
+                .unwrap(),
+            "{name}"
+        );
+        assert_eq!(one.cpu_percent, 0.0, "{name}: no interval to measure");
+        let expected_mem_percent = one.resident_bytes as f64 / total * 100.0;
+        assert!(
+            (one.mem_percent - expected_mem_percent).abs() < 1e-9,
+            "{name}: memory percent is resident over total"
+        );
+    }
 }
 
 #[test]
