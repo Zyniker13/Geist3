@@ -57,7 +57,8 @@ fn sort_label(sort: SortKey, descending: bool) -> String {
     format!("{name}{}", if descending { " ↓" } else { " ↑" })
 }
 
-/// Everything the render needs: the last sample, the last error, the sort.
+/// Everything the render needs: the last sample, the last error, the sort,
+/// and the active filters.
 ///
 /// A failed sample keeps the last good one and records the error, so a
 /// transient collector failure does not blank the screen.
@@ -67,6 +68,11 @@ pub struct Ui {
     pub error: Option<String>,
     pub sort: SortKey,
     pub descending: bool,
+    /// Name filter. `Some` means the filter prompt is open; an empty string
+    /// matches everything, so opening the filter never hides rows by itself.
+    pub filter: Option<String>,
+    /// When set, only this user's processes are listed.
+    pub user_filter: Option<String>,
 }
 
 impl Default for Ui {
@@ -76,6 +82,8 @@ impl Default for Ui {
             error: None,
             sort: SortKey::Cpu,
             descending: true,
+            filter: None,
+            user_filter: None,
         }
     }
 }
@@ -100,6 +108,83 @@ impl Ui {
     /// Flip between ascending and descending order.
     pub fn toggle_direction(&mut self) {
         self.descending = !self.descending;
+    }
+
+    /// Open or close the name-filter prompt. Closing discards the pattern;
+    /// opening starts from an empty prompt.
+    pub fn toggle_filter(&mut self) {
+        match self.filter {
+            Some(_) => self.filter = None,
+            None => self.filter = Some(String::new()),
+        }
+    }
+
+    /// Type one character into the open filter prompt.
+    pub fn filter_push(&mut self, c: char) {
+        if let Some(text) = &mut self.filter {
+            text.push(c);
+        }
+    }
+
+    /// Erase the last character from the open filter prompt.
+    pub fn filter_pop(&mut self) {
+        if let Some(text) = &mut self.filter {
+            text.pop();
+        }
+    }
+
+    /// Close the filter prompt without clearing the text (Enter).
+    pub fn close_filter(&mut self) {
+        self.filter = None;
+    }
+
+    /// Cycle the user filter through the users present in the current
+    /// sample: all users, then each user in sorted order, then back to all.
+    ///
+    /// When the filtered user's processes disappear from a later sample the
+    /// filter wraps back to "all users" on the next press.
+    pub fn cycle_user_filter(&mut self) {
+        let users: Vec<&str> = self
+            .sample
+            .as_ref()
+            .map(|s| {
+                let mut users: Vec<&str> = s.processes.iter().map(|p| p.user.as_str()).collect();
+                users.sort_unstable();
+                users.dedup();
+                users
+            })
+            .unwrap_or_default();
+        self.user_filter = match (&self.user_filter, users.as_slice()) {
+            (None, [first, ..]) => Some((*first).to_string()),
+            (Some(current), rest) => {
+                // The next user after `current` in sorted order, wrapping to
+                // "all users" past the last (or when `current` vanished).
+                rest.iter()
+                    .skip_while(|u| **u != current.as_str())
+                    .nth(1)
+                    .map(|u| (*u).to_string())
+            }
+            (None, []) => None,
+        };
+    }
+
+    /// Does a process pass the current name and user filters?
+    ///
+    /// The name match is a case-insensitive substring; an empty prompt
+    /// matches everything.
+    pub fn visible(&self, process: &Process) -> bool {
+        if let Some(user) = &self.user_filter {
+            if &process.user != user {
+                return false;
+            }
+        }
+        if let Some(pattern) = &self.filter {
+            let pattern = pattern.to_lowercase();
+            if !pattern.is_empty() && !process.name.to_lowercase().contains(&pattern) {
+                return false;
+            }
+        }
+        true
     }
 
     /// Store a fresh sample, or keep the last good one and record the error.
@@ -167,12 +252,21 @@ fn event_loop(terminal: &mut Tui, collector: &mut dyn Collector) -> io::Result<(
             if let Event::Key(key) = event::read()? {
                 if key.kind == KeyEventKind::Press {
                     match key.code {
-                        KeyCode::Char('q') | KeyCode::Esc => return Ok(()),
+                        // Ctrl-C always quits, even while typing a filter.
                         KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                             return Ok(());
                         }
                         KeyCode::Tab => ui.cycle_sort(),
+                        // While the filter prompt is open the keys edit it:
+                        // Esc closes, Backspace erases, everything printable
+                        // types — including `q` and `i`.
+                        KeyCode::Esc if ui.filter.is_some() => ui.close_filter(),
+                        KeyCode::Backspace if ui.filter.is_some() => ui.filter_pop(),
+                        KeyCode::Char(c) if ui.filter.is_some() => ui.filter_push(c),
+                        KeyCode::Char('q') | KeyCode::Esc => return Ok(()),
                         KeyCode::Char('i') => ui.toggle_direction(),
+                        KeyCode::F(4) => ui.toggle_filter(),
+                        KeyCode::Char('u') => ui.cycle_user_filter(),
                         _ => {}
                     }
                 }
@@ -409,20 +503,28 @@ fn status_line(ui: &Ui) -> Line<'static> {
     if let Some(error) = &ui.error {
         Line::from(Span::from(format!("error: {error} · q: quit")).red())
     } else if ui.sample.is_some() {
-        Line::from(format!(
-            "tab: sort {} · i: reverse · q: quit",
+        let mut parts = Vec::new();
+        if let Some(pattern) = &ui.filter {
+            parts.push(format!("filter:/{pattern}"));
+        }
+        if let Some(user) = &ui.user_filter {
+            parts.push(format!("user:{user}"));
+        }
+        parts.push(format!(
+            "tab: sort {} · i: reverse · f4: filter · u: user · q: quit",
             sort_label(ui.sort, ui.descending)
-        ))
+        ));
+        Line::from(parts.join(" · "))
     } else {
         Line::from("waiting for the first sample · q: quit")
     }
 }
 
 fn draw_processes(frame: &mut Frame, ui: &Ui, area: ratatui::layout::Rect) {
-    let header = Row::new(["PID", "USER", "STATE", "CPU%", "MEM%", "RES", "NAME"]).bold();
+    let header = Row::new(["PID", "USER", "STATE", "CPU%", "MEM%", "THR", "RES", "NAME"]).bold();
     let mut rows: Vec<Row<'static>> = Vec::new();
     if let Some(sample) = &ui.sample {
-        let mut procs: Vec<&Process> = sample.processes.iter().collect();
+        let mut procs: Vec<&Process> = sample.processes.iter().filter(|p| ui.visible(p)).collect();
         procs.sort_by(|a, b| {
             let ord = match ui.sort {
                 SortKey::Pid => a.pid.cmp(&b.pid),
@@ -442,6 +544,7 @@ fn draw_processes(frame: &mut Frame, ui: &Ui, area: ratatui::layout::Rect) {
         Constraint::Length(7),
         Constraint::Length(7),
         Constraint::Length(7),
+        Constraint::Length(5),
         Constraint::Length(9),
         Constraint::Min(1),
     ];
@@ -458,6 +561,7 @@ fn process_row(process: &Process) -> Row<'static> {
         Cell::from(process.state.clone()),
         Cell::from(format!("{:>6.1}", process.cpu_percent)),
         Cell::from(format!("{:>6.1}", process.mem_percent)),
+        Cell::from(format!("{:>4}", process.threads)),
         Cell::from(format!("{:>8}", bytes_text(process.resident_bytes as f64))),
         Cell::from(process.name.clone()),
     ])
@@ -537,8 +641,7 @@ mod tests {
         Ui {
             sample,
             error,
-            sort: SortKey::Cpu,
-            descending: true,
+            ..Ui::new()
         }
     }
 
@@ -683,6 +786,85 @@ mod tests {
             "status moves to row 4: {:?}",
             rows[4]
         );
+    }
+
+    #[test]
+    fn the_name_filter_narrows_and_the_status_shows_it() {
+        let mut ui = ui_with(Some(sample()), None);
+        ui.toggle_filter();
+        for c in "worker-01".chars() {
+            ui.filter_push(c);
+        }
+        let rows = render(&ui, 80, 24);
+        assert!(rows.iter().any(|row| row.contains("worker-01")));
+        assert!(!rows.iter().any(|row| row.contains("worker-02")));
+        assert!(
+            rows.iter().any(|row| row.contains("filter:/worker-01")),
+            "status shows the pattern: {:?}",
+            rows.iter().find(|row| row.contains("tab: sort"))
+        );
+
+        // Erasing characters widens the match again.
+        for _ in 0..6 {
+            ui.filter_pop();
+        }
+        let rows = render(&ui, 80, 24);
+        assert!(rows.iter().any(|row| row.contains("worker-02")));
+        assert!(rows.iter().any(|row| row.contains("filter:/wor")));
+
+        // Closing the prompt discards the pattern entirely.
+        ui.close_filter();
+        let rows = render(&ui, 80, 24);
+        assert!(rows.iter().any(|row| row.contains("worker-01")));
+        assert!(!rows.iter().any(|row| row.contains("filter:/")));
+    }
+
+    #[test]
+    fn the_user_filter_cycles_through_the_sample_users() {
+        let mut sample = sample();
+        sample.processes[0].user = "bob".to_string(); // worker-01 -> bob
+        let mut ui = ui_with(Some(sample), None);
+
+        // All users first.
+        let rows = render(&ui, 80, 24);
+        assert!(rows.iter().any(|row| row.contains("worker-01")));
+        assert!(rows.iter().any(|row| row.contains("worker-02")));
+        assert!(!rows.iter().any(|row| row.contains("user:")));
+
+        // alice: bob's process is hidden.
+        ui.cycle_user_filter();
+        let rows = render(&ui, 80, 24);
+        assert!(!rows.iter().any(|row| row.contains("worker-01")));
+        assert!(rows.iter().any(|row| row.contains("worker-02")));
+        assert!(rows.iter().any(|row| row.contains("user:alice")));
+
+        // bob: only worker-01 remains.
+        ui.cycle_user_filter();
+        let rows = render(&ui, 80, 24);
+        assert!(rows.iter().any(|row| row.contains("worker-01")));
+        assert!(!rows.iter().any(|row| row.contains("worker-02")));
+        assert!(rows.iter().any(|row| row.contains("user:bob")));
+
+        // Past the last user wraps back to all.
+        ui.cycle_user_filter();
+        let rows = render(&ui, 80, 24);
+        assert!(rows.iter().any(|row| row.contains("worker-01")));
+        assert!(rows.iter().any(|row| row.contains("worker-02")));
+    }
+
+    #[test]
+    fn the_thread_column_sits_between_memory_and_resident() {
+        let ui = ui_with(Some(sample()), None);
+        let rows = render(&ui, 80, 24);
+        let header_row = rows
+            .iter()
+            .position(|row| row.contains("PID"))
+            .expect("table header");
+        let header = &rows[header_row];
+        let mem = header.find("MEM%").expect("MEM% header");
+        let thr = header.find("THR").expect("THR header");
+        let res = header.find("RES").expect("RES header");
+        assert!(mem < thr && thr < res, "column order in {header:?}");
     }
 
     #[test]
