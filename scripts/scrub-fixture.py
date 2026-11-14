@@ -98,7 +98,7 @@ def main() -> None:
             continue
         match = PROC_PID_RE.match(name)
         data = src.read_text()
-        if match and match.group(2) in ("cmdline", "comm", "status"):
+        if match:
             data = scrub_text(name, data, fake_by_pid[int(match.group(1))])
         dst = args.dst / entry["path"]
         dst.write_text(data)
