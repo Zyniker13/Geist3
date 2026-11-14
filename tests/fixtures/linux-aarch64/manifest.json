@@ -3,7 +3,7 @@
   "platform": "linux",
   "arch": "aarch64",
   "kernel": "7.0.0-1017-azure",
-  "captured_at_unix": 1794653276,
+  "captured_at_unix": 1794695810,
   "source": "ztop 0.1.0-scrubbed",
   "entries": [
     {
@@ -107,6 +107,26 @@
       "kind": "text"
     },
     {
+      "name": "proc-2005-io",
+      "path": "data/proc-2005-io",
+      "kind": "text"
+    },
+    {
+      "name": "proc-2094-io",
+      "path": "data/proc-2094-io",
+      "kind": "text"
+    },
+    {
+      "name": "proc-2109-io",
+      "path": "data/proc-2109-io",
+      "kind": "text"
+    },
+    {
+      "name": "proc-2363-io",
+      "path": "data/proc-2363-io",
+      "kind": "text"
+    },
+    {
       "name": "proc-3-cmdline",
       "path": "data/proc-3-cmdline",
       "kind": "text"
@@ -124,6 +144,11 @@
     {
       "name": "proc-3-status",
       "path": "data/proc-3-status",
+      "kind": "text"
+    },
+    {
+      "name": "proc-3142-io",
+      "path": "data/proc-3142-io",
       "kind": "text"
     },
     {
