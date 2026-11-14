@@ -3,13 +3,15 @@
 Updated after every working session.
 
 - **Current milestone:** M2 (macOS collectors and Apple Silicon).
-- **Last done:** m2-power probing complete (decision 0011): IOReport CPU state residency decodes per core (idle `ELDI`, 64-byte records, mach ticks, interval = s2−s1); GPU power is real unprivileged (`GPU Energy` cooked samples, ~8.7 W under a Metal burner); SMC keys read unprivileged (temps `Te*`/`TCMb`, fan `F0Ac/F0Mx`, system power `PSTR`); CPU energy and CPU MHz have no unprivileged source and stay marked unavailable per decision 0009. CI green through `7dd4d1f`.
-- **Next step:** m2-power collector: implement the Rust collector for GPU power, SMC temps/fan/power and CPU state residency per decision 0011, then the recorded powermetrics-style comparison in docs/ closes M2's Done-when.
+- **Last done:** m2-power collector shipped and verified live: SMC temps, fans and `PSTR` system watts via AppleSMC (80-byte `SMCKeyData`; the key code is carried in a local because the keyinfo response does not echo the key back), GPU watts as deltas of cumulative nanjoule counters from cooked IOReport samples (primed on first call); a live two-sample peek printed real values (7 temps, 2 fans, 6.2 W idle to 17 W under load); the live-host test now requires real sensors whenever an SMC device is present, probing IOKit directly so a collector regression cannot hide behind an absent device; Linux marks GPU/system power unavailable; full gate and both Linux cross-target clippies green.
+- **Next step:** recorded powermetrics-style comparison in docs/ (notes powermetrics needs sudo), parity updates, then close M2 and move to M3.
 - **Blocked on:** nothing.
 
 ## Log
 
 Newest first. One or two lines per session: what changed, what is next.
+
+- 2026-11-14: m2-power collector shipped (`4ba8400`): `macos_power.rs` talks to AppleSMC (temps `Te*`/`TCMb`/`Tg01`/`Ta0P`, fans `F0Ac`/`F0Mx`, `PSTR`) and reads GPU watts from the IOReport `Energy Model` group with cumulative-counter deltas; the build script links the frameworks on macOS targets only (`CARGO_CFG_TARGET_OS`); Linux keeps GPU/system power unavailable. A live two-sample peek caught the SMC path returning nothing while 77 tests passed — the keyinfo response does not echo the key back, so the follow-up read asked for key 0 and got "not found"; the fix carries the key code in a local (probe21 first proved the identical C sequence works, isolating the bug to the Rust port). The live-host test now demands real sensors whenever IOKit reports an SMC device. Full gate plus both Linux cross-target clippies green. Next: the recorded powermetrics-style comparison, parity, close M2.
 
 - 2026-11-14: m2-power probing done (decision 0011): per-core CPU state residency decodes from IOReport (idle = `ELDI`, mach ticks, interval deltas); GPU watts are real from the `GPU Energy` channel (8.7 W under a Metal burner); SMC temps, fan RPM and `PSTR` system watts read unprivileged through the AppleSMC user client; CPU energy and CPU MHz have no unprivileged source and are marked unavailable. CI green through `7dd4d1f`. Next: the Rust collector and the recorded powermetrics-style comparison.
 
