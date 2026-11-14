@@ -201,12 +201,19 @@ mod linux {
         "/proc/sys/kernel/osrelease",
     ];
 
+    /// `/proc/stat` -> `proc-stat`, `/proc/sys/kernel/osrelease` ->
+    /// `proc-sys-kernel_osrelease`: slashes become hyphens, dots become
+    /// underscores.
+    pub(super) fn entry_name(path: &str) -> String {
+        path.trim_start_matches('/')
+            .replace('/', "-")
+            .replace('.', "_")
+    }
+
     pub(super) fn collect() -> Vec<CapturedInput> {
         let mut inputs = Vec::new();
         for path in PATHS {
-            // `/proc/stat` -> `proc_stat`, `/proc/sys/kernel/osrelease` ->
-            // `proc-sys-kernel_osrelease` (dots become underscores).
-            let name = path.trim_start_matches('/').replace(['/', '.'], ["-", "_"]);
+            let name = entry_name(path);
             if let Ok(text) = std::fs::read_to_string(path) {
                 inputs.push(CapturedInput::text(name, text));
             }
@@ -251,5 +258,15 @@ mod tests {
         let ncpu = mac::sysctl_u64("hw.ncpu").expect("hw.ncpu");
         assert!(ncpu > 0);
         assert!(mac::sysctl_text("no.such.key.ztop").is_none());
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn entry_names_map_slashes_and_dots() {
+        assert_eq!(linux::entry_name("/proc/stat"), "proc-stat");
+        assert_eq!(
+            linux::entry_name("/proc/sys/kernel/osrelease"),
+            "proc-sys-kernel_osrelease"
+        );
     }
 }
