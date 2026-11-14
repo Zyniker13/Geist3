@@ -78,3 +78,29 @@ names), never hardcoded for a particular chip.
   SDK, so no vendored code and no third-party dependency is needed.
 - If a future macOS denies IOReport reads unprivileged, the Apple Silicon view
   degrades to unavailable instead of breaking the collector.
+
+## Amendment — per-process task fields (2026-11-14)
+
+M3 parity needs per-process CPU time and RSS, which the Linux fixtures already
+carry per pid. Probing the development host settled what an unprivileged
+process can read:
+
+- Identity (pid, ppid, status, uid, name): `PROC_PIDT_SHORTBSDINFO` via
+  `proc_pidinfo` works for every process, other users' included.
+- CPU time, RSS, thread count (`PROC_PIDTASKINFO`): granted for same-user
+  processes, `EPERM` for other users'; `proc_pid_rusage` is denied the same
+  way. `/bin/ps` is setuid root and carries the
+  `com.apple.system-task-ports.read` entitlement, which is where its cputime
+  comes from; ztop does not assume privileges and records `-` instead.
+- The `PROC_PIDTASKINFO` CPU fields are mach absolute-time ticks, not
+  microseconds: a process burning a core for 0.650 s accumulated 15.53 M
+  ticks, and the recorded sum for a `ps` TIME of 3:04.03 converted to
+  184.034 s with `mach_timebase_info` (125/3 on Apple Silicon here). ztop
+  records CPU nanoseconds.
+
+So the recorded `processes` line is `pid ppid status uid utime stime rss
+threads "name"` — CPU nanoseconds, resident bytes, thread count — and the
+four task fields are `-` when the kernel denied the read. The first capture
+built the taskinfo struct at 160 bytes against the kernel's 96 and recorded
+zero thread counts everywhere; the size is now asserted at compile time and
+the committed fixture was re-recorded.
