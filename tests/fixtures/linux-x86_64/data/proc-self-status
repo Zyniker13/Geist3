@@ -1,34 +1,34 @@
 Name:	ztop
 Umask:	0022
 State:	R (running)
-Tgid:	3401
+Tgid:	3346
 Ngid:	0
-Pid:	3401
-PPid:	2598
+Pid:	3346
+PPid:	2525
 TracerPid:	0
 Uid:	1001	1001	1001	1001
 Gid:	1001	1001	1001	1001
 FDSize:	256
 Groups:	4 100 113 999 1001 
-NStgid:	3401
-NSpid:	3401
-NSpgid:	2168
-NSsid:	2168
+NStgid:	3346
+NSpid:	3346
+NSpgid:	2181
+NSsid:	2181
 Kthread:	0
-VmPeak:	    9540 kB
-VmSize:	    9540 kB
+VmPeak:	   10608 kB
+VmSize:	   10608 kB
 VmLck:	       0 kB
 VmPin:	       0 kB
-VmHWM:	    5408 kB
-VmRSS:	    5408 kB
-RssAnon:	     480 kB
-RssFile:	    4928 kB
+VmHWM:	    5744 kB
+VmRSS:	    5744 kB
+RssAnon:	     544 kB
+RssFile:	    5200 kB
 RssShmem:	       0 kB
 VmData:	     240 kB
 VmStk:	     136 kB
-VmExe:	    3748 kB
+VmExe:	    4488 kB
 VmLib:	    2500 kB
-VmPTE:	      60 kB
+VmPTE:	      64 kB
 VmSwap:	       0 kB
 HugetlbPages:	       0 kB
 CoreDumping:	0

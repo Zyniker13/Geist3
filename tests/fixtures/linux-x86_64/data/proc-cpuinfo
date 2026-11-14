@@ -5,7 +5,7 @@ model		: 1
 model name	: AMD EPYC 7763 64-Core Processor
 stepping	: 1
 microcode	: 0xffffffff
-cpu MHz		: 3260.895
+cpu MHz		: 3242.967
 cache size	: 512 KB
 physical id	: 0
 siblings	: 4
@@ -33,7 +33,7 @@ model		: 1
 model name	: AMD EPYC 7763 64-Core Processor
 stepping	: 1
 microcode	: 0xffffffff
-cpu MHz		: 3284.085
+cpu MHz		: 3180.096
 cache size	: 512 KB
 physical id	: 0
 siblings	: 4
@@ -61,7 +61,7 @@ model		: 1
 model name	: AMD EPYC 7763 64-Core Processor
 stepping	: 1
 microcode	: 0xffffffff
-cpu MHz		: 3244.313
+cpu MHz		: 3256.694
 cache size	: 512 KB
 physical id	: 0
 siblings	: 4
@@ -89,7 +89,7 @@ model		: 1
 model name	: AMD EPYC 7763 64-Core Processor
 stepping	: 1
 microcode	: 0xffffffff
-cpu MHz		: 3237.201
+cpu MHz		: 3329.295
 cache size	: 512 KB
 physical id	: 0
 siblings	: 4
