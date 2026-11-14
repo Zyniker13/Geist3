@@ -546,14 +546,14 @@ mod tests {
         assert!(text.contains("loadavg "), "loadavg line: {text}");
         assert!(text.contains("vm free "), "vm line: {text}");
         assert!(text.contains("swap total "), "swap line: {text}");
-        // A real host has a positive swap total and a boot time in the past.
-        let swap: u64 = text
+        // A boot time in the past is universal; a host may legitimately have
+        // no swap (CI runners report a zero total), so zero is accepted.
+        let _swap: u64 = text
             .lines()
             .find(|l| l.starts_with("swap total "))
             .and_then(|l| l.split_whitespace().nth(2))
             .and_then(|v| v.parse().ok())
             .expect("swap total");
-        assert!(swap > 0, "swap total positive: {swap}");
         assert!(text.contains("boottime "), "boottime line: {text}");
     }
 
