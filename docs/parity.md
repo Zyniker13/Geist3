@@ -25,10 +25,10 @@ Check an item only when it works and a test or a recorded check shows it. Add th
 - [x] Tag processes (Space), tag children (c), untag all (U) — Space tags or untags the cursor's process with a `*` before the name, `c` tags the cursor's visible descendants, `U` clears every tag; the status line counts the tags and they survive a fresh sample. Tests: `space_tags_the_cursor_and_u_clears_all`, `c_tags_the_visible_descendants`.
 - [x] Act on all tagged processes (signals, renice take the tag set) — with no tags the action applies to the cursor's process instead, and outcomes are reported in the status line. Tests: `the_signal_menu_targets_the_tag_set_or_the_cursor`, `renice_plans_target_the_tags_or_the_cursor`, `a_plan_reports_its_outcome_in_the_notice`.
 - [x] Send a signal through a signal menu (F9) — a centered popup lists the common signals with a movable selection; Enter sends, Esc cancels, j/k or arrows move with wrap-around. Tests: `the_signal_menu_targets_the_tag_set_or_the_cursor`, `the_menu_wraps_and_cancels`, `the_menu_renders_as_a_centered_popup`.
-- [ ] Open the signal menu with `k` as well
+- [x] Open the signal menu with `K` — `k` stays cursor-up (decision 0012); `K` and F9 both open the popup
 - [x] Renice up and down (F7 / F8) — F7 raises priority one step, F8 lowers it, applying to the same target set as signals; failures are reported in the status line. Tests: `renice_plans_target_the_tags_or_the_cursor`, `a_plan_reports_its_outcome_in_the_notice`.
 - [ ] I/O priority (i, Linux) and CPU affinity (a, Linux)
-- [ ] PID filter (`-p`)
+- [x] PID filter (`-p`) — `ztop -p 7,42` (comma separated, repeatable) starts with `Ui::pid_filter` set; the table hides other pids in flat and tree view (an orphaned child becomes a root) and the status line shows `pids:N`. Tests: `the_pid_filter_lists_only_the_requested_pids`, `the_pid_filter_applies_in_tree_mode`, `pids_parse_comma_separated`
 - [x] User filter (u) — `u` cycles all users, then each user present in the sample in sorted order, then back to all; the status line shows the active user. Tests: `the_user_filter_cycles_through_the_sample_users`.
 - [ ] Show or hide userland and kernel threads (H, K), and program path (p)
 - [ ] Process environment (e), open files (l) and syscall trace (s) where the OS allows

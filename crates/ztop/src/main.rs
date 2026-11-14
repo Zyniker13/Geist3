@@ -15,6 +15,10 @@ use clap::{Parser, Subcommand};
     about = "A system monitor for one host and your fleet, in a terminal."
 )]
 struct Cli {
+    /// Show only these process ids, comma separated (htop's `-p`).
+    #[arg(short = 'p', long, value_delimiter = ',')]
+    pids: Vec<u32>,
+
     #[command(subcommand)]
     command: Option<Command>,
 }
@@ -62,7 +66,8 @@ fn main() -> ExitCode {
 }
 
 fn run() -> Result<(), Box<dyn Error>> {
-    match Cli::parse().command {
+    let cli = Cli::parse();
+    match cli.command {
         None => {
             // The live sampler runs on Linux and macOS; other platforms get
             // a placeholder that reports itself unavailable in the TUI
@@ -73,7 +78,7 @@ fn run() -> Result<(), Box<dyn Error>> {
             let mut collector = ztop_core::macos_live::MacOsCollector::default();
             #[cfg(not(any(target_os = "linux", target_os = "macos")))]
             let mut collector = ztop_tui::UnavailableCollector;
-            ztop_tui::run(&mut collector)?;
+            ztop_tui::run(&mut collector, &cli.pids)?;
         }
         Some(Command::Capture { out }) => {
             let count = ztop_core::capture::capture_to(&out)?;
@@ -149,5 +154,17 @@ mod tests {
             cli.command,
             Some(Command::Replay { dir }) if dir == Path::new("/tmp/fixture")
         ));
+    }
+
+    #[test]
+    fn pids_parse_comma_separated() {
+        let cli = Cli::try_parse_from(["ztop", "-p", "7,42"]).expect("parses");
+        assert!(cli.pids == vec![7, 42]);
+
+        // Repeated flags accumulate; no `-p` means no filter.
+        let cli = Cli::try_parse_from(["ztop", "-p", "7", "--pids", "42"]).expect("parses");
+        assert!(cli.pids == vec![7, 42]);
+        let cli = Cli::try_parse_from(["ztop"]).expect("parses");
+        assert!(cli.pids.is_empty());
     }
 }

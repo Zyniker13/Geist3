@@ -83,6 +83,9 @@ pub struct Ui {
     pub filter: Option<String>,
     /// When set, only this user's processes are listed.
     pub user_filter: Option<String>,
+    /// Pids passed with `ztop -p`. An empty set lists every process; a
+    /// non-empty set hides every process whose pid is not in it.
+    pub pid_filter: std::collections::BTreeSet<u32>,
     /// The highlighted process, by pid. The cursor stays on the same pid
     /// across samples when it still exists.
     pub cursor: Option<u32>,
@@ -116,6 +119,7 @@ impl Default for Ui {
             descending: true,
             filter: None,
             user_filter: None,
+            pid_filter: std::collections::BTreeSet::new(),
             cursor: None,
             follow: None,
             tree: false,
@@ -393,6 +397,9 @@ impl Ui {
     /// The name match is a case-insensitive substring; an empty prompt
     /// matches everything.
     pub fn visible(&self, process: &Process) -> bool {
+        if !self.pid_filter.is_empty() && !self.pid_filter.contains(&process.pid) {
+            return false;
+        }
         if let Some(user) = &self.user_filter {
             if &process.user != user {
                 return false;
@@ -648,19 +655,22 @@ type Tui = Terminal<CrosstermBackend<Stdout>>;
 
 /// Run the TUI until the user quits, sampling from `collector`.
 ///
+/// `pids` is the `ztop -p` list: when it is not empty, the table lists only
+/// those processes.
+///
 /// Returns when the user presses `q`, `Esc` or `Ctrl-C`; terminal state is
 /// restored even when drawing or sampling fails.
-pub fn run(collector: &mut dyn Collector) -> io::Result<()> {
+pub fn run(collector: &mut dyn Collector, pids: &[u32]) -> io::Result<()> {
     enable_raw_mode()?;
-    let result = run_inner(collector);
+    let result = run_inner(collector, pids);
     restore()?;
     result
 }
 
-fn run_inner(collector: &mut dyn Collector) -> io::Result<()> {
+fn run_inner(collector: &mut dyn Collector, pids: &[u32]) -> io::Result<()> {
     execute!(io::stdout(), EnterAlternateScreen)?;
     let mut terminal = Terminal::new(CrosstermBackend::new(io::stdout()))?;
-    let result = event_loop(&mut terminal, collector);
+    let result = event_loop(&mut terminal, collector, pids);
     execute!(io::stdout(), LeaveAlternateScreen)?;
     result
 }
@@ -671,8 +681,9 @@ fn restore() -> io::Result<()> {
     Ok(())
 }
 
-fn event_loop(terminal: &mut Tui, collector: &mut dyn Collector) -> io::Result<()> {
+fn event_loop(terminal: &mut Tui, collector: &mut dyn Collector, pids: &[u32]) -> io::Result<()> {
     let mut ui = Ui::new();
+    ui.pid_filter = pids.iter().copied().collect();
     ui.apply(collector.sample());
     loop {
         terminal.draw(|frame| draw(frame, &ui))?;
@@ -718,7 +729,7 @@ fn event_loop(terminal: &mut Tui, collector: &mut dyn Collector) -> io::Result<(
                         KeyCode::Char(' ') => ui.toggle_tag(),
                         KeyCode::Char('c') => ui.tag_children(),
                         KeyCode::Char('U') => ui.untag_all(),
-                        KeyCode::F(9) => ui.open_menu(),
+                        KeyCode::F(9) | KeyCode::Char('K') => ui.open_menu(),
                         KeyCode::F(7) => {
                             if let Some(plan) = ui.renice_plan(-1) {
                                 run_plan(&mut ui, &plan);
@@ -1055,6 +1066,9 @@ fn status_line(ui: &Ui) -> Line<'static> {
         }
         if let Some(user) = &ui.user_filter {
             parts.push(format!("user:{user}"));
+        }
+        if !ui.pid_filter.is_empty() {
+            parts.push(format!("pids:{}", ui.pid_filter.len()));
         }
         if let Some(followed) = ui.follow {
             let name = ui
@@ -1541,6 +1555,50 @@ mod tests {
         let rows = render(&ui, 80, 24);
         assert!(rows.iter().any(|row| row.contains("worker-01")));
         assert!(rows.iter().any(|row| row.contains("worker-02")));
+    }
+
+    #[test]
+    fn the_pid_filter_lists_only_the_requested_pids() {
+        let mut ui = ui_with(Some(sample()), None);
+        ui.pid_filter = [7u32, 12].into_iter().collect();
+
+        // Only the requested rows survive, and the status line names them.
+        let rows = render(&ui, 80, 24);
+        assert!(rows.iter().any(|row| row.contains("worker-07")));
+        assert!(rows.iter().any(|row| row.contains("worker-12")));
+        assert!(!rows.iter().any(|row| row.contains("worker-01")));
+        assert!(rows.iter().any(|row| row.contains("pids:2")));
+
+        // An empty set lists everything again.
+        ui.pid_filter.clear();
+        let rows = render(&ui, 80, 24);
+        assert!(rows.iter().any(|row| row.contains("worker-01")));
+        assert!(!rows.iter().any(|row| row.contains("pids:")));
+    }
+
+    #[test]
+    fn the_pid_filter_applies_in_tree_mode() {
+        let mut ui = ui_with(Some(sample_with_tree()), None);
+        ui.tree = true;
+        // Only pid 4 (a leaf under 2 under 1) survives; with its ancestors
+        // filtered away it becomes a root row.
+        ui.pid_filter = [4u32].into_iter().collect();
+
+        let rows: Vec<_> = ui
+            .ordered_rows()
+            .iter()
+            .map(|row| row.process.pid)
+            .collect();
+        assert_eq!(rows, vec![4]);
+
+        // The subtree relationship still renders when the parent matches.
+        ui.pid_filter = [2u32, 4].into_iter().collect();
+        let rows: Vec<_> = ui
+            .ordered_rows()
+            .iter()
+            .map(|row| (row.process.pid, row.depth))
+            .collect();
+        assert_eq!(rows, vec![(2, 0), (4, 1)]);
     }
 
     #[test]
