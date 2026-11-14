@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: MIT OR Apache-2.0
+name: ZTop
+options:
+  bundleIdPrefix: dev.ztop
+  deploymentTarget:
+    iOS: "18.0"
+    macOS: "15.0"
+packages:
+  ZTopKit:
+    path: ../swift/ZTopKit
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    CODE_SIGNING_ALLOWED: "NO"
+targets:
+  ZTop:
+    type: application
+    platform: iOS
+    supportedDestinations: [iOS, macOS]
+    sources:
+      - Sources
+    info:
+      path: Sources/Info.plist
+      properties:
+        CFBundleDisplayName: zTop
+    dependencies:
+      - package: ZTopKit
