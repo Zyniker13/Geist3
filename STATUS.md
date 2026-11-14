@@ -3,13 +3,15 @@
 Updated after every working session.
 
 - **Current milestone:** M3 (Full TUI Parity).
-- **Last done:** M3 batch 3: tree view (F5 toggle, Enter fold/unfold) — indented rows with tree characters, hidden-descendant count on folded rows, collapse guarded to cursor pids with visible children. Four tests cover it; full gate green.
-- **Next step:** M3 batch 4 — incremental search (F3), tagging (Space/c/U), signals (F9/k), renice (F7/F8), I/O columns.
+- **Last done:** M3 batch 4: incremental search (F3 live prompt, F3 repeats, follow re-pins) and tagging (Space, c for visible descendants, U clears all; `*` marker, `tagged:` count). Four tests cover it; full gate green.
+- **Next step:** M3 batch 5 — signals (F9/k) and renice (F7/F8) acting on the tag set, then I/O columns.
 - **Blocked on:** nothing.
 
 ## Log
 
 Newest first. One or two lines per session: what changed, what is next.
+
+|- 2026-11-14: M3 batch 4 (`a2683fa`): incremental search (F3 opens a live prompt — the cursor keeps its row while the pattern still matches, otherwise jumps forward; F3 again repeats; Esc/Enter close; follow re-pins) and tagging (Space tags/untags the cursor, `c` tags its visible descendants, `U` clears all; `*` row marker, `tagged:` in the status line). Four tests; gate green. Next: signals and renice on the tag set, then I/O columns.
 
 |- 2026-11-14: M3 batch 2 (`8f2854a`): selection cursor (`j`/`k`, arrows) with highlight and scroll-into-view, follow (`F`) pinned by pid across samples, `follow:` shown in the status line. Five tests; gate green. Next: tree view, F3 search, tagging.
 
