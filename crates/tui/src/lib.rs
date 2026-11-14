@@ -1965,12 +1965,19 @@ mod tests {
             rows.iter().any(|row| row.contains("Send signal")),
             "the popup title shows: {rows:?}"
         );
+        // The menu lists each platform's numbers in number order, so the
+        // marker row is derived from the shared list rather than a fixed
+        // name: index 5 is TERM on macOS but USR1 on Linux.
+        let (name, number) = control::common_signals()[5];
         assert!(
-            rows.iter().any(|row| row.contains("> TERM")),
+            rows.iter()
+                .any(|row| row.contains(&format!("> {name} ({number})"))),
             "the selection marker shows: {rows:?}"
         );
+        let (kill, kill_number) = control::common_signals()[4];
         assert!(
-            rows.iter().any(|row| row.contains("  KILL (9)")),
+            rows.iter()
+                .any(|row| row.contains(&format!("  {kill} ({kill_number})"))),
             "unselected rows keep the two-space indent: {rows:?}"
         );
     }
