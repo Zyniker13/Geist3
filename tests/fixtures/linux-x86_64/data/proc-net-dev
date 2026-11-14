@@ -1,6 +1,5 @@
 Inter-|   Receive                                                |  Transmit
  face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets errs drop fifo colls carrier compressed
-    lo:   31037     194    0    0    0     0          0         0    31037     194    0    0    0     0       0          0
-  eth0: 263406427   13938    0    0    0     0          0         0  1070923    9438    0    0    0     0       0          0
-enP60s1: 274912519  185382    0  792    0     0          0         0  1080361    9578    0    0    0     0       0          0
+    lo:   32698     232    0    0    0     0          0         0    32698     232    0    0    0     0       0          0
+enp39s0: 272350359  183448    0    0    0     0          0         0   849141    7851    0    0    0     0       0          0
 docker0:       0       0    0    0    0     0          0         0        0       0    0    2    0     0       0          0

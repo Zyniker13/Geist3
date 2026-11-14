@@ -2,8 +2,8 @@
   "format": 1,
   "platform": "linux",
   "arch": "x86_64",
-  "kernel": "7.0.0-1019-azure",
-  "captured_at_unix": 1794649096,
+  "kernel": "7.0.0-1016-aws",
+  "captured_at_unix": 1794653243,
   "source": "ztop 0.1.0-scrubbed",
   "entries": [
     {
@@ -319,6 +319,21 @@
     {
       "name": "sys-class-hwmon-hwmon0-temp1_label",
       "path": "data/sys-class-hwmon-hwmon0-temp1_label",
+      "kind": "text"
+    },
+    {
+      "name": "sys-class-hwmon-hwmon1-name",
+      "path": "data/sys-class-hwmon-hwmon1-name",
+      "kind": "text"
+    },
+    {
+      "name": "sys-class-hwmon-hwmon1-temp1_input",
+      "path": "data/sys-class-hwmon-hwmon1-temp1_input",
+      "kind": "text"
+    },
+    {
+      "name": "sys-class-hwmon-hwmon1-temp1_label",
+      "path": "data/sys-class-hwmon-hwmon1-temp1_label",
       "kind": "text"
     }
   ]

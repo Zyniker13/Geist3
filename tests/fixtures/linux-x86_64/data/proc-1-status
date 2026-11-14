@@ -15,19 +15,19 @@ NSpid:	1
 NSpgid:	1
 NSsid:	1
 Kthread:	0
-VmPeak:	   29204 kB
-VmSize:	   25596 kB
+VmPeak:	   28544 kB
+VmSize:	   25448 kB
 VmLck:	       0 kB
 VmPin:	       0 kB
-VmHWM:	   16760 kB
-VmRSS:	   16760 kB
-RssAnon:	    5324 kB
-RssFile:	   11436 kB
+VmHWM:	   16068 kB
+VmRSS:	   16068 kB
+RssAnon:	    5320 kB
+RssFile:	   10748 kB
 RssShmem:	       0 kB
-VmData:	    4792 kB
+VmData:	    4748 kB
 VmStk:	     132 kB
 VmExe:	      64 kB
-VmLib:	   12564 kB
+VmLib:	   12496 kB
 VmPTE:	      96 kB
 VmSwap:	       0 kB
 HugetlbPages:	       0 kB
@@ -35,7 +35,7 @@ CoreDumping:	0
 THP_enabled:	1
 untag_mask:	0xffffffffffffffff
 Threads:	1
-SigQ:	1/58121
+SigQ:	1/55883
 SigPnd:	0000000000000000
 ShdPnd:	0000000000000000
 SigBlk:	7fefc1fe28014a03
@@ -49,13 +49,13 @@ CapAmb:	0000000000000000
 NoNewPrivs:	0
 Seccomp:	0
 Seccomp_filters:	0
-Speculation_Store_Bypass:	vulnerable
-SpeculationIndirectBranch:	always enabled
+Speculation_Store_Bypass:	thread vulnerable
+SpeculationIndirectBranch:	conditional enabled
 Cpus_allowed:	f
 Cpus_allowed_list:	0-3
 Mems_allowed:	00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000001
 Mems_allowed_list:	0
-voluntary_ctxt_switches:	2914
-nonvoluntary_ctxt_switches:	950
+voluntary_ctxt_switches:	3994
+nonvoluntary_ctxt_switches:	485
 x86_Thread_features:	
 x86_Thread_features_locked:	
