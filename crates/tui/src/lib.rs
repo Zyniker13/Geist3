@@ -44,6 +44,15 @@ pub enum SortKey {
     Name,
 }
 
+/// One row of the process table: a process plus its tree depth (always 0
+/// when tree view is off) and how many visible descendants a fold on it
+/// hides (always 0 outside tree view).
+pub struct TreeRow<'a> {
+    pub process: &'a Process,
+    pub depth: usize,
+    pub hidden: usize,
+}
+
 /// How the table is currently sorted, for the status line.
 fn sort_label(sort: SortKey, descending: bool) -> String {
     let name = match sort {
@@ -79,6 +88,11 @@ pub struct Ui {
     /// Follow mode: re-select this pid on every sample, htop-style. When the
     /// followed process disappears, follow mode ends.
     pub follow: Option<u32>,
+    /// Tree view: group processes under their parents instead of sorting
+    /// them into one flat list.
+    pub tree: bool,
+    /// Pids whose subtree is folded away in tree mode.
+    pub collapsed: std::collections::BTreeSet<u32>,
 }
 
 impl Default for Ui {
@@ -92,6 +106,8 @@ impl Default for Ui {
             user_filter: None,
             cursor: None,
             follow: None,
+            tree: false,
+            collapsed: std::collections::BTreeSet::new(),
         }
     }
 }
@@ -203,31 +219,155 @@ impl Ui {
             .as_ref()
             .map(|s| s.processes.iter().filter(|p| self.visible(p)).collect())
             .unwrap_or_default();
-        procs.sort_by(|a, b| {
-            let ord = match self.sort {
-                SortKey::Pid => a.pid.cmp(&b.pid),
-                SortKey::User => a.user.cmp(&b.user),
-                SortKey::Cpu => a.cpu_percent.total_cmp(&b.cpu_percent),
-                SortKey::Mem => a.mem_percent.total_cmp(&b.mem_percent),
-                SortKey::Resident => a.resident_bytes.cmp(&b.resident_bytes),
-                SortKey::Name => a.name.cmp(&b.name),
-            };
-            if self.descending { ord.reverse() } else { ord }
-        });
+        procs.sort_by(|a, b| self.compare(a, b));
         procs
+    }
+
+    /// The ordering rule for the flat list and for tree siblings.
+    fn compare(&self, a: &Process, b: &Process) -> std::cmp::Ordering {
+        let ord = match self.sort {
+            SortKey::Pid => a.pid.cmp(&b.pid),
+            SortKey::User => a.user.cmp(&b.user),
+            SortKey::Cpu => a.cpu_percent.total_cmp(&b.cpu_percent),
+            SortKey::Mem => a.mem_percent.total_cmp(&b.mem_percent),
+            SortKey::Resident => a.resident_bytes.cmp(&b.resident_bytes),
+            SortKey::Name => a.name.cmp(&b.name),
+        };
+        if self.descending { ord.reverse() } else { ord }
+    }
+
+    /// Switch between the flat list and the tree view.
+    pub fn toggle_tree(&mut self) {
+        self.tree = !self.tree;
+    }
+
+    /// Fold or unfold the subtree of the cursor's process. A row without
+    /// children has nothing to fold; the cursor then stays where it is.
+    pub fn toggle_collapse(&mut self) {
+        let Some(selected) = self.cursor else {
+            return;
+        };
+        if self.has_visible_descendants(selected) {
+            if self.collapsed.contains(&selected) {
+                self.collapsed.remove(&selected);
+            } else {
+                self.collapsed.insert(selected);
+            }
+        }
+    }
+
+    /// Does any visible process descend from this pid?
+    fn has_visible_descendants(&self, pid: u32) -> bool {
+        self.sample.as_ref().is_some_and(|sample| {
+            sample
+                .processes
+                .iter()
+                .any(|p| self.visible(p) && self.ancestors(p).contains(&pid))
+        })
+    }
+
+    /// The pids a process descends from within one sample.
+    fn ancestors(&self, process: &Process) -> std::collections::BTreeSet<u32> {
+        let mut set = std::collections::BTreeSet::new();
+        let Some(sample) = &self.sample else {
+            return set;
+        };
+        let mut parent = process.parent;
+        while let Some(pid) = parent {
+            if !set.insert(pid) {
+                break; // parent cycles end here
+            }
+            parent = sample
+                .processes
+                .iter()
+                .find(|p| p.pid == pid)
+                .and_then(|p| p.parent);
+        }
+        set
+    }
+
+    /// The rows the table shows, filtered and in display order: a flat
+    /// list when tree view is off, otherwise processes grouped under their
+    /// parents with siblings in sort order. A matched child of an
+    /// unmatched parent becomes a root; a folded row hides its subtree and
+    /// reports how many visible descendants it hides.
+    pub fn ordered_rows(&self) -> Vec<TreeRow<'_>> {
+        let procs = self.ordered_visible();
+        if !self.tree {
+            return procs
+                .into_iter()
+                .map(|process| TreeRow {
+                    process,
+                    depth: 0,
+                    hidden: 0,
+                })
+                .collect();
+        }
+        let mut children: std::collections::BTreeMap<u32, Vec<&Process>> = Default::default();
+        let mut roots: Vec<&Process> = Vec::new();
+        for p in &procs {
+            match p
+                .parent
+                .and_then(|pid| procs.iter().find(|q| q.pid == pid && q.pid != p.pid))
+            {
+                Some(parent) => children.entry(parent.pid).or_default().push(p),
+                None => roots.push(p),
+            }
+        }
+        fn hidden_descendants(
+            pid: u32,
+            children: &std::collections::BTreeMap<u32, Vec<&Process>>,
+        ) -> usize {
+            children.get(&pid).map_or(0, |kids| {
+                kids.len()
+                    + kids
+                        .iter()
+                        .map(|k| hidden_descendants(k.pid, children))
+                        .sum::<usize>()
+            })
+        }
+        fn walk<'a>(
+            list: &[&'a Process],
+            depth: usize,
+            children: &std::collections::BTreeMap<u32, Vec<&'a Process>>,
+            collapsed: &std::collections::BTreeSet<u32>,
+            rows: &mut Vec<TreeRow<'a>>,
+        ) {
+            for p in list {
+                if collapsed.contains(&p.pid) {
+                    rows.push(TreeRow {
+                        process: p,
+                        depth,
+                        hidden: hidden_descendants(p.pid, children),
+                    });
+                } else {
+                    rows.push(TreeRow {
+                        process: p,
+                        depth,
+                        hidden: 0,
+                    });
+                    if let Some(kids) = children.get(&p.pid) {
+                        walk(kids, depth + 1, children, collapsed, rows);
+                    }
+                }
+            }
+        }
+        let mut rows = Vec::new();
+        walk(&roots, 0, &children, &self.collapsed, &mut rows);
+        rows
     }
 
     /// Move the cursor down one visible row (or onto the first row).
     pub fn select_next(&mut self) {
-        let procs = self.ordered_visible();
-        if procs.is_empty() {
+        let rows = self.ordered_rows();
+        if rows.is_empty() {
             return;
         }
-        let index = procs
+        let index = rows
             .iter()
-            .position(|p| Some(p.pid) == self.cursor)
-            .map_or(0, |i| (i + 1).min(procs.len() - 1));
-        self.cursor = Some(procs[index].pid);
+            .position(|r| Some(r.process.pid) == self.cursor)
+            .map_or(0, |i| (i + 1).min(rows.len() - 1));
+        self.cursor = Some(rows[index].process.pid);
         if self.follow.is_some() {
             self.follow = self.cursor;
         }
@@ -235,15 +375,15 @@ impl Ui {
 
     /// Move the cursor up one visible row (or onto the first row).
     pub fn select_prev(&mut self) {
-        let procs = self.ordered_visible();
-        if procs.is_empty() {
+        let rows = self.ordered_rows();
+        if rows.is_empty() {
             return;
         }
-        let index = procs
+        let index = rows
             .iter()
-            .position(|p| Some(p.pid) == self.cursor)
+            .position(|r| Some(r.process.pid) == self.cursor)
             .map_or(0, |i| i.saturating_sub(1));
-        self.cursor = Some(procs[index].pid);
+        self.cursor = Some(rows[index].process.pid);
         if self.follow.is_some() {
             self.follow = self.cursor;
         }
@@ -358,6 +498,8 @@ fn event_loop(terminal: &mut Tui, collector: &mut dyn Collector) -> io::Result<(
                         KeyCode::F(4) => ui.toggle_filter(),
                         KeyCode::Char('u') => ui.cycle_user_filter(),
                         KeyCode::Char('f') | KeyCode::Char('F') => ui.toggle_follow(),
+                        KeyCode::F(5) => ui.toggle_tree(),
+                        KeyCode::Enter => ui.toggle_collapse(),
                         KeyCode::Char('j') | KeyCode::Down => ui.select_next(),
                         KeyCode::Char('k') | KeyCode::Up => ui.select_prev(),
                         _ => {}
@@ -611,8 +753,11 @@ fn status_line(ui: &Ui) -> Line<'static> {
                 .map_or_else(|| format!("pid {followed}"), |p| p.name.clone());
             parts.push(format!("follow:{name}"));
         }
+        if ui.tree {
+            parts.push("tree".to_string());
+        }
         parts.push(format!(
-            "q: quit · tab: sort {} · i: reverse · f4: filter · u: user · j/k: select · f: follow",
+            "q: quit · tab: sort {} · i: reverse · f4: filter · u: user · j/k: select · f: follow · f5: tree · enter: fold",
             sort_label(ui.sort, ui.descending)
         ));
         Line::from(parts.join(" · "))
@@ -624,18 +769,18 @@ fn status_line(ui: &Ui) -> Line<'static> {
 fn draw_processes(frame: &mut Frame, ui: &Ui, area: ratatui::layout::Rect) {
     let header = Row::new(["PID", "USER", "STATE", "CPU%", "MEM%", "THR", "RES", "NAME"]).bold();
     let mut rows: Vec<Row<'static>> = Vec::new();
-    let procs = ui.ordered_visible();
+    let procs = ui.ordered_rows();
     // Keep the cursor in view: scroll only far enough. The fold is what fits
     // under the table header (the block's top border takes one line).
     let fold = area.height.saturating_sub(2) as usize;
-    let cursor_index = procs.iter().position(|p| Some(p.pid) == ui.cursor);
+    let cursor_index = procs.iter().position(|r| Some(r.process.pid) == ui.cursor);
     let offset = match cursor_index {
         Some(index) if fold > 0 => index.saturating_sub(fold - 1).min(index),
         _ => 0,
     };
-    for (_index, process) in procs.iter().enumerate().skip(offset).take(fold) {
-        let mut row = process_row(process);
-        if Some(process.pid) == ui.cursor {
+    for row_view in procs.iter().skip(offset).take(fold) {
+        let mut row = process_row(row_view, ui.tree);
+        if Some(row_view.process.pid) == ui.cursor {
             row = row.style(ratatui::style::Style::default().reversed());
         }
         rows.push(row);
@@ -656,16 +801,31 @@ fn draw_processes(frame: &mut Frame, ui: &Ui, area: ratatui::layout::Rect) {
     frame.render_widget(table, area);
 }
 
-fn process_row(process: &Process) -> Row<'static> {
+fn process_row(row_view: &TreeRow<'_>, tree: bool) -> Row<'static> {
+    let name = if tree {
+        let indent = "  ".repeat(row_view.depth);
+        let branch = if row_view.depth > 0 { "└─ " } else { "" };
+        let folded = if row_view.hidden > 0 {
+            format!(" (+{})", row_view.hidden)
+        } else {
+            String::new()
+        };
+        format!("{indent}{branch}{}{folded}", row_view.process.name)
+    } else {
+        row_view.process.name.clone()
+    };
     Row::new(vec![
-        Cell::from(format!("{:>7}", process.pid)),
-        Cell::from(format!("{:>9}", process.user)),
-        Cell::from(process.state.clone()),
-        Cell::from(format!("{:>6.1}", process.cpu_percent)),
-        Cell::from(format!("{:>6.1}", process.mem_percent)),
-        Cell::from(format!("{:>4}", process.threads)),
-        Cell::from(format!("{:>8}", bytes_text(process.resident_bytes as f64))),
-        Cell::from(process.name.clone()),
+        Cell::from(format!("{:>7}", row_view.process.pid)),
+        Cell::from(format!("{:>9}", row_view.process.user)),
+        Cell::from(row_view.process.state.clone()),
+        Cell::from(format!("{:>6.1}", row_view.process.cpu_percent)),
+        Cell::from(format!("{:>6.1}", row_view.process.mem_percent)),
+        Cell::from(format!("{:>4}", row_view.process.threads)),
+        Cell::from(format!(
+            "{:>8}",
+            bytes_text(row_view.process.resident_bytes as f64)
+        )),
+        Cell::from(name),
     ])
 }
 
@@ -732,6 +892,16 @@ mod tests {
                 system_watts: Metric::unavailable(Unit::Watts),
             },
         }
+    }
+
+    /// A tree sample where pid 1 (cpu 100) has children 2 (50) and 3 (33.3),
+    /// and pid 2 has child 4 (25).
+    fn sample_with_tree() -> Sample {
+        let mut s = sample();
+        for (pid, parent) in [(2u32, Some(1u32)), (3, Some(1)), (4, Some(2))] {
+            s.processes[(pid - 1) as usize].parent = parent;
+        }
+        s
     }
 
     /// Render through the public helper under test.
@@ -1080,6 +1250,80 @@ mod tests {
             rows.iter().any(|row| row.contains("PID")),
             "the table header stays visible"
         );
+    }
+
+    #[test]
+    fn tree_groups_children_under_their_parents() {
+        let mut s = sample();
+        for (pid, parent) in [(2u32, Some(1u32)), (3, Some(1)), (4, Some(2))] {
+            s.processes[(pid - 1) as usize].parent = parent;
+        }
+        let ui = ui_with(Some(s), None);
+        // Flat mode is unchanged by the parent links.
+        let flat: Vec<u32> = ui.ordered_rows().iter().map(|r| r.process.pid).collect();
+        assert_eq!(flat, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+        let mut tree_ui = ui_with(Some(sample_with_tree()), None);
+        tree_ui.toggle_tree();
+        let rows = tree_ui.ordered_rows();
+        let pids: Vec<u32> = rows.iter().map(|r| r.process.pid).collect();
+        // worker-01 (cpu 100) roots the tree; its children 2 and 3 follow in
+        // sort order, 4 nests under 2, then the other roots.
+        assert_eq!(pids, vec![1, 2, 4, 3, 5, 6, 7, 8, 9, 10, 11, 12]);
+        let depths: Vec<usize> = rows.iter().map(|r| r.depth).collect();
+        assert_eq!(depths, vec![0, 1, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0]);
+    }
+
+    #[test]
+    fn a_fold_hides_the_subtree_and_reports_the_count() {
+        let mut ui = ui_with(Some(sample_with_tree()), None);
+        ui.toggle_tree();
+        ui.cursor = Some(1);
+        ui.toggle_collapse();
+        assert_eq!(ui.collapsed, std::iter::once(1).collect());
+        let rows = ui.ordered_rows();
+        assert_eq!(rows.len(), 9, "three descendants fold away");
+        assert_eq!(rows[0].process.pid, 1);
+        assert_eq!(rows[0].hidden, 3);
+        assert_eq!(rows[1].process.pid, 5);
+        // Unfolding brings the whole subtree back.
+        ui.toggle_collapse();
+        assert!(ui.collapsed.is_empty());
+        assert_eq!(ui.ordered_rows().len(), 12);
+    }
+
+    #[test]
+    fn folding_needs_a_cursor_with_children() {
+        let mut ui = ui_with(Some(sample_with_tree()), None);
+        ui.toggle_tree();
+        // No cursor: nothing to fold.
+        ui.toggle_collapse();
+        assert!(ui.collapsed.is_empty());
+        // worker-05 has no visible children: nothing to fold either.
+        ui.cursor = Some(5);
+        ui.toggle_collapse();
+        assert!(ui.collapsed.is_empty());
+    }
+
+    #[test]
+    fn the_tree_render_indents_and_marks_folds() {
+        let mut ui = ui_with(Some(sample_with_tree()), None);
+        ui.toggle_tree();
+        ui.cursor = Some(1);
+        ui.toggle_collapse();
+        let rows = render(&ui, 80, 24);
+        assert!(
+            rows.iter().any(|row| row.contains("worker-01 (+3)")),
+            "the folded row reports its hidden descendants: {rows:?}"
+        );
+        assert!(
+            !rows.iter().any(|row| row.contains("worker-02")),
+            "folded descendants stay hidden"
+        );
+        // Unfold and check the indent prefix on a grandchild.
+        ui.toggle_collapse();
+        let rows = render(&ui, 80, 24);
+        assert!(rows.iter().any(|row| row.contains("└─ worker-04")));
+        assert!(rows.iter().any(|row| row.contains("└─ worker-02")));
     }
 
     #[test]
