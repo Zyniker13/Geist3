@@ -1,0 +1,85 @@
+{
+  "format": 1,
+  "platform": "macos",
+  "arch": "aarch64",
+  "kernel": "27.2.0",
+  "captured_at_unix": 1794649601,
+  "source": "ztop 0.1.0-scrubbed",
+  "entries": [
+    {
+      "name": "hostinfo",
+      "path": "data/hostinfo",
+      "kind": "text"
+    },
+    {
+      "name": "processes",
+      "path": "data/processes",
+      "kind": "text"
+    },
+    {
+      "name": "sysctl-hw_byteorder",
+      "path": "data/sysctl-hw_byteorder",
+      "kind": "text"
+    },
+    {
+      "name": "sysctl-hw_cpusubtype",
+      "path": "data/sysctl-hw_cpusubtype",
+      "kind": "text"
+    },
+    {
+      "name": "sysctl-hw_cputype",
+      "path": "data/sysctl-hw_cputype",
+      "kind": "text"
+    },
+    {
+      "name": "sysctl-hw_machine",
+      "path": "data/sysctl-hw_machine",
+      "kind": "text"
+    },
+    {
+      "name": "sysctl-hw_memsize",
+      "path": "data/sysctl-hw_memsize",
+      "kind": "text"
+    },
+    {
+      "name": "sysctl-hw_model",
+      "path": "data/sysctl-hw_model",
+      "kind": "text"
+    },
+    {
+      "name": "sysctl-hw_ncpu",
+      "path": "data/sysctl-hw_ncpu",
+      "kind": "text"
+    },
+    {
+      "name": "sysctl-hw_optional_arm64",
+      "path": "data/sysctl-hw_optional_arm64",
+      "kind": "text"
+    },
+    {
+      "name": "sysctl-hw_pagesize",
+      "path": "data/sysctl-hw_pagesize",
+      "kind": "text"
+    },
+    {
+      "name": "sysctl-kern_osproductversion",
+      "path": "data/sysctl-kern_osproductversion",
+      "kind": "text"
+    },
+    {
+      "name": "sysctl-kern_osrelease",
+      "path": "data/sysctl-kern_osrelease",
+      "kind": "text"
+    },
+    {
+      "name": "sysctl-kern_ostype",
+      "path": "data/sysctl-kern_ostype",
+      "kind": "text"
+    },
+    {
+      "name": "sysctl-kern_version",
+      "path": "data/sysctl-kern_version",
+      "kind": "text"
+    }
+  ]
+}

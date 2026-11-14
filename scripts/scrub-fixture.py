@@ -9,6 +9,10 @@ per-process cmdline/comm/status-Name values with obviously fake names
 bounded number of processes, regenerates manifest.json for the surviving
 entries, and marks the manifest source with a `-scrubbed` suffix.
 
+On macOS the capture has a single `processes` entry with one line per pid
+(`pid ppid status threads "name"`); the quoted names are replaced with fake
+names and the lines trimmed to the lowest pids.
+
 The parsers must accept both real and scrubbed text, so the scrub never
 becomes parser load-bearing (decision 0007).
 
@@ -24,6 +28,20 @@ from pathlib import Path
 FAKE_NAMES = [f"proc-{c}" for c in "abcdefghijklmnopqrstuvwxyz"]
 
 PROC_PID_RE = re.compile(r"^proc-(\d+)-(cmdline|comm|status|stat)$")
+
+MAC_PROC_RE = re.compile(
+    r'^(?P<pid>\d+) (?P<rest>\d+ \d+ \d+) "(?P<name>.*)"$', re.MULTILINE
+)
+
+
+def scrub_process_entry(text: str, fake_by_pid: dict[int, str]) -> str:
+    """Replace the quoted name tail of each `processes` line (macOS)."""
+    out = []
+    for line in text.splitlines():
+        m = MAC_PROC_RE.match(line)
+        if m and int(m["pid"]) in fake_by_pid:
+            out.append(f'{m["pid"]} {m["rest"]} "{fake_by_pid[int(m["pid"])]}"')
+    return "\n".join(out) + ("\n" if out else "")
 
 
 def scrub_pid_name(pid: int, index: int) -> str:
@@ -65,6 +83,41 @@ def main() -> None:
     args = parser.parse_args()
 
     manifest = json.loads((args.src / "manifest.json").read_text())
+
+    # A macOS capture has a single `processes` entry with one line per pid:
+    # scrub its name tails and trim to the lowest pids.
+    mac_processes = next(
+        (e for e in manifest["entries"] if e["name"] == "processes"), None
+    )
+    if mac_processes is not None:
+        text = (args.src / mac_processes["path"]).read_text()
+        pids = sorted({int(m["pid"]) for m in MAC_PROC_RE.finditer(text)})
+        keep_pids = pids[: args.procs]
+        fake_by_pid = {
+            pid: scrub_pid_name(pid, index) for index, pid in enumerate(keep_pids)
+        }
+        if args.dst.exists():
+            shutil.rmtree(args.dst)
+        (args.dst / "data").mkdir(parents=True)
+        out_entries = []
+        for entry in manifest["entries"]:
+            src = args.src / entry["path"]
+            data = src.read_text()
+            if entry["name"] == "processes":
+                data = scrub_process_entry(data, fake_by_pid)
+            dst = args.dst / entry["path"]
+            dst.write_text(data)
+            out_entries.append(entry)
+        manifest["entries"] = out_entries
+        manifest["source"] = manifest["source"] + "-scrubbed"
+        (args.dst / "manifest.json").write_text(
+            json.dumps(manifest, indent=2) + "\n"
+        )
+        print(
+            f"kept {len(out_entries)} entries: "
+            f"{len(out_entries) - 1} fixed + {len(keep_pids)} processes"
+        )
+        return
 
     # Collect per-process entries keyed by pid, and everything else.
     fixed: list[dict] = []
