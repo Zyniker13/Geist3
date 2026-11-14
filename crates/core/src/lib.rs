@@ -7,6 +7,8 @@
 //! produce and the recorded-input fixtures their tests run against.
 
 pub mod capture;
+#[cfg(target_os = "macos")]
+mod capture_macos;
 pub mod collector;
 pub mod fixture;
 pub mod linux;
