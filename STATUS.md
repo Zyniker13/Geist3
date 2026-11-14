@@ -3,13 +3,15 @@
 Updated after every working session.
 
 - **Current milestone:** M2 (macOS collectors and Apple Silicon).
-- **Last done:** m2-fixtures (part 1): `ztop capture` now runs on macOS — `crates/core/src/capture_macos.rs` reads the allowlisted sysctls, Mach `host_statistics64` vm stats, `vm.loadavg` and `vm.swapusage` (binary `xsw_usage`), `kern.boottime`, and a libproc process snapshot (`proc_listallpids` + SHORTBSDINFO + taskinfo), sorted and deduped; live capture produces 16 clean entries.
-- **Next step:** m2-fixtures (part 2): extend the scrubber for macOS process names, record this host's macOS fixtures, and add the macOS side of `sample_from_fixture`.
+- **Last done:** m2-fixtures (part 2): the macOS `processes` snapshot now records `pid ppid status uid utime stime rss threads "name"` — CPU nanoseconds via `mach_timebase_info`, verified against `ps`; task fields are `-` when the kernel denies the read (other users' processes; `/bin/ps` is setuid root, ztop is not). The 96-byte `proc_taskinfo` layout is asserted at compile time, the scrubber keeps both line shapes (lowest pids plus the busiest same-user pids), and `tests/fixtures/macos-aarch64` was re-recorded from a fresh capture.
+- **Next step:** m2-fixtures (part 3): the macOS parser in `sample_from_fixture` with per-field fixture tests, then the macOS live collector.
 - **Blocked on:** nothing.
 
 ## Log
 
 Newest first. One or two lines per session: what changed, what is next.
+
+- 2026-11-14: macOS fixtures re-recorded with per-process task fields (decision 0009 amendment): TASKINFO is same-user-only unprivileged, CPU fields are mach ticks converted to ns, the taskinfo struct size is now compile-asserted, and the scrubber keeps `-` and real-value line shapes. Next: the macOS fixture parser.
 
 - 2026-11-14: macOS capture mode works (`capture_macos.rs`, commit A of m2-fixtures): sysctls + Mach vm stats + loadavg/swap/boottime + libproc processes; full check gate green; live capture 16 entries. Next: scrubber for macOS names, record fixtures, fixture parser.
 
