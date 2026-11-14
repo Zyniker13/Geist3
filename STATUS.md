@@ -3,13 +3,15 @@
 Updated after every working session.
 
 - **Current milestone:** M3 (Full TUI Parity).
-- **Last done:** M3 batch 6: per-process I/O — `Process.io` (`ProcessIo`: read/write byte totals and per-second rates) in the model; Linux reads `/proc/<pid>/io` for fixtures and live sampling with delta rates between samples; macOS reports none today; the TUI table gains conditional `RD/s`/`WR/s` columns shown only while a visible process moves data, so the recorded renders stay unchanged. Five new tests; gate green.
+- **Last done:** Fixture replay now carries the recorded io totals (`7aea746`): the per-pid entry whitelist admits `io`, replayed samples get read/write byte totals with rates unset, and the render test asserts rates stay unset instead of assuming fixtures have no io.
 - **Next step:** M3 batch 7 — setup screens, mouse, Apple Silicon screen with charts, config file, disk/network/thermal panels; leftover parity items (`k` opens the signal menu, `-p` PID filter).
 - **Blocked on:** nothing.
 
 ## Log
 
 Newest first. One or two lines per session: what changed, what is next.
+
+- 2026-11-14: io replay fix (`7aea746`): the fixture replay whitelist admits `io`, so replayed samples carry the recorded `/proc/<pid>/io` totals with rates unset; the render test now asserts rates stay unset instead of assuming fixtures carry no io, and the integration test tolerates io entries whose process left before the recording's per-pid pass. Gate plus both cross-target clippies green. Next: setup screens, mouse, Apple Silicon screen, config file.
 
 - 2026-11-14: M3 batch 6 (`a6aa908`): per-process I/O — `ProcessIo` (read/write byte totals and delta rates) joins `Process`; Linux captures `/proc/[0-9]*/io` for fixtures and reads it live with two-sample rates (a partially filled io file counts as unavailable); macOS reports none today; the TUI adds conditional `RD/s`/`WR/s` columns hidden without traffic, with compact `3.5Mi`-style cells. Five tests; gate green. Next: setup screens, mouse, Apple Silicon screen, config file.
 
