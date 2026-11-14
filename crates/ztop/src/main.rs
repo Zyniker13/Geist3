@@ -64,11 +64,14 @@ fn main() -> ExitCode {
 fn run() -> Result<(), Box<dyn Error>> {
     match Cli::parse().command {
         None => {
-            // The live sampler is Linux-only for now; other platforms get a
-            // placeholder that reports itself unavailable in the TUI header.
+            // The live sampler runs on Linux and macOS; other platforms get
+            // a placeholder that reports itself unavailable in the TUI
+            // header.
             #[cfg(target_os = "linux")]
             let mut collector = ztop_core::linux::LinuxCollector::default();
-            #[cfg(not(target_os = "linux"))]
+            #[cfg(target_os = "macos")]
+            let mut collector = ztop_core::macos_live::MacOsCollector::default();
+            #[cfg(not(any(target_os = "linux", target_os = "macos")))]
             let mut collector = ztop_tui::UnavailableCollector;
             ztop_tui::run(&mut collector)?;
         }
