@@ -37,6 +37,17 @@ impl Metric {
     }
 }
 
+/// The default metric is the explicitly unavailable one.
+///
+/// Structs that derive `Default` and own metrics (such as [`Sensors`]) get
+/// present-but-unavailable slots, so layouts keep their place on hosts that
+/// do not provide a source (decision 0009).
+impl Default for Metric {
+    fn default() -> Self {
+        Self::unavailable(Unit::Count)
+    }
+}
+
 /// Physical unit of a [`Metric`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -192,16 +203,22 @@ pub struct Battery {
     pub state: BatteryState,
 }
 
-/// Temperatures, fans and battery.
+/// Temperatures, fans, battery and power.
 ///
 /// An empty group means the host has none of them (or no driver exposes
 /// them); lists are genuinely empty and an absent battery is `None`, not
-/// unavailable placeholders.
+/// unavailable placeholders. Power metrics are per-source: unavailable when
+/// the platform has no unprivileged source for them (decision 0009),
+/// never faked.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Sensors {
     pub temps: Vec<TempSensor>,
     pub fans: Vec<Fan>,
     pub battery: Option<Battery>,
+    /// GPU power draw over the sample interval, where a source exists.
+    pub gpu_watts: Metric,
+    /// Whole-system power draw, where a source exists (macOS `PSTR`).
+    pub system_watts: Metric,
 }
 
 /// CPU state for one host: per-core times and, when reported, frequencies.
@@ -321,11 +338,24 @@ mod tests {
                     power_watts: Metric::unavailable(Unit::Watts),
                     state: BatteryState::Charging,
                 }),
+                gpu_watts: Metric::available(8.7, Unit::Watts),
+                system_watts: Metric::unavailable(Unit::Watts),
             },
         };
         let json = serde_json::to_string(&sample).expect("serialize");
         let back: Sample = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(back, sample);
+    }
+
+    #[test]
+    fn default_sensors_are_unavailable_metrics() {
+        let sensors = Sensors::default();
+        assert!(sensors.temps.is_empty());
+        assert!(sensors.fans.is_empty());
+        assert!(sensors.battery.is_none());
+        assert!(!sensors.gpu_watts.available);
+        assert!(!sensors.system_watts.available);
+        assert_eq!(sensors.gpu_watts.unit, Unit::Count);
     }
 
     #[test]

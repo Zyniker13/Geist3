@@ -676,6 +676,7 @@ pub fn sample_from_fixture(dir: &Path) -> Result<Sample, FixtureSampleError> {
             temps: Vec::new(),
             fans: Vec::new(),
             battery: None,
+            ..Sensors::default()
         },
     })
 }

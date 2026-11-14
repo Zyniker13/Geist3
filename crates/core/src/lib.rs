@@ -16,6 +16,7 @@ pub mod macos;
 #[cfg(target_os = "macos")]
 pub mod macos_live;
 pub mod model;
+pub mod power;
 
 /// Reads a recorded fixture into a [`Sample`], choosing the platform
 /// reader by the manifest's `platform` field.
