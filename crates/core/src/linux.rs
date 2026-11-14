@@ -615,7 +615,7 @@ fn split_pid_entry(name: &str) -> Option<(u32, &str)> {
         return None;
     }
     let pid: u32 = pid.parse().ok()?;
-    if !matches!(kind, "stat" | "status" | "comm" | "cmdline") {
+    if !matches!(kind, "stat" | "status" | "comm" | "cmdline" | "io") {
         return None;
     }
     Some((pid, kind))
@@ -1271,6 +1271,7 @@ mod tests {
     fn pid_entry_names_split_into_pid_and_kind() {
         assert_eq!(split_pid_entry("proc-1-stat"), Some((1, "stat")));
         assert_eq!(split_pid_entry("proc-42-cmdline"), Some((42, "cmdline")));
+        assert_eq!(split_pid_entry("proc-7-io"), Some((7, "io")));
         assert_eq!(split_pid_entry("proc-stat"), None);
         assert_eq!(split_pid_entry("proc-sys-kernel-osrelease"), None);
         assert_eq!(split_pid_entry("proc-1-mounts"), None);

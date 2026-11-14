@@ -207,6 +207,56 @@ fn core_times_fit_inside_the_machine_uptime() {
 }
 
 #[test]
+fn io_totals_come_from_the_recorded_io_files() {
+    for name in ARCHES {
+        let dir = fixture_dir(name);
+        let sample = sample_from_fixture(&dir).unwrap();
+        // Every recorded `proc-<pid>-io` entry must land in the sample as
+        // byte totals, with no rates: a fixture replay has no interval to
+        // measure rates over.
+        let mut recorded = 0usize;
+        for entry in std::fs::read_dir(dir.join("data")).unwrap() {
+            let file_name = entry.unwrap().file_name().into_string().unwrap();
+            let Some(pid) = file_name
+                .strip_prefix("proc-")
+                .and_then(|rest| rest.strip_suffix("-io"))
+                .and_then(|pid| pid.parse::<u32>().ok())
+            else {
+                continue;
+            };
+            recorded += 1;
+            let text = data(&dir, &file_name);
+            let byte_after = |key: &str| {
+                text.lines().find_map(|line| {
+                    let (field, value) = line.split_once(':')?;
+                    (field.trim() == key)
+                        .then(|| value.trim().parse::<u64>().ok())
+                        .flatten()
+                })
+            };
+            let read = byte_after("read_bytes");
+            let write = byte_after("write_bytes");
+            let (read, write) = match (read, write) {
+                (Some(read), Some(write)) => (read, write),
+                _ => panic!("{name}: {file_name} must record both totals"),
+            };
+            let proc = match sample.processes.iter().find(|proc| proc.pid == pid) {
+                Some(proc) => proc,
+                // The recorder's io pass can outlive its process: a pid that
+                // vanished before the per-pid pass has no stat entry and no
+                // row. Its io file stays in the fixture, unread.
+                None => continue,
+            };
+            assert_eq!(proc.io.read_bytes, Some(read), "{name} pid {pid}");
+            assert_eq!(proc.io.write_bytes, Some(write), "{name} pid {pid}");
+            assert_eq!(proc.io.read_rate, None, "{name} pid {pid}");
+            assert_eq!(proc.io.write_rate, None, "{name} pid {pid}");
+        }
+        assert!(recorded > 0, "{name}: the recording carries io entries");
+    }
+}
+
+#[test]
 fn fields_match_the_recording_for_each_arch() {
     for name in ARCHES {
         let dir = fixture_dir(name);

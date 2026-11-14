@@ -7,7 +7,6 @@
 
 use std::path::{Path, PathBuf};
 
-use ztop_core::model::ProcessIo;
 use ztop_core::sample_from_fixture;
 use ztop_tui::{Ui, draw_lines};
 
@@ -61,19 +60,19 @@ fn renders_both_recorded_fixtures_at_80x24() {
 }
 
 #[test]
-fn replayed_fixtures_carry_no_io_and_render_without_the_io_columns() {
+fn replayed_fixtures_render_without_the_io_columns() {
     for arch in ARCHES {
         let dir = fixture_dir(arch);
         let sample =
             sample_from_fixture(&dir).unwrap_or_else(|err| panic!("{arch} should parse: {err}"));
-        // The recorded captures predate per-process I/O: replaying them
-        // must leave every io field unset, so the recorded 80x24 renders
-        // stay byte-identical with or without the new columns.
+        // A fixture replay has no interval to measure over, so every io
+        // rate stays unset; the io columns are gated on rates and stay
+        // closed, and the recorded 80x24 renders are byte-identical
+        // with or without the new columns.
         for proc in &sample.processes {
-            assert_eq!(
-                proc.io,
-                ProcessIo::default(),
-                "{arch} {} should replay without io data",
+            assert!(
+                proc.io.read_rate.is_none() && proc.io.write_rate.is_none(),
+                "{arch} {}: a replay must not invent io rates",
                 proc.name
             );
         }
