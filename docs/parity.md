@@ -21,7 +21,7 @@ Check an item only when it works and a test or a recorded check shows it. Add th
 - [ ] Tree view with collapse and expand
 - [ ] Incremental search (F3)
 - [x] Filter (F4) — F4 opens a prompt that edits live; an empty prompt matches everything; the active pattern shows in the status line. Tests: `the_name_filter_narrows_and_the_status_shows_it`.
-- [ ] Follow a process (F)
+- [x] Follow a process (F) — j/k/arrows move a cursor over the visible rows; F pins follow to the cursor's pid across samples and re-pins when the cursor moves; a vanished followed process ends follow mode; the cursor row is highlighted and the list scrolls to keep it visible. Tests: `j_and_k_move_the_cursor_over_visible_rows`, `follow_reselects_the_pid_after_apply`, `follow_ends_when_the_process_vanishes`, `a_plain_cursor_keeps_its_pid_and_dies_with_it`, `the_cursor_scrolls_to_stay_visible`.
 - [ ] Tag processes (Space), tag children (c), untag all (U), and act on all tagged
 - [ ] Send any signal through a signal menu (F9 / k)
 - [ ] Renice up and down (F7 / F8)

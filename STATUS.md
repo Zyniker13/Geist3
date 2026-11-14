@@ -3,13 +3,15 @@
 Updated after every working session.
 
 - **Current milestone:** M3 (Full TUI Parity).
-- **Last done:** M3 batch 1: name filter (F4, live-editing prompt, status-line pattern display), user filter (`u` cycles all users then each user in sorted order then back to all, status-line display), and a threads (THR) column between MEM% and RES; key handling is filter-aware (while the prompt is open, printable keys type into it; Esc closes; Ctrl-C still quits). Three tests cover the behavior at 11 TUI unit tests; full gate green.
-- **Next step:** M3 batch 2 — follow a process (F), then tree view, incremental search (F3), tagging, signals, renice, I/O columns.
+- **Last done:** M3 batch 2: selection cursor (`j`/`k`/arrows) and follow (`F`) — the cursor rides by pid across samples, follow re-pins on cursor moves and ends when the followed process vanishes; the cursor row is highlighted and the list scrolls to keep it visible. Five tests cover it at 16 TUI unit tests; full gate green.
+- **Next step:** M3 batch 3 — tree view (collapse/expand), then incremental search (F3), tagging, signals, renice, I/O columns.
 - **Blocked on:** nothing.
 
 ## Log
 
 Newest first. One or two lines per session: what changed, what is next.
+
+- 2026-11-14: M3 batch 2 (`8f2854a`): selection cursor (`j`/`k`, arrows) with highlight and scroll-into-view, follow (`F`) pinned by pid across samples, `follow:` shown in the status line. Five tests; gate green. Next: tree view, F3 search, tagging.
 
 - 2026-11-14: M3 opened; batch 1 shipped (`79d52a4`): name filter (F4 live prompt, status shows the pattern), user filter (`u` cycles the sample's users, wrapping back to all) and a THR column; filter-aware key handling (typing goes to the prompt, Esc closes, Ctrl-C always quits). 11 TUI unit tests, gate green. Next: follow, tree view, search, tagging.
 
