@@ -3,13 +3,15 @@
 Updated after every working session.
 
 - **Current milestone:** M2 (macOS collectors and Apple Silicon).
-- **Last done:** m2-fixtures (part 2): the macOS `processes` snapshot now records `pid ppid status uid utime stime rss threads "name"` — CPU nanoseconds via `mach_timebase_info`, verified against `ps`; task fields are `-` when the kernel denies the read (other users' processes; `/bin/ps` is setuid root, ztop is not). The 96-byte `proc_taskinfo` layout is asserted at compile time, the scrubber keeps both line shapes (lowest pids plus the busiest same-user pids), and `tests/fixtures/macos-aarch64` was re-recorded from a fresh capture.
-- **Next step:** m2-fixtures (part 3): the macOS parser in `sample_from_fixture` with per-field fixture tests, then the macOS live collector.
+- **Last done:** m2-fixtures (part 3): the macOS fixture parser (`ztop_core::macos`) replays the recorded capture into a `Sample` — hostinfo CPU ticks at 100 Hz, vm stats, loadavg/boottime, and the 9-field process table (BSD status byte mapped to the `ps` state letter, task fields `-` when denied) — behind a platform dispatcher `ztop_core::sample_from_fixture` keyed on the manifest, with 10 per-field tests re-derived from the raw fixture text; `ztop replay` and the TUI render test now cover the macOS fixture too. Full gate green.
+- **Next step:** m2-live: the macOS live collector (same parsers against live sysctl/Mach/libproc reads), then the TUI on macOS and parity updates.
 - **Blocked on:** nothing.
 
 ## Log
 
 Newest first. One or two lines per session: what changed, what is next.
+
+- 2026-11-14: macOS fixture parsing and replay done (part 3): `ztop_core::macos` parses the recorded hostinfo/processes text ungated (Linux CI exercises it), the fixture dispatcher picks Linux/macOS by manifest, `ztop replay` accepts macOS fixtures, and the TUI render test renders all three recorded captures. Next: the macOS live collector.
 
 - 2026-11-14: macOS fixtures re-recorded with per-process task fields (decision 0009 amendment): TASKINFO is same-user-only unprivileged, CPU fields are mach ticks converted to ns, the taskinfo struct size is now compile-asserted, and the scrubber keeps `-` and real-value line shapes. Next: the macOS fixture parser.
 
