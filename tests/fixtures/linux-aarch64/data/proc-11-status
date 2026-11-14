@@ -36,5 +36,5 @@ Cpus_allowed:	1
 Cpus_allowed_list:	0
 Mems_allowed:	00000000,00000001
 Mems_allowed_list:	0
-voluntary_ctxt_switches:	168
+voluntary_ctxt_switches:	243
 nonvoluntary_ctxt_switches:	3
