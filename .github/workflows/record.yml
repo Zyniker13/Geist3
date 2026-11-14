@@ -35,6 +35,12 @@ jobs:
           mkdir -p tests/fixtures
           cp -R "$RUNNER_TEMP/scrubbed" tests/fixtures/linux-x86_64
           find tests/fixtures/linux-x86_64 -type f | sort | xargs sha256sum | sha256sum
+      - name: Self-test the scrubbed fixture
+        run: |
+          ./target/debug/ztop replay "$RUNNER_TEMP/scrubbed" > "$RUNNER_TEMP/frame.txt"
+          grep -Eq '[0-9]+ procs' "$RUNNER_TEMP/frame.txt"
+          grep -q 'proc-' "$RUNNER_TEMP/frame.txt"
+          echo "frame header: $(head -1 "$RUNNER_TEMP/frame.txt")"
       - name: Commit the fixture
         run: |
           git config user.name "github-actions[bot]"
@@ -67,6 +73,12 @@ jobs:
           mkdir -p tests/fixtures
           cp -R "$RUNNER_TEMP/scrubbed" tests/fixtures/linux-aarch64
           find tests/fixtures/linux-aarch64 -type f | sort | xargs sha256sum | sha256sum
+      - name: Self-test the scrubbed fixture
+        run: |
+          ./target/debug/ztop replay "$RUNNER_TEMP/scrubbed" > "$RUNNER_TEMP/frame.txt"
+          grep -Eq '[0-9]+ procs' "$RUNNER_TEMP/frame.txt"
+          grep -q 'proc-' "$RUNNER_TEMP/frame.txt"
+          echo "frame header: $(head -1 "$RUNNER_TEMP/frame.txt")"
       - name: Commit the fixture
         run: |
           git config user.name "github-actions[bot]"

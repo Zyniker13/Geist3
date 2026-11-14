@@ -33,6 +33,17 @@ run() {
 run fmt cargo fmt --all -- --check
 run clippy cargo clippy --workspace --all-targets -- -D warnings
 run test cargo test --workspace
+run smoke sh -c '
+    set -e
+    # Replay both committed fixtures through the production draw path.
+    for arch in linux-x86_64 linux-aarch64; do
+        frame=$(cargo run -q -p ztop -- replay "tests/fixtures/$arch")
+        echo "$frame" | grep -q "$arch" || { echo "header missing $arch"; exit 1; }
+        echo "$frame" | grep -Eq "[0-9]+ procs" || { echo "process count missing"; exit 1; }
+        echo "$frame" | grep -q "proc-" || { echo "no process rows"; exit 1; }
+        echo "$frame" | head -1
+    done
+'
 run deny cargo deny check licenses bans sources
 
 if command -v xcodebuild >/dev/null 2>&1; then
