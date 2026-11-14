@@ -4,14 +4,16 @@ Updated after every working session.
 
 - **Current milestone:** M2 (macOS collectors and Apple Silicon).
 - **Last done:** m2-live: the macOS live collector (`ztop_core::macos_live::MacOsCollector`, gated to macOS) — decision 0010: the capture producers and the fixture parsers are shared, so a recorded capture and a live sample are interpreted identically; per-core and per-process rates are deltas between samples through the shared `core_percents` math, every source unprivileged. A live-host test asserts universal bounds over two real samples; full gate green including both Linux cross-target clippy runs.
-- **Next step:** the TUI on macOS with screenshots, then parity updates and the rest of M2 per the ROADMAP.
+- **Next step:** m2-power: IOReport power/frequency and SMC temps/fans probing unprivileged (decision 0009), then the recorded powermetrics-style comparison in docs/ closes M2's Done-when.
 - **Blocked on:** nothing.
 
 ## Log
 
 Newest first. One or two lines per session: what changed, what is next.
 
-- 2026-11-14: m2-live done: the macOS live collector shares the capture's text producers and the fixture parsers (decision 0010), rates come from the shared per-core/per-process delta math, and a live-host test pins universal bounds over two real samples; hostinfo-without-cores keeps reporting a bad `hostinfo` source. Next: the TUI on macOS with screenshots, then parity updates.
+- 2026-11-14: the TUI works live on macOS: the binary draws real samples in a pty (per-core, memory, swap, load, per-process rates) and quits cleanly; the scrubbed fixture-replay snapshot is committed in docs/screenshots/. Next: IOReport power/frequency and SMC unprivileged probing, then the recorded comparison.
+
+- 2026-11-14: m2-live done: the macOS live collector shares the capture's text producers and the fixture parsers (decision 0010), rates come from the shared per-core/per-process delta math, and a live-host test pins universal bounds over two real samples; hostinfo-without-cores keeps reporting a bad `hostinfo` source. CI green on the push.
 
 - 2026-11-14: macOS fixtures re-recorded with per-process task fields (decision 0009 amendment): TASKINFO is same-user-only unprivileged, CPU fields are mach ticks converted to ns, the taskinfo struct size is now compile-asserted, and the scrubber keeps `-` and real-value line shapes. Next: the macOS fixture parser.
 
