@@ -2,8 +2,8 @@
   "format": 1,
   "platform": "linux",
   "arch": "x86_64",
-  "kernel": "7.0.0-1016-aws",
-  "captured_at_unix": 1794653243,
+  "kernel": "7.0.0-1019-azure",
+  "captured_at_unix": 1794695769,
   "source": "ztop 0.1.0-scrubbed",
   "entries": [
     {
@@ -107,6 +107,26 @@
       "kind": "text"
     },
     {
+      "name": "proc-2167-io",
+      "path": "data/proc-2167-io",
+      "kind": "text"
+    },
+    {
+      "name": "proc-2218-io",
+      "path": "data/proc-2218-io",
+      "kind": "text"
+    },
+    {
+      "name": "proc-2236-io",
+      "path": "data/proc-2236-io",
+      "kind": "text"
+    },
+    {
+      "name": "proc-2500-io",
+      "path": "data/proc-2500-io",
+      "kind": "text"
+    },
+    {
       "name": "proc-3-cmdline",
       "path": "data/proc-3-cmdline",
       "kind": "text"
@@ -124,6 +144,11 @@
     {
       "name": "proc-3-status",
       "path": "data/proc-3-status",
+      "kind": "text"
+    },
+    {
+      "name": "proc-3350-io",
+      "path": "data/proc-3350-io",
       "kind": "text"
     },
     {
@@ -304,36 +329,6 @@
     {
       "name": "proc-version",
       "path": "data/proc-version",
-      "kind": "text"
-    },
-    {
-      "name": "sys-class-hwmon-hwmon0-name",
-      "path": "data/sys-class-hwmon-hwmon0-name",
-      "kind": "text"
-    },
-    {
-      "name": "sys-class-hwmon-hwmon0-temp1_input",
-      "path": "data/sys-class-hwmon-hwmon0-temp1_input",
-      "kind": "text"
-    },
-    {
-      "name": "sys-class-hwmon-hwmon0-temp1_label",
-      "path": "data/sys-class-hwmon-hwmon0-temp1_label",
-      "kind": "text"
-    },
-    {
-      "name": "sys-class-hwmon-hwmon1-name",
-      "path": "data/sys-class-hwmon-hwmon1-name",
-      "kind": "text"
-    },
-    {
-      "name": "sys-class-hwmon-hwmon1-temp1_input",
-      "path": "data/sys-class-hwmon-hwmon1-temp1_input",
-      "kind": "text"
-    },
-    {
-      "name": "sys-class-hwmon-hwmon1-temp1_label",
-      "path": "data/sys-class-hwmon-hwmon1-temp1_label",
       "kind": "text"
     }
   ]
