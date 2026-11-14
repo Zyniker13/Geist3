@@ -2,15 +2,15 @@
 //! The recorded fixtures render end to end through the TUI draw path.
 //!
 //! These tests run on every OS: fixture replay never touches the live
-//! host, so the Linux captures render identically on macOS, in CI and in
-//! the local gate.
+//! host, so the recorded captures render identically on every machine,
+//! in CI and in the local gate.
 
 use std::path::{Path, PathBuf};
 
-use ztop_core::linux::sample_from_fixture;
+use ztop_core::sample_from_fixture;
 use ztop_tui::{Ui, draw_lines};
 
-const ARCHES: [&str; 2] = ["linux-x86_64", "linux-aarch64"];
+const ARCHES: [&str; 3] = ["linux-x86_64", "linux-aarch64", "macos-aarch64"];
 
 /// The committed fixture directories, one per recorded architecture.
 fn fixture_dir(arch: &str) -> PathBuf {
@@ -59,7 +59,8 @@ fn renders_both_recorded_fixtures_at_80x24() {
     }
 }
 
-/// The scrubbed process names of a fixture, read from its `comm` entries.
+/// The scrubbed process names of a fixture, from `comm` entries (Linux)
+/// or the quoted names in the `processes` entry (macOS).
 fn proc_names(dir: &Path) -> Vec<String> {
     let data = dir.join("data");
     let mut names = std::fs::read_dir(&data)
@@ -72,6 +73,14 @@ fn proc_names(dir: &Path) -> Vec<String> {
             text.trim().to_string()
         })
         .collect::<Vec<_>>();
+    if let Ok(processes) = std::fs::read_to_string(data.join("processes")) {
+        // The macOS table records names last, quoted: the fields before
+        // them are numbers and dashes, so the first ` "` starts the name.
+        names.extend(processes.lines().filter_map(|line| {
+            line.split_once(" \"")
+                .map(|(_, quoted)| quoted.strip_suffix('"').unwrap_or(quoted).to_string())
+        }));
+    }
     names.sort();
     names.dedup();
     names
