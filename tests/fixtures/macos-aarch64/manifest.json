@@ -3,7 +3,7 @@
   "platform": "macos",
   "arch": "aarch64",
   "kernel": "27.2.0",
-  "captured_at_unix": 1794649601,
+  "captured_at_unix": 1794652365,
   "source": "ztop 0.1.0-scrubbed",
   "entries": [
     {
