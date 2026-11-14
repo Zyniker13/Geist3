@@ -654,6 +654,7 @@ pub fn sample_from_fixture(dir: &Path) -> Result<Sample, FixtureSampleError> {
             .unwrap_or("unknown")
             .to_string(),
         cpu: Cpu {
+            busy_percent: vec![0.0; stat.cores.len()],
             cores: stat.cores,
             frequency_mhz: Vec::new(),
         },
@@ -671,6 +672,39 @@ pub fn sample_from_fixture(dir: &Path) -> Result<Sample, FixtureSampleError> {
     })
 }
 
+/// Per-core busy percentages between the previous and current core times.
+///
+/// Index `i` pairs `current[i]` with `previous[i]`; a core without a
+/// previous reading reports 0.0, as does a non-positive interval. The
+/// result is clamped to 0..=100 so counter resets cannot produce
+/// negative values.
+#[cfg(any(target_os = "linux", test))]
+pub(crate) fn core_percents(
+    current: &[CpuTimes],
+    previous: &[CpuTimes],
+    interval_secs: f64,
+) -> Vec<f64> {
+    if interval_secs <= 0.0 {
+        return vec![0.0; current.len()];
+    }
+    current
+        .iter()
+        .enumerate()
+        .map(|(index, now)| {
+            let Some(old) = previous.get(index) else {
+                return 0.0;
+            };
+            let busy = now.busy() - old.busy();
+            let total = now.total() - old.total();
+            if total <= 0.0 {
+                0.0
+            } else {
+                (busy / total * 100.0).clamp(0.0, 100.0)
+            }
+        })
+        .collect()
+}
+
 #[cfg(target_os = "linux")]
 pub use live::LinuxCollector;
 
@@ -683,9 +717,10 @@ mod live {
     use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
     use super::{
-        PidData, PidStat, USER_HZ, memory_from, parse_hwmon, parse_pid_stat, parse_pid_status,
-        parse_power_supply, parse_proc_diskstats, parse_proc_loadavg, parse_proc_meminfo,
-        parse_proc_net_dev, parse_proc_stat, parse_proc_uptime, process_row,
+        CpuTimes, PidData, PidStat, USER_HZ, core_percents, memory_from, parse_hwmon,
+        parse_pid_stat, parse_pid_status, parse_power_supply, parse_proc_diskstats,
+        parse_proc_loadavg, parse_proc_meminfo, parse_proc_net_dev, parse_proc_stat,
+        parse_proc_uptime, process_row,
     };
     use crate::collector::{CollectError, Collector};
     use crate::model::{Cpu, Fan, Metric, Process, Sample, Sensors, TempSensor, Unit};
@@ -705,6 +740,7 @@ mod live {
     struct Prev {
         at: Instant,
         pids: HashMap<u32, PidStat>,
+        cores: Vec<CpuTimes>,
     }
 
     impl Collector for LinuxCollector {
@@ -720,12 +756,20 @@ mod live {
             let hostname = fs::read_to_string("/proc/sys/kernel/hostname")?
                 .trim()
                 .to_string();
+            let interval_secs = self
+                .prev
+                .as_ref()
+                .map(|prev| now.duration_since(prev.at).as_secs_f64());
 
             let stat_text = fs::read_to_string("/proc/stat")?;
             let stat = parse_proc_stat(&stat_text).ok_or(CollectError::Unavailable {
                 origin: "/proc/stat",
                 what: "CPU times",
             })?;
+            let per_core_percent = match (self.prev.as_ref(), interval_secs) {
+                (Some(prev), Some(secs)) => core_percents(&stat.cores, &prev.cores, secs),
+                _ => vec![0.0; stat.cores.len()],
+            };
             let meminfo_text = fs::read_to_string("/proc/meminfo")?;
             let meminfo = parse_proc_meminfo(&meminfo_text).ok_or(CollectError::Unavailable {
                 origin: "/proc/meminfo",
@@ -793,10 +837,6 @@ mod live {
                 })
                 .next();
 
-            let interval_secs = self
-                .prev
-                .as_ref()
-                .map(|prev| now.duration_since(prev.at).as_secs_f64());
             let prev_pids = self.prev.as_ref().map(|prev| &prev.pids);
             let total_mem_bytes = meminfo.total;
             let mut processes: Vec<Process> = Vec::new();
@@ -822,12 +862,14 @@ mod live {
                     .iter()
                     .filter_map(|(pid, data)| data.stat.as_ref().map(|stat| (*pid, *stat)))
                     .collect(),
+                cores: stat.cores.clone(),
             });
 
             Ok(Sample {
                 timestamp_ms,
                 hostname,
                 cpu: Cpu {
+                    busy_percent: per_core_percent,
                     cores: stat.cores,
                     frequency_mhz: Vec::new(),
                 },
@@ -1186,5 +1228,81 @@ mod tests {
         assert_eq!(row.user, "?");
         assert_eq!(row.parent, None);
         assert_eq!(row.mem_percent, 0.0);
+    }
+
+    #[test]
+    fn core_percents_reports_zero_without_history() {
+        let core = CpuTimes {
+            user: 10.0,
+            system: 2.0,
+            nice: 0.0,
+            idle: 8.0,
+            io_wait: 0.0,
+            irq: 0.0,
+            soft_irq: 0.0,
+            steal: 0.0,
+            guest: 0.0,
+        };
+        let cores = vec![core];
+        // No previous sample: nothing to measure against.
+        assert_eq!(core_percents(&cores, &[], 10.0), vec![0.0]);
+        // A non-positive interval carries no signal either.
+        assert_eq!(core_percents(&cores, &cores, 0.0), vec![0.0]);
+    }
+
+    #[test]
+    fn core_percents_measures_each_core_independently() {
+        let idle = || CpuTimes {
+            user: 0.0,
+            system: 0.0,
+            nice: 0.0,
+            idle: 10.0,
+            io_wait: 0.0,
+            irq: 0.0,
+            soft_irq: 0.0,
+            steal: 0.0,
+            guest: 0.0,
+        };
+        let old = vec![idle(), idle()];
+        let new = vec![
+            CpuTimes {
+                user: 5.0,
+                idle: 15.0,
+                ..idle()
+            },
+            CpuTimes {
+                idle: 20.0,
+                ..idle()
+            },
+        ];
+        let percents = core_percents(&new, &old, 10.0);
+        assert_eq!(percents.len(), 2);
+        // First core: 5s busy of a 10s interval; second core stayed idle.
+        assert!((percents[0] - 50.0).abs() < 1e-9, "got {}", percents[0]);
+        assert!((percents[1] - 0.0).abs() < 1e-9, "got {}", percents[1]);
+    }
+
+    #[test]
+    fn core_percents_clamps_counter_resets() {
+        let heavy = CpuTimes {
+            user: 10.0,
+            system: 2.0,
+            nice: 0.0,
+            idle: 10.0,
+            io_wait: 0.0,
+            irq: 0.0,
+            soft_irq: 0.0,
+            steal: 0.0,
+            guest: 0.0,
+        };
+        let reset = CpuTimes {
+            user: 5.0,
+            system: 2.0,
+            idle: 8.0,
+            ..heavy
+        };
+        // Counters went backwards (reboot or cgroup reset): clamp to 0.
+        let percents = core_percents(&[reset], &[heavy], 10.0);
+        assert_eq!(percents, vec![0.0]);
     }
 }

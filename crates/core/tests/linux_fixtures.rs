@@ -28,6 +28,8 @@ fn both_fixtures_build_a_full_sample() {
         let sample = sample_from_fixture(&dir).unwrap_or_else(|err| panic!("{name}: {err}"));
         assert_eq!(sample.hostname, name, "hostname comes from the directory");
         assert_eq!(sample.cpu.cores.len(), 4, "{name}");
+        // A single capture has no interval to measure over.
+        assert_eq!(sample.cpu.busy_percent, vec![0.0; 4], "{name}");
         assert_eq!(sample.processes.len(), 12, "{name}");
         assert!(
             sample.sensors.temps.is_empty(),

@@ -180,6 +180,13 @@ pub struct Sensors {
 pub struct Cpu {
     /// Per-core times; index matches the core number on both platforms.
     pub cores: Vec<CpuTimes>,
+    /// Per-core CPU utilization in percent over the sample interval.
+    ///
+    /// Like [`Process::cpu_percent`], rates are measured from the previous
+    /// sample: the first sample of a collector, and every fixture replay of
+    /// a single capture, reports 0.0 because a lone snapshot has no
+    /// interval to average over.
+    pub busy_percent: Vec<f64>,
     /// Current frequency per core, when the platform reports it.
     pub frequency_mhz: Vec<Metric>,
 }
@@ -238,6 +245,7 @@ mod tests {
                     ..CpuTimes::default()
                 }],
                 frequency_mhz: vec![Metric::unavailable(Unit::Hertz)],
+                busy_percent: vec![0.0],
             },
             memory: Memory {
                 total: Metric::available(16.0 * 1024.0 * 1024.0 * 1024.0, Unit::Bytes),
