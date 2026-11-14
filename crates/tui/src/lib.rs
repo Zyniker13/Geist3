@@ -73,6 +73,12 @@ pub struct Ui {
     pub filter: Option<String>,
     /// When set, only this user's processes are listed.
     pub user_filter: Option<String>,
+    /// The highlighted process, by pid. The cursor stays on the same pid
+    /// across samples when it still exists.
+    pub cursor: Option<u32>,
+    /// Follow mode: re-select this pid on every sample, htop-style. When the
+    /// followed process disappears, follow mode ends.
+    pub follow: Option<u32>,
 }
 
 impl Default for Ui {
@@ -84,6 +90,8 @@ impl Default for Ui {
             descending: true,
             filter: None,
             user_filter: None,
+            cursor: None,
+            follow: None,
         }
     }
 }
@@ -187,10 +195,92 @@ impl Ui {
         true
     }
 
+    /// The processes the table shows, filtered and in display order. The
+    /// cursor, the draw path and the tests all use this one ordering.
+    pub fn ordered_visible(&self) -> Vec<&Process> {
+        let mut procs: Vec<&Process> = self
+            .sample
+            .as_ref()
+            .map(|s| s.processes.iter().filter(|p| self.visible(p)).collect())
+            .unwrap_or_default();
+        procs.sort_by(|a, b| {
+            let ord = match self.sort {
+                SortKey::Pid => a.pid.cmp(&b.pid),
+                SortKey::User => a.user.cmp(&b.user),
+                SortKey::Cpu => a.cpu_percent.total_cmp(&b.cpu_percent),
+                SortKey::Mem => a.mem_percent.total_cmp(&b.mem_percent),
+                SortKey::Resident => a.resident_bytes.cmp(&b.resident_bytes),
+                SortKey::Name => a.name.cmp(&b.name),
+            };
+            if self.descending { ord.reverse() } else { ord }
+        });
+        procs
+    }
+
+    /// Move the cursor down one visible row (or onto the first row).
+    pub fn select_next(&mut self) {
+        let procs = self.ordered_visible();
+        if procs.is_empty() {
+            return;
+        }
+        let index = procs
+            .iter()
+            .position(|p| Some(p.pid) == self.cursor)
+            .map_or(0, |i| (i + 1).min(procs.len() - 1));
+        self.cursor = Some(procs[index].pid);
+        if self.follow.is_some() {
+            self.follow = self.cursor;
+        }
+    }
+
+    /// Move the cursor up one visible row (or onto the first row).
+    pub fn select_prev(&mut self) {
+        let procs = self.ordered_visible();
+        if procs.is_empty() {
+            return;
+        }
+        let index = procs
+            .iter()
+            .position(|p| Some(p.pid) == self.cursor)
+            .map_or(0, |i| i.saturating_sub(1));
+        self.cursor = Some(procs[index].pid);
+        if self.follow.is_some() {
+            self.follow = self.cursor;
+        }
+    }
+
+    /// Turn follow on for the cursor's process, or off when it is already
+    /// following. Without a cursor there is nothing to follow.
+    pub fn toggle_follow(&mut self) {
+        if self.follow.is_some() {
+            self.follow = None;
+        } else {
+            self.follow = self.cursor;
+        }
+    }
+
     /// Store a fresh sample, or keep the last good one and record the error.
+    ///
+    /// The cursor rides along by pid: a followed process is re-selected on
+    /// every sample, a plain cursor keeps its pid while it still exists, and
+    /// a vanished followed process ends follow mode.
     pub fn apply(&mut self, result: Result<Sample, CollectError>) {
         match result {
             Ok(sample) => {
+                let exists =
+                    |pid: u32, sample: &Sample| sample.processes.iter().any(|p| p.pid == pid);
+                if let Some(followed) = self.follow {
+                    if exists(followed, &sample) {
+                        self.cursor = Some(followed);
+                    } else {
+                        self.follow = None;
+                        self.cursor = None;
+                    }
+                } else if let Some(selected) = self.cursor {
+                    if !exists(selected, &sample) {
+                        self.cursor = None;
+                    }
+                }
                 self.sample = Some(sample);
                 self.error = None;
             }
@@ -267,6 +357,9 @@ fn event_loop(terminal: &mut Tui, collector: &mut dyn Collector) -> io::Result<(
                         KeyCode::Char('i') => ui.toggle_direction(),
                         KeyCode::F(4) => ui.toggle_filter(),
                         KeyCode::Char('u') => ui.cycle_user_filter(),
+                        KeyCode::Char('f') | KeyCode::Char('F') => ui.toggle_follow(),
+                        KeyCode::Char('j') | KeyCode::Down => ui.select_next(),
+                        KeyCode::Char('k') | KeyCode::Up => ui.select_prev(),
                         _ => {}
                     }
                 }
@@ -510,8 +603,16 @@ fn status_line(ui: &Ui) -> Line<'static> {
         if let Some(user) = &ui.user_filter {
             parts.push(format!("user:{user}"));
         }
+        if let Some(followed) = ui.follow {
+            let name = ui
+                .sample
+                .as_ref()
+                .and_then(|s| s.processes.iter().find(|p| p.pid == followed))
+                .map_or_else(|| format!("pid {followed}"), |p| p.name.clone());
+            parts.push(format!("follow:{name}"));
+        }
         parts.push(format!(
-            "tab: sort {} · i: reverse · f4: filter · u: user · q: quit",
+            "q: quit · tab: sort {} · i: reverse · f4: filter · u: user · j/k: select · f: follow",
             sort_label(ui.sort, ui.descending)
         ));
         Line::from(parts.join(" · "))
@@ -523,20 +624,21 @@ fn status_line(ui: &Ui) -> Line<'static> {
 fn draw_processes(frame: &mut Frame, ui: &Ui, area: ratatui::layout::Rect) {
     let header = Row::new(["PID", "USER", "STATE", "CPU%", "MEM%", "THR", "RES", "NAME"]).bold();
     let mut rows: Vec<Row<'static>> = Vec::new();
-    if let Some(sample) = &ui.sample {
-        let mut procs: Vec<&Process> = sample.processes.iter().filter(|p| ui.visible(p)).collect();
-        procs.sort_by(|a, b| {
-            let ord = match ui.sort {
-                SortKey::Pid => a.pid.cmp(&b.pid),
-                SortKey::User => a.user.cmp(&b.user),
-                SortKey::Cpu => a.cpu_percent.total_cmp(&b.cpu_percent),
-                SortKey::Mem => a.mem_percent.total_cmp(&b.mem_percent),
-                SortKey::Resident => a.resident_bytes.cmp(&b.resident_bytes),
-                SortKey::Name => a.name.cmp(&b.name),
-            };
-            if ui.descending { ord.reverse() } else { ord }
-        });
-        rows.extend(procs.iter().map(|p| process_row(p)));
+    let procs = ui.ordered_visible();
+    // Keep the cursor in view: scroll only far enough. The fold is what fits
+    // under the table header (the block's top border takes one line).
+    let fold = area.height.saturating_sub(2) as usize;
+    let cursor_index = procs.iter().position(|p| Some(p.pid) == ui.cursor);
+    let offset = match cursor_index {
+        Some(index) if fold > 0 => index.saturating_sub(fold - 1).min(index),
+        _ => 0,
+    };
+    for (_index, process) in procs.iter().enumerate().skip(offset).take(fold) {
+        let mut row = process_row(process);
+        if Some(process.pid) == ui.cursor {
+            row = row.style(ratatui::style::Style::default().reversed());
+        }
+        rows.push(row);
     }
     let widths = [
         Constraint::Length(8),
@@ -868,6 +970,119 @@ mod tests {
     }
 
     #[test]
+    fn j_and_k_move_the_cursor_over_visible_rows() {
+        let mut ui = ui_with(Some(sample()), None);
+
+        // No cursor until the first key press; then the first visible row
+        // (cpu desc: worker-01 has the highest cpu).
+        let rows = render(&ui, 80, 24);
+        assert!(rows.iter().any(|row| row.contains("worker-12")));
+        ui.select_next();
+        assert_eq!(ui.cursor, Some(1));
+
+        // Down twice more lands on worker-03; up once walks back.
+        ui.select_next();
+        ui.select_next();
+        assert_eq!(ui.cursor, Some(3));
+        ui.select_prev();
+        assert_eq!(ui.cursor, Some(2));
+
+        // The top row stops the cursor; it never wraps.
+        for _ in 0..12 {
+            ui.select_prev();
+        }
+        assert_eq!(ui.cursor, Some(1));
+    }
+
+    #[test]
+    fn follow_reselects_the_pid_after_apply() {
+        let mut ui = ui_with(Some(sample()), None);
+        ui.select_next();
+        ui.select_next(); // cursor on pid 2 (second row, cpu desc)
+        ui.toggle_follow();
+        assert_eq!(ui.follow, Some(2));
+
+        // A fresh sample in which pid 2 sinks to the bottom of the cpu order
+        // still leaves the cursor on it.
+        let mut next = sample();
+        for process in &mut next.processes {
+            if process.pid == 2 {
+                process.cpu_percent = 0.1;
+            }
+        }
+        ui.apply(Ok(next));
+        assert_eq!(ui.cursor, Some(2));
+        assert_eq!(ui.follow, Some(2));
+
+        // Moving the cursor while following re-pins follow to the new row
+        // (one row up from the bottom of the new order is pid 12).
+        ui.select_prev();
+        assert_eq!(ui.follow, Some(12));
+    }
+
+    #[test]
+    fn follow_ends_when_the_process_vanishes() {
+        let mut ui = ui_with(Some(sample()), None);
+        ui.select_next();
+        ui.toggle_follow();
+        assert_eq!(ui.follow, Some(1));
+
+        let mut next = sample();
+        next.processes.retain(|p| p.pid != 1);
+        ui.apply(Ok(next));
+        assert_eq!(ui.follow, None);
+        assert_eq!(ui.cursor, None);
+    }
+
+    #[test]
+    fn a_plain_cursor_keeps_its_pid_and_dies_with_it() {
+        let mut ui = ui_with(Some(sample()), None);
+        for _ in 0..5 {
+            ui.select_next();
+        }
+        assert_eq!(ui.cursor, Some(5));
+
+        // Same pid in a new sample keeps the cursor despite reordering.
+        let mut next = sample();
+        for process in &mut next.processes {
+            if process.pid == 5 {
+                process.cpu_percent = 0.0;
+            }
+        }
+        ui.apply(Ok(next));
+        assert_eq!(ui.cursor, Some(5));
+        assert_eq!(ui.follow, None);
+
+        // The pid vanishing clears the cursor but never starts follow.
+        let mut gone = sample();
+        gone.processes.retain(|p| p.pid != 5);
+        ui.apply(Ok(gone));
+        assert_eq!(ui.cursor, None);
+        assert_eq!(ui.follow, None);
+    }
+
+    #[test]
+    fn the_cursor_scrolls_to_stay_visible() {
+        let mut ui = ui_with(Some(sample()), None);
+        // Walk deep into the table; the fold at 80x10 is 4 process rows.
+        for _ in 0..8 {
+            ui.select_next();
+        }
+        assert_eq!(ui.cursor, Some(8)); // worker-08
+        let rows = render(&ui, 80, 10);
+        assert!(rows.iter().any(|row| row.contains("worker-08")));
+        assert!(
+            !rows.iter().any(|row| row.contains("worker-01")),
+            "the top of the list scrolled away"
+        );
+        assert!(rows.iter().any(|row| row.contains("worker-05")));
+        assert!(
+            rows.iter().any(|row| row.contains("PID")),
+            "the table header stays visible"
+        );
+    }
+
+    #[test]
     fn apply_keeps_the_last_good_sample_on_error() {
         let mut ui = Ui::new();
         ui.apply(Err(CollectError::Unavailable {
@@ -913,6 +1128,20 @@ mod tests {
     #[ignore = "manual inspection helper"]
     fn dump_screen_snapshot() {
         let ui = ui_with(Some(sample()), None);
+        for (index, row) in render(&ui, 80, 24).iter().enumerate() {
+            println!("{index:2}|{row}");
+        }
+        // A second frame with a cursor and follow mode active.
+        let mut ui = ui_with(Some(sample()), None);
+        for _ in 0..5 {
+            ui.select_next();
+        }
+        ui.toggle_follow();
+        ui.toggle_filter();
+        for c in "wor".chars() {
+            ui.filter_push(c);
+        }
+        println!("---- cursor on pid 5, follow on, filter prompt open ----");
         for (index, row) in render(&ui, 80, 24).iter().enumerate() {
             println!("{index:2}|{row}");
         }
