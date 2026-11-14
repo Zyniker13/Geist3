@@ -3,15 +3,15 @@
 Updated after every working session.
 
 - **Current milestone:** M2 (macOS collectors and Apple Silicon).
-- **Last done:** m2-fixtures (part 3): the macOS fixture parser (`ztop_core::macos`) replays the recorded capture into a `Sample` — hostinfo CPU ticks at 100 Hz, vm stats, loadavg/boottime, and the 9-field process table (BSD status byte mapped to the `ps` state letter, task fields `-` when denied) — behind a platform dispatcher `ztop_core::sample_from_fixture` keyed on the manifest, with 10 per-field tests re-derived from the raw fixture text; `ztop replay` and the TUI render test now cover the macOS fixture too. Full gate green.
-- **Next step:** m2-live: the macOS live collector (same parsers against live sysctl/Mach/libproc reads), then the TUI on macOS and parity updates.
+- **Last done:** m2-live: the macOS live collector (`ztop_core::macos_live::MacOsCollector`, gated to macOS) — decision 0010: the capture producers and the fixture parsers are shared, so a recorded capture and a live sample are interpreted identically; per-core and per-process rates are deltas between samples through the shared `core_percents` math, every source unprivileged. A live-host test asserts universal bounds over two real samples; full gate green including both Linux cross-target clippy runs.
+- **Next step:** the TUI on macOS with screenshots, then parity updates and the rest of M2 per the ROADMAP.
 - **Blocked on:** nothing.
 
 ## Log
 
 Newest first. One or two lines per session: what changed, what is next.
 
-- 2026-11-14: macOS fixture parsing and replay done (part 3): `ztop_core::macos` parses the recorded hostinfo/processes text ungated (Linux CI exercises it), the fixture dispatcher picks Linux/macOS by manifest, `ztop replay` accepts macOS fixtures, and the TUI render test renders all three recorded captures. Next: the macOS live collector.
+- 2026-11-14: m2-live done: the macOS live collector shares the capture's text producers and the fixture parsers (decision 0010), rates come from the shared per-core/per-process delta math, and a live-host test pins universal bounds over two real samples; hostinfo-without-cores keeps reporting a bad `hostinfo` source. Next: the TUI on macOS with screenshots, then parity updates.
 
 - 2026-11-14: macOS fixtures re-recorded with per-process task fields (decision 0009 amendment): TASKINFO is same-user-only unprivileged, CPU fields are mach ticks converted to ns, the taskinfo struct size is now compile-asserted, and the scrubber keeps `-` and real-value line shapes. Next: the macOS fixture parser.
 
