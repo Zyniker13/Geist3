@@ -208,17 +208,47 @@ pub fn draw_lines(ui: &Ui, width: u16, height: u16) -> Vec<String> {
 ///
 /// Pure with respect to `ui`, so tests can drive it through a `TestBackend`.
 pub fn draw(frame: &mut Frame, ui: &Ui) {
-    let areas = Layout::vertical([Constraint::Length(4), Constraint::Min(1)]).split(frame.area());
+    let header = Constraint::Length(4 + u16::from(sensors_present(ui)));
+    let areas = Layout::vertical([header, Constraint::Min(1)]).split(frame.area());
     draw_header(frame, ui, areas[0]);
     draw_processes(frame, ui, areas[1]);
 }
 
+/// True when the sample carries any sensor reading worth a header row.
+///
+/// Battery is deliberately absent: nothing renders it yet, and a row must
+/// never appear empty.
+fn sensors_present(ui: &Ui) -> bool {
+    ui.sample.as_ref().is_some_and(|sample| {
+        let sensors = &sample.sensors;
+        !sensors.temps.is_empty()
+            || !sensors.fans.is_empty()
+            || sensors.gpu_watts.available
+            || sensors.system_watts.available
+    })
+}
+
 fn draw_header(frame: &mut Frame, ui: &Ui, area: ratatui::layout::Rect) {
-    let rows = Layout::vertical([Constraint::Length(1); 4]).split(area);
+    let with_sensors = sensors_present(ui);
+    let rows = Layout::vertical([
+        Constraint::Length(1),
+        Constraint::Length(1),
+        Constraint::Length(1),
+        if with_sensors {
+            Constraint::Length(1)
+        } else {
+            Constraint::Length(0)
+        },
+        Constraint::Length(1),
+    ])
+    .split(area);
     frame.render_widget(Paragraph::new(title_line(ui)), rows[0]);
     draw_cpu_row(frame, ui, rows[1]);
     draw_memory_row(frame, ui, rows[2]);
-    frame.render_widget(Paragraph::new(status_line(ui)), rows[3]);
+    if with_sensors {
+        frame.render_widget(Paragraph::new(sensors_line(ui)), rows[3]);
+    }
+    frame.render_widget(Paragraph::new(status_line(ui)), rows[4]);
 }
 
 fn title_line(ui: &Ui) -> Line<'static> {
@@ -347,6 +377,34 @@ fn uptime_text(metric: &Metric) -> String {
     }
 }
 
+/// One compact line of sensor readings, when the host reports any.
+///
+/// Renders the collector's own labels verbatim; the row only exists when
+/// there is something to show, so an empty list never draws an empty line.
+fn sensors_line(ui: &Ui) -> Line<'static> {
+    let Some(sample) = &ui.sample else {
+        return Line::from("");
+    };
+    let mut parts: Vec<String> = Vec::new();
+    for temp in sample.sensors.temps.iter().take(3) {
+        if temp.celsius.available {
+            parts.push(format!("{} {:.1}°C", temp.label, temp.celsius.value));
+        }
+    }
+    for fan in sample.sensors.fans.iter().take(1) {
+        if fan.rpm.available {
+            parts.push(format!("{} {}rpm", fan.label, fan.rpm.value as u32));
+        }
+    }
+    if sample.sensors.system_watts.available {
+        parts.push(format!("Sys {:.1}W", sample.sensors.system_watts.value));
+    }
+    if sample.sensors.gpu_watts.available {
+        parts.push(format!("GPU {:.1}W", sample.sensors.gpu_watts.value));
+    }
+    Line::from(parts.join("  "))
+}
+
 fn status_line(ui: &Ui) -> Line<'static> {
     if let Some(error) = &ui.error {
         Line::from(Span::from(format!("error: {error} · q: quit")).red())
@@ -408,7 +466,7 @@ fn process_row(process: &Process) -> Row<'static> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ztop_core::model::{Cpu, CpuTimes, Sensors};
+    use ztop_core::model::{Cpu, CpuTimes, Fan, Metric, Sensors, TempSensor, Unit};
 
     /// A 4-core, 12-process sample with spread-out values.
     fn sample() -> Sample {
@@ -568,6 +626,63 @@ mod tests {
         );
         // The table still renders its header with no sample to show.
         assert!(rows.iter().any(|row| row.contains("CPU%")));
+    }
+
+    #[test]
+    fn sensors_row_applies_only_when_the_sample_has_readings() {
+        let mut sample = sample();
+
+        // Without readings the header keeps its four rows: status on row 3.
+        let ui = ui_with(Some(sample.clone()), None);
+        let rows = render(&ui, 80, 24);
+        assert_eq!(rows.len(), 24);
+        assert!(
+            rows[3].contains("q: quit"),
+            "status stays on row 3: {:?}",
+            rows[3]
+        );
+        assert!(!rows[3].contains("°C"));
+
+        // With readings a fifth header row appears between memory and status.
+        sample.sensors.temps = vec![
+            TempSensor {
+                label: "CPU composite".to_string(),
+                celsius: Metric::available(78.7, Unit::Celsius),
+            },
+            TempSensor {
+                label: "CPU die 7".to_string(),
+                celsius: Metric::available(48.5, Unit::Celsius),
+            },
+        ];
+        sample.sensors.fans = vec![Fan {
+            label: "Fan 0".to_string(),
+            rpm: Metric::available(1001.0, Unit::RevolutionsPerMinute),
+        }];
+        sample.sensors.system_watts = Metric::available(17.0, Unit::Watts);
+        sample.sensors.gpu_watts = Metric::available(0.3, Unit::Watts);
+        let ui = ui_with(Some(sample), None);
+        let rows = render(&ui, 80, 24);
+        assert_eq!(rows.len(), 24);
+        assert!(
+            rows[3].starts_with("CPU composite 78.7°C"),
+            "sensors row on row 3: {:?}",
+            rows[3]
+        );
+        assert!(
+            rows[3].contains("Fan 0 1001rpm"),
+            "fan reading present: {:?}",
+            rows[3]
+        );
+        assert!(
+            rows[3].contains("Sys 17.0W"),
+            "system power present: {:?}",
+            rows[3]
+        );
+        assert!(
+            rows[4].contains("q: quit"),
+            "status moves to row 4: {:?}",
+            rows[4]
+        );
     }
 
     #[test]
