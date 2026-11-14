@@ -15,17 +15,19 @@ Check an item only when it works and a test or a recorded check shows it. Add th
 
 ## htop: Process Table
 
-- [ ] Every common column: PID, PPID, user, priority, nice, VIRT, RES, SHR, state, CPU%, MEM%, TIME+, command, threads, start time, processor
+- [ ] Every common column: PID, PPID, user, priority, nice, VIRT, RES, SHR, state, CPU%, MEM%, TIME+, command, threads, start time, processor — shown today: PID, user, state, CPU%, MEM%, THR (threads), RES, NAME
 - [ ] I/O columns: read and write rates and totals (Linux; where permitted)
 - [ ] Sort by any column, invert sort, and the M, P and T shortcuts
 - [ ] Tree view with collapse and expand
-- [ ] Incremental search (F3) and filter (F4)
+- [ ] Incremental search (F3)
+- [x] Filter (F4) — F4 opens a prompt that edits live; an empty prompt matches everything; the active pattern shows in the status line. Tests: `the_name_filter_narrows_and_the_status_shows_it`.
 - [ ] Follow a process (F)
 - [ ] Tag processes (Space), tag children (c), untag all (U), and act on all tagged
 - [ ] Send any signal through a signal menu (F9 / k)
 - [ ] Renice up and down (F7 / F8)
 - [ ] I/O priority (i, Linux) and CPU affinity (a, Linux)
-- [ ] User filter (u) and PID filter (`-p`)
+- [ ] PID filter (`-p`)
+- [x] User filter (u) — `u` cycles all users, then each user present in the sample in sorted order, then back to all; the status line shows the active user. Tests: `the_user_filter_cycles_through_the_sample_users`.
 - [ ] Show or hide userland and kernel threads (H, K), and program path (p)
 - [ ] Process environment (e), open files (l) and syscall trace (s) where the OS allows
 - [ ] Highlight new and dying processes, and large numbers

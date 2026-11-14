@@ -3,13 +3,15 @@
 Updated after every working session.
 
 - **Current milestone:** M3 (Full TUI Parity).
-- **Last done:** M2 closed: macOS collectors (Mach/sysctl/libproc, IOKit, IOReport, AppleSMC) all working unprivileged; SMC temps, fans and `PSTR` system watts via AppleSMC (80-byte `SMCKeyData` with key code in a local because keyinfo does not echo it back), GPU watts as deltas of cumulative nanjoule counters from cooked IOReport samples; a live two-sample peek printed real values (7 temps, 2 fans, 6.2 W idle to 17 W under load); the live-host test now requires real sensors whenever an SMC device is present; Linux marks GPU/system power unavailable; the TUI renders a conditional sensors row (5 rows when sensors exist, 4 otherwise); powermetrics comparison documented in docs/m2-power-checks.md; parity updated. CI green through `edcfdcd`.
-- **Next step:** M3 — tree view, filter/search, follow, tag, signals, renice, user filter, threads, I/O columns, setup screens, mouse, Apple Silicon screen with charts, config file, disk/network/thermal panels.
+- **Last done:** M3 batch 1: name filter (F4, live-editing prompt, status-line pattern display), user filter (`u` cycles all users then each user in sorted order then back to all, status-line display), and a threads (THR) column between MEM% and RES; key handling is filter-aware (while the prompt is open, printable keys type into it; Esc closes; Ctrl-C still quits). Three tests cover the behavior at 11 TUI unit tests; full gate green.
+- **Next step:** M3 batch 2 — follow a process (F), then tree view, incremental search (F3), tagging, signals, renice, I/O columns.
 - **Blocked on:** nothing.
 
 ## Log
 
 Newest first. One or two lines per session: what changed, what is next.
+
+- 2026-11-14: M3 opened; batch 1 shipped (`79d52a4`): name filter (F4 live prompt, status shows the pattern), user filter (`u` cycles the sample's users, wrapping back to all) and a THR column; filter-aware key handling (typing goes to the prompt, Esc closes, Ctrl-C always quits). 11 TUI unit tests, gate green. Next: follow, tree view, search, tagging.
 
 - 2026-11-14: m2-power collector shipped (`4ba8400`): `macos_power.rs` talks to AppleSMC (temps `Te*`/`TCMb`/`Tg01`/`Ta0P`, fans `F0Ac`/`F0Mx`, `PSTR`) and reads GPU watts from the IOReport `Energy Model` group with cumulative-counter deltas; the build script links the frameworks on macOS targets only (`CARGO_CFG_TARGET_OS`); Linux keeps GPU/system power unavailable. A live two-sample peek caught the SMC path returning nothing while 77 tests passed — the keyinfo response does not echo the key back, so the follow-up read asked for key 0 and got "not found"; the fix carries the key code in a local (probe21 first proved the identical C sequence works, isolating the bug to the Rust port). The live-host test now demands real sensors whenever IOKit reports an SMC device. Full gate plus both Linux cross-target clippies green. Next: the recorded powermetrics-style comparison, parity, close M2.
 
