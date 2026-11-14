@@ -2191,4 +2191,5 @@ name = "ztop-tui"
 version = "0.1.0"
 dependencies = [
  "ratatui",
+ "ztop-core",
 ]
