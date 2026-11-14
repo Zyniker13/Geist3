@@ -23,9 +23,10 @@ Check an item only when it works and a test or a recorded check shows it. Add th
 - [x] Filter (F4) — F4 opens a prompt that edits live; an empty prompt matches everything; the active pattern shows in the status line. Tests: `the_name_filter_narrows_and_the_status_shows_it`.
 - [x] Follow a process (F) — j/k/arrows move a cursor over the visible rows; F pins follow to the cursor's pid across samples and re-pins when the cursor moves; a vanished followed process ends follow mode; the cursor row is highlighted and the list scrolls to keep it visible. Tests: `j_and_k_move_the_cursor_over_visible_rows`, `follow_reselects_the_pid_after_apply`, `follow_ends_when_the_process_vanishes`, `a_plain_cursor_keeps_its_pid_and_dies_with_it`, `the_cursor_scrolls_to_stay_visible`.
 - [x] Tag processes (Space), tag children (c), untag all (U) — Space tags or untags the cursor's process with a `*` before the name, `c` tags the cursor's visible descendants, `U` clears every tag; the status line counts the tags and they survive a fresh sample. Tests: `space_tags_the_cursor_and_u_clears_all`, `c_tags_the_visible_descendants`.
-- [ ] Act on all tagged processes (signals, renice take the tag set)
-- [ ] Send any signal through a signal menu (F9 / k)
-- [ ] Renice up and down (F7 / F8)
+- [x] Act on all tagged processes (signals, renice take the tag set) — with no tags the action applies to the cursor's process instead, and outcomes are reported in the status line. Tests: `the_signal_menu_targets_the_tag_set_or_the_cursor`, `renice_plans_target_the_tags_or_the_cursor`, `a_plan_reports_its_outcome_in_the_notice`.
+- [x] Send a signal through a signal menu (F9) — a centered popup lists the common signals with a movable selection; Enter sends, Esc cancels, j/k or arrows move with wrap-around. Tests: `the_signal_menu_targets_the_tag_set_or_the_cursor`, `the_menu_wraps_and_cancels`, `the_menu_renders_as_a_centered_popup`.
+- [ ] Open the signal menu with `k` as well
+- [x] Renice up and down (F7 / F8) — F7 raises priority one step, F8 lowers it, applying to the same target set as signals; failures are reported in the status line. Tests: `renice_plans_target_the_tags_or_the_cursor`, `a_plan_reports_its_outcome_in_the_notice`.
 - [ ] I/O priority (i, Linux) and CPU affinity (a, Linux)
 - [ ] PID filter (`-p`)
 - [x] User filter (u) — `u` cycles all users, then each user present in the sample in sorted order, then back to all; the status line shows the active user. Tests: `the_user_filter_cycles_through_the_sample_users`.

@@ -3,14 +3,15 @@
 Updated after every working session.
 
 - **Current milestone:** M3 (Full TUI Parity).
-- **Last done:** M3 batch 4: incremental search (F3 live prompt, F3 repeats, follow re-pins) and tagging (Space, c for visible descendants, U clears all; `*` marker, `tagged:` count). Four tests cover it; full gate green.
-- **Next step:** M3 batch 5 — signals (F9/k) and renice (F7/F8) acting on the tag set, then I/O columns.
+- **Last done:** M3 batch 5: control actions — the core `control` module runs the real `kill`/`setpriority` syscalls (signal numbers from a shared common-signals table, errno handled per platform); the TUI builds a plan from the tag set (or the cursor's process) and a centered signal menu drives F9 (Enter sends, Esc cancels, j/k with wrap), F7/F8 renice; outcomes report in the status line for one refresh. Nine new tests; full gate green.
+- **Next step:** M3 batch 6 — I/O columns; then setup screens, mouse, Apple Silicon screen with charts, config file, disk/network/thermal panels.
 - **Blocked on:** nothing.
 
 ## Log
 
 Newest first. One or two lines per session: what changed, what is next.
 
+- 2026-11-14: M3 batch 5 (`402a861`): signals and renice on the tag set — `ztop_core::control` owns the syscalls (`Control::Signal(n)` from `common_signals()`, `Control::Renice(delta)`; F7 raises priority, F8 lowers it), the TUI builds a `Plan` from the tags (or the cursor's process) and runs it in the event loop; F9 opens a centered signal menu (j/k wrap, Enter sends, Esc cancels), the outcome lands in the status line for one refresh, failures list the first error. Eight tests; gate green. Next: I/O columns.
 |- 2026-11-14: M3 batch 4 (`a2683fa`): incremental search (F3 opens a live prompt — the cursor keeps its row while the pattern still matches, otherwise jumps forward; F3 again repeats; Esc/Enter close; follow re-pins) and tagging (Space tags/untags the cursor, `c` tags its visible descendants, `U` clears all; `*` row marker, `tagged:` in the status line). Four tests; gate green. Next: signals and renice on the tag set, then I/O columns.
 
 |- 2026-11-14: M3 batch 2 (`8f2854a`): selection cursor (`j`/`k`, arrows) with highlight and scroll-into-view, follow (`F`) pinned by pid across samples, `follow:` shown in the status line. Five tests; gate green. Next: tree view, F3 search, tagging.
