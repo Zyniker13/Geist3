@@ -10,3 +10,7 @@ Status: planning. See [ROADMAP.md](ROADMAP.md) for the plan, [DESIGN.md](DESIGN.
 ## License
 
 Licensed under either of [Apache License, Version 2.0](LICENSE-APACHE) or [MIT license](LICENSE-MIT), at your option. Unless you explicitly state otherwise, any contribution you submit for inclusion in this work, as defined in the Apache-2.0 license, is dual licensed as above, without any additional terms or conditions.
+
+## History
+
+This repository earlier held an end-to-end encrypted messenger, now [Thrum](https://github.com/BITS-Freeware/Thrum).
