@@ -3,13 +3,15 @@
 Updated after every working session.
 
 - **Current milestone:** M2 (macOS collectors and Apple Silicon).
-- **Last done:** m2-live: the macOS live collector (`ztop_core::macos_live::MacOsCollector`, gated to macOS) — decision 0010: the capture producers and the fixture parsers are shared, so a recorded capture and a live sample are interpreted identically; per-core and per-process rates are deltas between samples through the shared `core_percents` math, every source unprivileged. A live-host test asserts universal bounds over two real samples; full gate green including both Linux cross-target clippy runs.
-- **Next step:** m2-power: IOReport power/frequency and SMC temps/fans probing unprivileged (decision 0009), then the recorded powermetrics-style comparison in docs/ closes M2's Done-when.
+- **Last done:** m2-power probing complete (decision 0011): IOReport CPU state residency decodes per core (idle `ELDI`, 64-byte records, mach ticks, interval = s2−s1); GPU power is real unprivileged (`GPU Energy` cooked samples, ~8.7 W under a Metal burner); SMC keys read unprivileged (temps `Te*`/`TCMb`, fan `F0Ac/F0Mx`, system power `PSTR`); CPU energy and CPU MHz have no unprivileged source and stay marked unavailable per decision 0009. CI green through `7dd4d1f`.
+- **Next step:** m2-power collector: implement the Rust collector for GPU power, SMC temps/fan/power and CPU state residency per decision 0011, then the recorded powermetrics-style comparison in docs/ closes M2's Done-when.
 - **Blocked on:** nothing.
 
 ## Log
 
 Newest first. One or two lines per session: what changed, what is next.
+
+- 2026-11-14: m2-power probing done (decision 0011): per-core CPU state residency decodes from IOReport (idle = `ELDI`, mach ticks, interval deltas); GPU watts are real from the `GPU Energy` channel (8.7 W under a Metal burner); SMC temps, fan RPM and `PSTR` system watts read unprivileged through the AppleSMC user client; CPU energy and CPU MHz have no unprivileged source and are marked unavailable. CI green through `7dd4d1f`. Next: the Rust collector and the recorded powermetrics-style comparison.
 
 - 2026-11-14: the TUI works live on macOS: the binary draws real samples in a pty (per-core, memory, swap, load, per-process rates) and quits cleanly; the scrubbed fixture-replay snapshot is committed in docs/screenshots/. Next: IOReport power/frequency and SMC unprivileged probing, then the recorded comparison.
 
