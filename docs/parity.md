@@ -59,7 +59,7 @@ Check an item only when it works and a test or a recorded check shows it. Add th
 
 - [ ] Per-disk usage, and disk I/O panels
 - [ ] Network interfaces with rates and totals
-- [ ] Temperatures and fans
+- [x] Temperatures and fans — TUI header row: temps (up to 3), fans (up to 1), system/GPU watts. Snapshot test at 80x24 (5-row header), plus fixture replay at 80x24 (4-row header when no sensors).
 - [ ] Linux GPUs: NVIDIA through NVML, AMD through sysfs
 - [ ] cgroup and container awareness (Linux)
 - [ ] `ztop connect` shows a remote agent in the TUI
