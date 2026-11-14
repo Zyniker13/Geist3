@@ -84,6 +84,35 @@ impl CpuTimes {
     }
 }
 
+/// Per-core busy percentages between the previous and current core times.
+///
+/// Index `i` pairs `current[i]` with `previous[i]`; a core without a
+/// previous reading reports 0.0, as does a non-positive interval. The
+/// result is clamped to 0..=100 so counter resets cannot produce
+/// negative values. Shared by the Linux and macOS collectors, whose
+/// CPU counters are cumulative in the same way.
+pub fn core_percents(current: &[CpuTimes], previous: &[CpuTimes], interval_secs: f64) -> Vec<f64> {
+    if interval_secs <= 0.0 {
+        return vec![0.0; current.len()];
+    }
+    current
+        .iter()
+        .enumerate()
+        .map(|(index, now)| {
+            let Some(old) = previous.get(index) else {
+                return 0.0;
+            };
+            let busy = now.busy() - old.busy();
+            let total = now.total() - old.total();
+            if total <= 0.0 {
+                0.0
+            } else {
+                (busy / total * 100.0).clamp(0.0, 100.0)
+            }
+        })
+        .collect()
+}
+
 /// One sample of one host: a consistent snapshot at one instant.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Sample {

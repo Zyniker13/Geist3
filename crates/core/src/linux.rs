@@ -31,6 +31,8 @@ use std::path::Path;
 
 use crate::fixture::{Fixture, FixtureError};
 #[cfg(any(target_os = "linux", test))]
+use crate::model::core_percents;
+#[cfg(any(target_os = "linux", test))]
 use crate::model::{Battery, BatteryState, Fan, TempSensor};
 use crate::model::{Cpu, CpuTimes, Disk, Memory, Metric, NetIf, Process, Sample, Sensors, Unit};
 
@@ -678,38 +680,9 @@ pub fn sample_from_fixture(dir: &Path) -> Result<Sample, FixtureSampleError> {
     })
 }
 
-/// Per-core busy percentages between the previous and current core times.
-///
-/// Index `i` pairs `current[i]` with `previous[i]`; a core without a
-/// previous reading reports 0.0, as does a non-positive interval. The
-/// result is clamped to 0..=100 so counter resets cannot produce
-/// negative values.
-#[cfg(any(target_os = "linux", test))]
-pub(crate) fn core_percents(
-    current: &[CpuTimes],
-    previous: &[CpuTimes],
-    interval_secs: f64,
-) -> Vec<f64> {
-    if interval_secs <= 0.0 {
-        return vec![0.0; current.len()];
-    }
-    current
-        .iter()
-        .enumerate()
-        .map(|(index, now)| {
-            let Some(old) = previous.get(index) else {
-                return 0.0;
-            };
-            let busy = now.busy() - old.busy();
-            let total = now.total() - old.total();
-            if total <= 0.0 {
-                0.0
-            } else {
-                (busy / total * 100.0).clamp(0.0, 100.0)
-            }
-        })
-        .collect()
-}
+// Per-core busy percentages between the previous and current core times
+// are defined in `model` (`core_percents`) so the macOS collector shares
+// it.
 
 #[cfg(target_os = "linux")]
 pub use live::LinuxCollector;

@@ -66,6 +66,16 @@ fn sysctl_inputs() -> Vec<CapturedInput> {
 /// One `hostinfo` entry with the Mach values the collector parses: CPU tick
 /// counters, load average, virtual-memory counters, swap and boot time.
 fn mach_inputs() -> Vec<CapturedInput> {
+    match hostinfo_text() {
+        Some(text) => vec![CapturedInput::text("hostinfo", text)],
+        None => Vec::new(),
+    }
+}
+
+/// The `hostinfo` text the capture records and the live collector parses:
+/// tick counters, load average, vm counters, swap and boot time (decision
+/// 0010). `None` when the host offered none of the sources.
+pub(crate) fn hostinfo_text() -> Option<String> {
     let mut text = String::new();
     // CPU tick counters (raw counts since boot; the collector derives busy
     // percentages between samples).
@@ -109,10 +119,7 @@ fn mach_inputs() -> Vec<CapturedInput> {
     if let Some((sec, usec)) = boottime() {
         text.push_str(&format!("boottime {sec} {usec}\n"));
     }
-    if text.is_empty() {
-        return Vec::new();
-    }
-    vec![CapturedInput::text("hostinfo", text)]
+    if text.is_empty() { None } else { Some(text) }
 }
 
 /// Tick counters of one CPU, in Mach `cpu_usage_info` order.
@@ -220,6 +227,13 @@ fn boottime() -> Option<(i64, i64)> {
 /// unavailable, never faked). The committed fixture scrubs `name`
 /// (decision 0007); the live collector reads the real names.
 fn process_entry() -> CapturedInput {
+    CapturedInput::text("processes", processes_text())
+}
+
+/// The `processes` text the capture records and the live collector parses
+/// (decision 0010). One line per process: pid, ppid, status, uid, user and
+/// system CPU in nanoseconds, RSS in bytes, thread count, quoted name.
+pub(crate) fn processes_text() -> String {
     let pids = list_pids();
     let tb = task_timebase();
     let mut text = String::new();
@@ -248,7 +262,7 @@ fn process_entry() -> CapturedInput {
             pid, bsd.ppid, bsd.status, bsd.uid, utime, stime, rss, threads, name
         ));
     }
-    CapturedInput::text("processes", text)
+    text
 }
 
 /// Recorded in place of a value the OS would not give us (decision 0009).

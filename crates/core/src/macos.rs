@@ -293,12 +293,7 @@ pub fn sample_from_fixture(dir: &Path) -> Result<Sample, FixtureSampleError> {
     if !have_hostinfo {
         return Err(missing_source("hostinfo"));
     }
-    if host.cores.is_empty()
-        || host.load_avg.is_none()
-        || host.vm.is_none()
-        || host.swap.is_none()
-        || host.boottime.is_none()
-    {
+    if host.cores.is_empty() {
         return Err(bad_source("hostinfo"));
     }
     let memsize = match memsize {
@@ -312,12 +307,24 @@ pub fn sample_from_fixture(dir: &Path) -> Result<Sample, FixtureSampleError> {
         return Err(missing_source("processes"));
     }
 
-    let vm = host.vm.expect("checked above");
-    let swap = host.swap.expect("checked above");
-    let (boot_sec, boot_usec) = host.boottime.expect("checked above");
-    let load_avg = host.load_avg.expect("checked above");
-    let cores: Vec<CpuTimes> = host
-        .cores
+    sample_from_parts(
+        host,
+        procs,
+        memsize,
+        dir.file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("unknown"),
+        fixture.manifest().captured_at_unix * 1000,
+        Vec::new(),
+    )
+    .map_err(|_| bad_source("hostinfo"))
+}
+
+/// Converts core tick counters into [`CpuTimes`] seconds at the recorded
+/// tick rate; shared by the fixture replay and the live collector, so both
+/// scale the counters identically.
+pub(crate) fn core_times(cores: &[CoreTicks]) -> Vec<CpuTimes> {
+    cores
         .iter()
         .map(|ticks| {
             let seconds = |value: u64| value as f64 / HOST_TICK_HZ;
@@ -329,7 +336,60 @@ pub fn sample_from_fixture(dir: &Path) -> Result<Sample, FixtureSampleError> {
                 ..CpuTimes::default()
             }
         })
-        .collect();
+        .collect()
+}
+
+/// A required field a parsed macOS source did not provide.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct SourceError {
+    /// The entry or sysctl the field belongs to, as the capture names it.
+    pub(crate) origin: &'static str,
+    /// The field the source lacked.
+    pub(crate) what: &'static str,
+}
+
+/// Assembles a [`Sample`] from parsed macOS sources — the shared tail of
+/// the fixture replay and the live collector (decision 0010), so both
+/// interpret the recorded text identically. `cpu_busy` carries per-core
+/// busy percentages measured between two samples; the fixture replay has
+/// no interval and passes an empty vector, which becomes zeros. Uptime is
+/// the timestamp minus the host's boot time.
+///
+/// # Errors
+///
+/// Returns a [`SourceError`] when a required `hostinfo` field is absent.
+pub(crate) fn sample_from_parts(
+    host: HostInfo,
+    procs: Vec<MacProcess>,
+    memsize: u64,
+    hostname: &str,
+    timestamp_ms: u64,
+    cpu_busy: Vec<f64>,
+) -> Result<Sample, SourceError> {
+    if host.cores.is_empty() {
+        return Err(SourceError {
+            origin: "hostinfo",
+            what: "CPU tick counters",
+        });
+    }
+    let vm = host.vm.ok_or(SourceError {
+        origin: "hostinfo",
+        what: "vm counters",
+    })?;
+    let swap = host.swap.ok_or(SourceError {
+        origin: "hostinfo",
+        what: "swap counters",
+    })?;
+    let load_avg = host.load_avg.ok_or(SourceError {
+        origin: "hostinfo",
+        what: "load average",
+    })?;
+    let (boot_sec, boot_usec) = host.boottime.ok_or(SourceError {
+        origin: "hostinfo",
+        what: "boot time",
+    })?;
+
+    let cores = core_times(&host.cores);
     let total_mem = memsize as f64;
     let processes: Vec<Process> = procs
         .iter()
@@ -359,20 +419,18 @@ pub fn sample_from_fixture(dir: &Path) -> Result<Sample, FixtureSampleError> {
             }
         })
         .collect();
-    let uptime_secs = (fixture.manifest().captured_at_unix as f64
-        - boot_sec as f64
-        - boot_usec as f64 / 1_000_000.0)
-        .max(0.0);
+    let uptime_secs =
+        (timestamp_ms as f64 / 1000.0 - boot_sec as f64 - boot_usec as f64 / 1_000_000.0).max(0.0);
 
     Ok(Sample {
-        timestamp_ms: fixture.manifest().captured_at_unix * 1000,
-        hostname: dir
-            .file_name()
-            .and_then(|name| name.to_str())
-            .unwrap_or("unknown")
-            .to_string(),
+        timestamp_ms,
+        hostname: hostname.to_string(),
         cpu: Cpu {
-            busy_percent: vec![0.0; cores.len()],
+            busy_percent: if cpu_busy.len() == cores.len() {
+                cpu_busy
+            } else {
+                vec![0.0; cores.len()]
+            },
             cores,
             frequency_mhz: Vec::new(),
         },
