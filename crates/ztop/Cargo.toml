@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: MIT OR Apache-2.0
+[package]
+name = "ztop"
+description = "A system monitor for one host and your fleet, in a terminal"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+clap = { workspace = true }
+tokio = { workspace = true }
+ztop-agent = { path = "../agent", version = "0.1.0" }
+ztop-core = { path = "../core", version = "0.1.0" }
+ztop-hub = { path = "../hub", version = "0.1.0" }
+ztop-tui = { path = "../tui", version = "0.1.0" }
