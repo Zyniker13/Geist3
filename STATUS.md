@@ -3,14 +3,15 @@
 Updated after every working session.
 
 - **Current milestone:** M2 (macOS collectors and Apple Silicon).
-- **Last done:** M1 closed — all three "Done when" prongs verified with real output: the CI smoke replays both fixtures on every push (Linux job green), the real-host smoke is recorded in `docs/screenshots/` with runner self-tests, and every collector field has a fixture test (`1990198` derives each expectation from the fixture's own raw `/proc` text, so re-recorded captures stay valid).
-- **Next step:** m2-plan: decision 0009 for the macOS collector sources (libproc, sysctl, host_statistics64, IOReport, SMC — all without root), then `ztop capture` on macOS to record this host's fixtures.
+- **Last done:** m2-plan: decision 0009 pins the macOS collector sources — Mach/sysctl/libproc for CPU, memory, load and processes; IOKit for disks, network and battery; IOReport through `libIOReport` (unprivileged, probed working on this host) for CPU/GPU performance-state residency and energy; SMC and ANE attempted unprivileged and marked unavailable when denied. Capture records all of it as text fixtures in format v1.
+- **Next step:** m2-fixtures: add the macOS capture mode to `ztop capture`, record this host's fixtures (scrubbed), and extend `sample_from_fixture` with the macOS parser.
 - **Blocked on:** nothing.
 
 ## Log
 
 Newest first. One or two lines per session: what changed, what is next.
 
+- M2 planned: decision 0009 — macOS sources per DESIGN.md (Mach/sysctl/libproc, IOKit, IOReport via `libIOReport`, SMC), everything unprivileged; SMC and ANE probed as denied unprivileged on the dev host and recorded as unavailable-when-denied rather than faked. Next: macOS capture mode and fixtures.
 - M1 closed: CI smoke, real-host recorded smoke and per-field fixture tests all verified (the fixture tests now derive expectations from the raw capture text, so fresh recordings cannot break them). Next: M2, macOS collectors.
 - m1-close: the fixture tests had pinned exact machine-state values (CPU ticks, memory sizes), so the record workflow's fresh captures broke them on pull. The per-field test now re-derives every expectation from the fixture's own raw `/proc` text — parser column/unit drift still fails, re-recorded captures do not. Next: confirm CI, close M1.
 - m1-ci-smoke done: `ztop replay` renders a recorded fixture through the same `draw` the live TUI uses, so no terminal is needed — the local gate replays both fixtures on every push, the record workflow self-tests each freshly scrubbed fixture before committing it, and real-host frames are recorded in `docs/screenshots/`. Next: close M1.
