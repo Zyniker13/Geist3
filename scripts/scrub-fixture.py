@@ -29,9 +29,42 @@ FAKE_NAMES = [f"proc-{c}" for c in "abcdefghijklmnopqrstuvwxyz"]
 
 PROC_PID_RE = re.compile(r"^proc-(\d+)-(cmdline|comm|status|stat)$")
 
+# A macOS `processes` line: `pid ppid status uid utime stime rss threads
+# "name"`, where task fields the kernel denies an unprivileged read of are
+# `-` (decision 0009). Names are identifying and always scrubbed; pids,
+# uids and counters are host-local numbers the Linux fixtures also keep.
 MAC_PROC_RE = re.compile(
-    r'^(?P<pid>\d+) (?P<rest>\d+ \d+ \d+) "(?P<name>.*)"$', re.MULTILINE
+    r'^(?P<pid>\d+) (?P<rest>(?:\d+|-)(?: (?:\d+|-))*) "(?P<name>.*)"$',
+    re.MULTILINE,
 )
+
+
+def mac_rows(text: str) -> list[tuple[int, bool, int]]:
+    """(pid, has_task_fields, cpu_ns) for each macOS `processes` line."""
+    rows = []
+    for m in MAC_PROC_RE.finditer(text):
+        fields = m["rest"].split(" ")
+        has = len(fields) >= 7 and all(f.isdigit() for f in fields[3:7])
+        cpu = int(fields[3]) + int(fields[4]) if has else 0
+        rows.append((int(m["pid"]), has, cpu))
+    return rows
+
+
+def pick_mac_keep(text: str, want: int) -> list[int]:
+    """Deterministic trim: the lowest pids plus the busiest real-field pids.
+
+    The lowest pids are mostly root-owned, so their task fields are `-`;
+    the busiest pids that carry task fields are same-user processes. The
+    fixture keeps both shapes so parser tests exercise both.
+    """
+    rows = mac_rows(text)
+    lowest = rows[: want // 2]
+    kept = {pid for pid, _, _ in lowest}
+    busy = sorted(
+        (r for r in rows if r[1] and r[0] not in kept),
+        key=lambda r: (-r[2], r[0]),
+    )[: want - len(lowest)]
+    return sorted({pid for pid, _, _ in lowest} | {pid for pid, _, _ in busy})
 
 
 def scrub_process_entry(text: str, fake_by_pid: dict[int, str]) -> str:
@@ -85,14 +118,13 @@ def main() -> None:
     manifest = json.loads((args.src / "manifest.json").read_text())
 
     # A macOS capture has a single `processes` entry with one line per pid:
-    # scrub its name tails and trim to the lowest pids.
+    # scrub its name tails and trim to a deterministic pid set.
     mac_processes = next(
         (e for e in manifest["entries"] if e["name"] == "processes"), None
     )
     if mac_processes is not None:
         text = (args.src / mac_processes["path"]).read_text()
-        pids = sorted({int(m["pid"]) for m in MAC_PROC_RE.finditer(text)})
-        keep_pids = pids[: args.procs]
+        keep_pids = pick_mac_keep(text, args.procs)
         fake_by_pid = {
             pid: scrub_pid_name(pid, index) for index, pid in enumerate(keep_pids)
         }
