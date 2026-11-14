@@ -572,15 +572,21 @@ pub enum FixtureSampleError {
         /// Name of the unparseable entry.
         name: String,
     },
+    /// The manifest names a platform this build has no reader for.
+    #[error("no fixture reader for platform {platform:?}")]
+    UnknownPlatform {
+        /// The recorded platform string, e.g. `linux` or `macos`.
+        platform: String,
+    },
 }
 
-fn missing_source(name: &'static str) -> FixtureSampleError {
+pub(crate) fn missing_source(name: &'static str) -> FixtureSampleError {
     FixtureSampleError::MissingSource {
         name: name.to_string(),
     }
 }
 
-fn bad_source(name: &str) -> FixtureSampleError {
+pub(crate) fn bad_source(name: &str) -> FixtureSampleError {
     FixtureSampleError::BadSource {
         name: name.to_string(),
     }

@@ -12,4 +12,26 @@ mod capture_macos;
 pub mod collector;
 pub mod fixture;
 pub mod linux;
+pub mod macos;
 pub mod model;
+
+/// Reads a recorded fixture into a [`Sample`], choosing the platform
+/// reader by the manifest's `platform` field.
+///
+/// # Errors
+///
+/// Returns [`FixtureSampleError`] when reading fails, a required source
+/// is missing or does not parse, or the manifest names a platform with
+/// no reader.
+pub fn sample_from_fixture(
+    dir: &std::path::Path,
+) -> Result<model::Sample, linux::FixtureSampleError> {
+    let fixture = fixture::Fixture::open(dir)?;
+    match fixture.manifest().platform.as_str() {
+        "linux" => linux::sample_from_fixture(dir),
+        "macos" => macos::sample_from_fixture(dir),
+        platform => Err(linux::FixtureSampleError::UnknownPlatform {
+            platform: platform.to_string(),
+        }),
+    }
+}

@@ -94,7 +94,7 @@ fn run() -> Result<(), Box<dyn Error>> {
         Some(Command::Replay { dir }) => {
             // One rendered frame through the production draw path: the same
             // journey a live sample would take, without needing a terminal.
-            let sample = ztop_core::linux::sample_from_fixture(&dir)?;
+            let sample = ztop_core::sample_from_fixture(&dir)?;
             let ui = ztop_tui::Ui {
                 sample: Some(sample),
                 ..ztop_tui::Ui::new()
