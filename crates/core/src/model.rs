@@ -71,15 +71,16 @@ pub struct CpuTimes {
 
 impl CpuTimes {
     /// Total busy time (everything but idle).
+    ///
+    /// `guest` is deliberately left out: the kernel already counts guest
+    /// time inside `user`, so adding both would double-count it.
     pub fn busy(&self) -> f64 {
-        self.user
-            + self.system
-            + self.nice
-            + self.io_wait
-            + self.irq
-            + self.soft_irq
-            + self.steal
-            + self.guest
+        self.user + self.system + self.nice + self.io_wait + self.irq + self.soft_irq + self.steal
+    }
+
+    /// Total observed time: [`CpuTimes::busy`] plus idle.
+    pub fn total(&self) -> f64 {
+        self.busy() + self.idle
     }
 }
 
@@ -95,6 +96,83 @@ pub struct Sample {
     pub load_avg: [f64; 3],
     pub uptime: Metric,
     pub processes: Vec<Process>,
+    /// Lifetime IO counters per block device.
+    pub disks: Vec<Disk>,
+    /// Lifetime counters per network interface.
+    pub net: Vec<NetIf>,
+    /// Temperatures, fans and battery, when the host provides them.
+    pub sensors: Sensors,
+}
+
+/// Lifetime IO counters of one block device, in bytes.
+///
+/// `/proc/diskstats` counts sectors; collectors convert with the
+/// traditional 512-byte sector the kernel counts in, regardless of the
+/// device's real sector size.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Disk {
+    /// Kernel device name, e.g. `sda` or `nvme0n1`.
+    pub name: String,
+    pub read_bytes: u64,
+    pub write_bytes: u64,
+}
+
+/// Lifetime counters of one network interface.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NetIf {
+    /// Interface name as the kernel reports it, e.g. `eth0`.
+    pub name: String,
+    pub rx_bytes: u64,
+    pub rx_packets: u64,
+    pub tx_bytes: u64,
+    pub tx_packets: u64,
+}
+
+/// One temperature reading.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TempSensor {
+    /// Where the reading comes from, e.g. a chip or zone label.
+    pub label: String,
+    pub celsius: Metric,
+}
+
+/// One fan.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Fan {
+    /// Where the reading comes from, e.g. a chip or sensor label.
+    pub label: String,
+    pub rpm: Metric,
+}
+
+/// Charge state of a battery, as the kernel reports it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BatteryState {
+    Charging,
+    Discharging,
+    Full,
+    Unknown,
+}
+
+/// One battery.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Battery {
+    pub percent: Metric,
+    /// Current power draw; often unavailable on desktops and servers.
+    pub power_watts: Metric,
+    pub state: BatteryState,
+}
+
+/// Temperatures, fans and battery.
+///
+/// An empty group means the host has none of them (or no driver exposes
+/// them); lists are genuinely empty and an absent battery is `None`, not
+/// unavailable placeholders.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct Sensors {
+    pub temps: Vec<TempSensor>,
+    pub fans: Vec<Fan>,
+    pub battery: Option<Battery>,
 }
 
 /// CPU state for one host: per-core times and, when reported, frequencies.
@@ -183,6 +261,30 @@ mod tests {
                 resident_bytes: 1 << 20,
                 threads: 4,
             }],
+            disks: vec![Disk {
+                name: "sda".into(),
+                read_bytes: 1_474_182 * 512,
+                write_bytes: 7_098_027 * 512,
+            }],
+            net: vec![NetIf {
+                name: "eth0".into(),
+                rx_bytes: 265_744_198,
+                rx_packets: 29_836,
+                tx_bytes: 1_193_601,
+                tx_packets: 10_693,
+            }],
+            sensors: Sensors {
+                temps: vec![TempSensor {
+                    label: "coretemp".into(),
+                    celsius: Metric::available(45.5, Unit::Celsius),
+                }],
+                fans: vec![],
+                battery: Some(Battery {
+                    percent: Metric::available(80.0, Unit::Percent),
+                    power_watts: Metric::unavailable(Unit::Watts),
+                    state: BatteryState::Charging,
+                }),
+            },
         };
         let json = serde_json::to_string(&sample).expect("serialize");
         let back: Sample = serde_json::from_str(&json).expect("deserialize");
@@ -199,5 +301,24 @@ mod tests {
             serde_json::to_string(&Unit::RevolutionsPerMinute).unwrap(),
             r#""revolutions_per_minute""#
         );
+    }
+
+    #[test]
+    fn busy_time_does_not_double_count_guest() {
+        // The kernel accounts guest time inside `user`; adding `guest`
+        // again would inflate busy time.
+        let times = CpuTimes {
+            user: 10.0,
+            system: 2.0,
+            nice: 1.0,
+            idle: 7.0,
+            io_wait: 1.0,
+            irq: 0.5,
+            soft_irq: 0.5,
+            steal: 1.0,
+            guest: 3.0,
+        };
+        assert_eq!(times.busy(), 16.0);
+        assert_eq!(times.total(), 23.0);
     }
 }

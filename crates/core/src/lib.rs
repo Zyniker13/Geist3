@@ -9,4 +9,5 @@
 pub mod capture;
 pub mod collector;
 pub mod fixture;
+pub mod linux;
 pub mod model;
