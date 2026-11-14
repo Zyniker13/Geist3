@@ -202,8 +202,8 @@ mod linux {
     ];
 
     /// `/proc/stat` -> `proc-stat`, `/proc/sys/kernel/osrelease` ->
-    /// `proc-sys-kernel_osrelease`: slashes become hyphens, dots become
-    /// underscores.
+    /// `proc-sys-kernel-osrelease`: slashes become hyphens and dots (none
+    /// occur in the recorded paths) become underscores.
     pub(super) fn entry_name(path: &str) -> String {
         path.trim_start_matches('/')
             .replace('/', "-")
@@ -266,7 +266,7 @@ mod tests {
         assert_eq!(linux::entry_name("/proc/stat"), "proc-stat");
         assert_eq!(
             linux::entry_name("/proc/sys/kernel/osrelease"),
-            "proc-sys-kernel_osrelease"
+            "proc-sys-kernel-osrelease"
         );
     }
 }
