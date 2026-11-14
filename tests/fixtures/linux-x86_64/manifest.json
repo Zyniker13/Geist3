@@ -3,7 +3,7 @@
   "platform": "linux",
   "arch": "x86_64",
   "kernel": "7.0.0-1019-azure",
-  "captured_at_unix": 1794643524,
+  "captured_at_unix": 1794649096,
   "source": "ztop 0.1.0-scrubbed",
   "entries": [
     {
@@ -304,6 +304,21 @@
     {
       "name": "proc-version",
       "path": "data/proc-version",
+      "kind": "text"
+    },
+    {
+      "name": "sys-class-hwmon-hwmon0-name",
+      "path": "data/sys-class-hwmon-hwmon0-name",
+      "kind": "text"
+    },
+    {
+      "name": "sys-class-hwmon-hwmon0-temp1_input",
+      "path": "data/sys-class-hwmon-hwmon0-temp1_input",
+      "kind": "text"
+    },
+    {
+      "name": "sys-class-hwmon-hwmon0-temp1_label",
+      "path": "data/sys-class-hwmon-hwmon0-temp1_label",
       "kind": "text"
     }
   ]
