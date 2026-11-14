@@ -2,9 +2,9 @@
 
 Updated after every working session.
 
-- **Current milestone:** M2 (macOS collectors and Apple Silicon).
-- **Last done:** m2-power collector shipped and verified live: SMC temps, fans and `PSTR` system watts via AppleSMC (80-byte `SMCKeyData`; the key code is carried in a local because the keyinfo response does not echo the key back), GPU watts as deltas of cumulative nanjoule counters from cooked IOReport samples (primed on first call); a live two-sample peek printed real values (7 temps, 2 fans, 6.2 W idle to 17 W under load); the live-host test now requires real sensors whenever an SMC device is present, probing IOKit directly so a collector regression cannot hide behind an absent device; Linux marks GPU/system power unavailable; full gate and both Linux cross-target clippies green.
-- **Next step:** recorded powermetrics-style comparison in docs/ (notes powermetrics needs sudo), parity updates, then close M2 and move to M3.
+- **Current milestone:** M3 (Full TUI Parity).
+- **Last done:** M2 closed: macOS collectors (Mach/sysctl/libproc, IOKit, IOReport, AppleSMC) all working unprivileged; SMC temps, fans and `PSTR` system watts via AppleSMC (80-byte `SMCKeyData` with key code in a local because keyinfo does not echo it back), GPU watts as deltas of cumulative nanjoule counters from cooked IOReport samples; a live two-sample peek printed real values (7 temps, 2 fans, 6.2 W idle to 17 W under load); the live-host test now requires real sensors whenever an SMC device is present; Linux marks GPU/system power unavailable; the TUI renders a conditional sensors row (5 rows when sensors exist, 4 otherwise); powermetrics comparison documented in docs/m2-power-checks.md; parity updated. CI green through `edcfdcd`.
+- **Next step:** M3 — tree view, filter/search, follow, tag, signals, renice, user filter, threads, I/O columns, setup screens, mouse, Apple Silicon screen with charts, config file, disk/network/thermal panels.
 - **Blocked on:** nothing.
 
 ## Log
