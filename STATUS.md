@@ -3,13 +3,15 @@
 Updated after every working session.
 
 - **Current milestone:** M2 (macOS collectors and Apple Silicon).
-- **Last done:** m2-plan: decision 0009 pins the macOS collector sources — Mach/sysctl/libproc for CPU, memory, load and processes; IOKit for disks, network and battery; IOReport through `libIOReport` (unprivileged, probed working on this host) for CPU/GPU performance-state residency and energy; SMC and ANE attempted unprivileged and marked unavailable when denied. Capture records all of it as text fixtures in format v1.
-- **Next step:** m2-fixtures: add the macOS capture mode to `ztop capture`, record this host's fixtures (scrubbed), and extend `sample_from_fixture` with the macOS parser.
+- **Last done:** m2-fixtures (part 1): `ztop capture` now runs on macOS — `crates/core/src/capture_macos.rs` reads the allowlisted sysctls, Mach `host_statistics64` vm stats, `vm.loadavg` and `vm.swapusage` (binary `xsw_usage`), `kern.boottime`, and a libproc process snapshot (`proc_listallpids` + SHORTBSDINFO + taskinfo), sorted and deduped; live capture produces 16 clean entries.
+- **Next step:** m2-fixtures (part 2): extend the scrubber for macOS process names, record this host's macOS fixtures, and add the macOS side of `sample_from_fixture`.
 - **Blocked on:** nothing.
 
 ## Log
 
 Newest first. One or two lines per session: what changed, what is next.
+
+- 2026-11-14: macOS capture mode works (`capture_macos.rs`, commit A of m2-fixtures): sysctls + Mach vm stats + loadavg/swap/boottime + libproc processes; full check gate green; live capture 16 entries. Next: scrubber for macOS names, record fixtures, fixture parser.
 
 - M2 planned: decision 0009 — macOS sources per DESIGN.md (Mach/sysctl/libproc, IOKit, IOReport via `libIOReport`, SMC), everything unprivileged; SMC and ANE probed as denied unprivileged on the dev host and recorded as unavailable-when-denied rather than faked. Next: macOS capture mode and fixtures.
 - M1 closed: CI smoke, real-host recorded smoke and per-field fixture tests all verified (the fixture tests now derive expectations from the raw capture text, so fresh recordings cannot break them). Next: M2, macOS collectors.
