@@ -93,6 +93,12 @@ pub struct Ui {
     pub tree: bool,
     /// Pids whose subtree is folded away in tree mode.
     pub collapsed: std::collections::BTreeSet<u32>,
+    /// Incremental search prompt. `Some` means the prompt is open; the
+    /// cursor follows the next row whose name matches the pattern.
+    pub search: Option<String>,
+    /// Pids tagged with Space (and `c` for children). Actions in later
+    /// milestones apply to every tagged process at once.
+    pub tags: std::collections::BTreeSet<u32>,
 }
 
 impl Default for Ui {
@@ -108,6 +114,8 @@ impl Default for Ui {
             follow: None,
             tree: false,
             collapsed: std::collections::BTreeSet::new(),
+            search: None,
+            tags: std::collections::BTreeSet::new(),
         }
     }
 }
@@ -135,11 +143,15 @@ impl Ui {
     }
 
     /// Open or close the name-filter prompt. Closing discards the pattern;
-    /// opening starts from an empty prompt.
+    /// opening starts from an empty prompt and closes the search prompt —
+    /// the two share the keyboard.
     pub fn toggle_filter(&mut self) {
         match self.filter {
             Some(_) => self.filter = None,
-            None => self.filter = Some(String::new()),
+            None => {
+                self.search = None;
+                self.filter = Some(String::new());
+            }
         }
     }
 
@@ -160,6 +172,117 @@ impl Ui {
     /// Close the filter prompt without clearing the text (Enter).
     pub fn close_filter(&mut self) {
         self.filter = None;
+    }
+
+    /// Open or close the incremental-search prompt. Closing discards the
+    /// pattern and keeps the cursor where the search left it; opening
+    /// starts from an empty prompt and closes the filter prompt — the two
+    /// share the keyboard.
+    pub fn toggle_search(&mut self) {
+        if self.search.is_some() {
+            self.search = None;
+        } else {
+            self.filter = None;
+            self.search = Some(String::new());
+        }
+    }
+
+    /// Close the search prompt, keeping the cursor where it jumped.
+    pub fn close_search(&mut self) {
+        self.search = None;
+    }
+
+    /// Type one character into the open search prompt and re-run the
+    /// search from the cursor.
+    pub fn search_push(&mut self, c: char) {
+        if let Some(text) = &mut self.search {
+            text.push(c);
+        }
+        self.search_scan(0);
+    }
+
+    /// Erase the last character from the open search prompt and re-run the
+    /// search from the cursor.
+    pub fn search_pop(&mut self) {
+        if let Some(text) = &mut self.search {
+            text.pop();
+        }
+        self.search_scan(0);
+    }
+
+    /// Jump the cursor to the next match after it (F3 again while the
+    /// prompt is open), wrapping around the table.
+    pub fn search_next(&mut self) {
+        self.search_scan(1);
+    }
+
+    /// Scan the visible rows for the first one whose name contains the
+    /// open search pattern, case-insensitively, starting `skip` rows after
+    /// the cursor and wrapping around. Moves the cursor (and re-pins
+    /// follow) there; with no match — or an empty prompt — the cursor
+    /// stays put. `skip` 0 re-checks the cursor's own row first, so
+    /// editing the pattern keeps the cursor while it still matches.
+    fn search_scan(&mut self, skip: isize) {
+        let Some(pattern) = self.search.as_deref() else {
+            return;
+        };
+        let pattern = pattern.to_lowercase();
+        if pattern.is_empty() {
+            return;
+        }
+        let rows = self.ordered_rows();
+        if rows.is_empty() {
+            return;
+        }
+        let len = rows.len() as isize;
+        let start = rows
+            .iter()
+            .position(|r| Some(r.process.pid) == self.cursor)
+            .map_or(0, |i| i as isize);
+        for step in 0..len {
+            let index = (start + skip + step).rem_euclid(len) as usize;
+            if rows[index].process.name.to_lowercase().contains(&pattern) {
+                self.cursor = Some(rows[index].process.pid);
+                if self.follow.is_some() {
+                    self.follow = self.cursor;
+                }
+                return;
+            }
+        }
+    }
+
+    /// Tag or untag the cursor's process (Space).
+    pub fn toggle_tag(&mut self) {
+        if let Some(pid) = self.cursor {
+            if self.tags.contains(&pid) {
+                self.tags.remove(&pid);
+            } else {
+                self.tags.insert(pid);
+            }
+        }
+    }
+
+    /// Tag every visible descendant of the cursor's process (`c`).
+    pub fn tag_children(&mut self) {
+        let Some(selected) = self.cursor else {
+            return;
+        };
+        let Some(sample) = &self.sample else {
+            return;
+        };
+        for process in &sample.processes {
+            if process.pid != selected
+                && self.visible(process)
+                && self.ancestors(process).contains(&selected)
+            {
+                self.tags.insert(process.pid);
+            }
+        }
+    }
+
+    /// Clear every tag (`U`).
+    pub fn untag_all(&mut self) {
+        self.tags.clear();
     }
 
     /// Cycle the user filter through the users present in the current
@@ -493,10 +616,22 @@ fn event_loop(terminal: &mut Tui, collector: &mut dyn Collector) -> io::Result<(
                         KeyCode::Esc if ui.filter.is_some() => ui.close_filter(),
                         KeyCode::Backspace if ui.filter.is_some() => ui.filter_pop(),
                         KeyCode::Char(c) if ui.filter.is_some() => ui.filter_push(c),
+                        // While the search prompt is open the keys edit it:
+                        // F3 repeats the search, Esc/Enter close, Backspace
+                        // erases, everything printable types.
+                        KeyCode::Esc if ui.search.is_some() => ui.close_search(),
+                        KeyCode::Backspace if ui.search.is_some() => ui.search_pop(),
+                        KeyCode::F(3) if ui.search.is_some() => ui.search_next(),
+                        KeyCode::Enter if ui.search.is_some() => ui.close_search(),
+                        KeyCode::Char(c) if ui.search.is_some() => ui.search_push(c),
                         KeyCode::Char('q') | KeyCode::Esc => return Ok(()),
                         KeyCode::Char('i') => ui.toggle_direction(),
+                        KeyCode::F(3) => ui.toggle_search(),
                         KeyCode::F(4) => ui.toggle_filter(),
                         KeyCode::Char('u') => ui.cycle_user_filter(),
+                        KeyCode::Char(' ') => ui.toggle_tag(),
+                        KeyCode::Char('c') => ui.tag_children(),
+                        KeyCode::Char('U') => ui.untag_all(),
                         KeyCode::Char('f') | KeyCode::Char('F') => ui.toggle_follow(),
                         KeyCode::F(5) => ui.toggle_tree(),
                         KeyCode::Enter => ui.toggle_collapse(),
@@ -756,8 +891,15 @@ fn status_line(ui: &Ui) -> Line<'static> {
         if ui.tree {
             parts.push("tree".to_string());
         }
+        if let Some(pattern) = &ui.search {
+            parts.push(format!("search:/{pattern}"));
+        }
+        let tagged = ui.tags.len();
+        if tagged > 0 {
+            parts.push(format!("tagged:{tagged}"));
+        }
         parts.push(format!(
-            "q: quit · tab: sort {} · i: reverse · f4: filter · u: user · j/k: select · f: follow · f5: tree · enter: fold",
+            "q: quit · tab: sort {} · i: reverse · f3: search · f4: filter · u: user · space: tag · j/k: select · f: follow · f5: tree · enter: fold",
             sort_label(ui.sort, ui.descending)
         ));
         Line::from(parts.join(" · "))
@@ -779,7 +921,7 @@ fn draw_processes(frame: &mut Frame, ui: &Ui, area: ratatui::layout::Rect) {
         _ => 0,
     };
     for row_view in procs.iter().skip(offset).take(fold) {
-        let mut row = process_row(row_view, ui.tree);
+        let mut row = process_row(row_view, ui.tree, ui.tags.contains(&row_view.process.pid));
         if Some(row_view.process.pid) == ui.cursor {
             row = row.style(ratatui::style::Style::default().reversed());
         }
@@ -801,7 +943,8 @@ fn draw_processes(frame: &mut Frame, ui: &Ui, area: ratatui::layout::Rect) {
     frame.render_widget(table, area);
 }
 
-fn process_row(row_view: &TreeRow<'_>, tree: bool) -> Row<'static> {
+/// One table row. Tagged processes carry a `*` before the name, htop-style.
+fn process_row(row_view: &TreeRow<'_>, tree: bool, tagged: bool) -> Row<'static> {
     let name = if tree {
         let indent = "  ".repeat(row_view.depth);
         let branch = if row_view.depth > 0 { "└─ " } else { "" };
@@ -814,6 +957,7 @@ fn process_row(row_view: &TreeRow<'_>, tree: bool) -> Row<'static> {
     } else {
         row_view.process.name.clone()
     };
+    let name = if tagged { format!("* {name}") } else { name };
     Row::new(vec![
         Cell::from(format!("{:>7}", row_view.process.pid)),
         Cell::from(format!("{:>9}", row_view.process.user)),
@@ -1324,6 +1468,121 @@ mod tests {
         let rows = render(&ui, 80, 24);
         assert!(rows.iter().any(|row| row.contains("└─ worker-04")));
         assert!(rows.iter().any(|row| row.contains("└─ worker-02")));
+    }
+
+    #[test]
+    fn f3_search_jumps_to_the_next_name_match() {
+        let mut ui = ui_with(Some(sample()), None);
+        ui.toggle_search();
+        for c in "07".chars() {
+            ui.search_push(c);
+        }
+        assert_eq!(ui.cursor, Some(7), "the first match of \"07\" is worker-07");
+        // Closing keeps the cursor where the search left it.
+        ui.close_search();
+        assert_eq!(ui.cursor, Some(7));
+        assert!(ui.search.is_none());
+        // A wider pattern keeps the cursor while its row still matches.
+        ui.toggle_search();
+        for c in "wor".chars() {
+            ui.search_push(c);
+        }
+        assert_eq!(ui.cursor, Some(7));
+        // F3 again moves to the next match after the cursor.
+        ui.search_next();
+        assert_eq!(ui.cursor, Some(8), "the next worker after 7 is worker-08");
+        // A pattern with no match leaves the cursor alone; backspacing back
+        // to a matching pattern re-finds the current row.
+        ui.search_push('z');
+        assert_eq!(ui.cursor, Some(8));
+        let status = status_line(&ui).to_string();
+        assert!(status.contains("search:/worz"), "status: {status}");
+        ui.search_pop();
+        assert_eq!(ui.cursor, Some(8));
+    }
+
+    #[test]
+    fn the_search_repins_follow() {
+        let mut ui = ui_with(Some(sample()), None);
+        ui.toggle_search();
+        for c in "02".chars() {
+            ui.search_push(c);
+        }
+        assert_eq!(ui.cursor, Some(2));
+        ui.toggle_follow();
+        // Re-open with a fresh pattern: the jump drags follow along.
+        ui.close_search();
+        ui.toggle_search();
+        for c in "05".chars() {
+            ui.search_push(c);
+        }
+        assert_eq!(ui.cursor, Some(5));
+        assert_eq!(ui.follow, Some(5), "follow re-pins to the searched pid");
+    }
+
+    #[test]
+    fn space_tags_the_cursor_and_u_clears_all() {
+        let mut ui = ui_with(Some(sample()), None);
+        ui.cursor = Some(2);
+        ui.toggle_tag();
+        assert_eq!(ui.tags.len(), 1);
+        assert!(ui.tags.contains(&2));
+        // Tagged rows carry a `*` before the name; the status line counts.
+        let rows = render(&ui, 80, 24);
+        assert!(
+            rows.iter().any(|row| row.contains("* worker-02")),
+            "the tagged row shows a star: {rows:?}"
+        );
+        assert!(
+            !rows.iter().any(|row| row.contains("* worker-03")),
+            "untagged rows stay clean: {rows:?}"
+        );
+        let status = status_line(&ui).to_string();
+        assert!(status.contains("tagged:1"), "status: {status}");
+        // Space again untags; tags survive a fresh sample.
+        ui.toggle_tag();
+        assert!(ui.tags.is_empty());
+        ui.toggle_tag();
+        ui.cursor = Some(3);
+        ui.toggle_tag();
+        ui.apply(Ok(sample()));
+        assert_eq!(ui.tags.len(), 2);
+        // `U` clears every tag at once.
+        ui.untag_all();
+        assert!(ui.tags.is_empty());
+        // Space without a cursor is a no-op.
+        ui.cursor = None;
+        ui.toggle_tag();
+        assert!(ui.tags.is_empty());
+    }
+
+    #[test]
+    fn c_tags_the_visible_descendants() {
+        let mut ui = ui_with(Some(sample_with_tree()), None);
+        ui.toggle_tree();
+        ui.cursor = Some(1);
+        ui.tag_children();
+        // Children 2 and 3 plus grandchild 4 — but not the cursor itself.
+        assert!(ui.tags.contains(&2));
+        assert!(ui.tags.contains(&3));
+        assert!(ui.tags.contains(&4));
+        assert!(!ui.tags.contains(&1));
+        assert_eq!(ui.tags.len(), 3);
+        // Tagged descendants show the marker; the untagged root does not.
+        let rows = render(&ui, 80, 24);
+        assert!(
+            rows.iter().any(|row| row.contains("*   └─ worker-02")),
+            "the tagged child shows a star: {rows:?}"
+        );
+        assert!(
+            rows.iter()
+                .any(|row| row.contains("worker-01") && !row.contains('*')),
+            "the root stays untagged: {rows:?}"
+        );
+        // `c` without a cursor does nothing.
+        let mut empty = ui_with(Some(sample()), None);
+        empty.tag_children();
+        assert!(empty.tags.is_empty());
     }
 
     #[test]
