@@ -2,15 +2,16 @@
 
 Updated after every working session.
 
-- **Current milestone:** M1 (Linux collectors and basic TUI).
-- **Last done:** m1-close: the record workflow's fresh captures broke the fixture tests (they pinned exact machine-state values that change on every recording), so the per-field test now re-derives every expected value from the raw `/proc` text inside the fixture itself — re-recorded captures stay valid while wrong-column and wrong-unit parser drift still fails (`1990198`).
-- **Next step:** confirm CI green on `1990198`, then close M1 per ROADMAP.md (the third "Done when" prong — per-field fixture tests — is met by the rewritten test).
+- **Current milestone:** M2 (macOS collectors and Apple Silicon).
+- **Last done:** M1 closed — all three "Done when" prongs verified with real output: the CI smoke replays both fixtures on every push (Linux job green), the real-host smoke is recorded in `docs/screenshots/` with runner self-tests, and every collector field has a fixture test (`1990198` derives each expectation from the fixture's own raw `/proc` text, so re-recorded captures stay valid).
+- **Next step:** m2-plan: decision 0009 for the macOS collector sources (libproc, sysctl, host_statistics64, IOReport, SMC — all without root), then `ztop capture` on macOS to record this host's fixtures.
 - **Blocked on:** nothing.
 
 ## Log
 
 Newest first. One or two lines per session: what changed, what is next.
 
+- M1 closed: CI smoke, real-host recorded smoke and per-field fixture tests all verified (the fixture tests now derive expectations from the raw capture text, so fresh recordings cannot break them). Next: M2, macOS collectors.
 - m1-close: the fixture tests had pinned exact machine-state values (CPU ticks, memory sizes), so the record workflow's fresh captures broke them on pull. The per-field test now re-derives every expectation from the fixture's own raw `/proc` text — parser column/unit drift still fails, re-recorded captures do not. Next: confirm CI, close M1.
 - m1-ci-smoke done: `ztop replay` renders a recorded fixture through the same `draw` the live TUI uses, so no terminal is needed — the local gate replays both fixtures on every push, the record workflow self-tests each freshly scrubbed fixture before committing it, and real-host frames are recorded in `docs/screenshots/`. Next: close M1.
 - m1-tui done: header meters (title, per-core gauges, memory/swap gauges, load, uptime) over a sortable process table; the render path is a pure function of UI state, so snapshot tests at 80x24 and 200x50 run without a pty, and a `--ignored` dump test prints the frame for a human eye. Wired into `ztop` behind a Linux/macOS split (Linux live collector, otherwise an unavailable placeholder).
