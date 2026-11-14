@@ -18,7 +18,7 @@ Check an item only when it works and a test or a recorded check shows it. Add th
 - [ ] Every common column: PID, PPID, user, priority, nice, VIRT, RES, SHR, state, CPU%, MEM%, TIME+, command, threads, start time, processor — shown today: PID, user, state, CPU%, MEM%, THR (threads), RES, NAME
 - [ ] I/O columns: read and write rates and totals (Linux; where permitted)
 - [ ] Sort by any column, invert sort, and the M, P and T shortcuts
-- [ ] Tree view with collapse and expand
+- [x] Tree view with collapse and expand (F5: toggle, Enter: fold/unfold the cursor's subtree) — indented rows with tree characters, hidden-descendant count on folded rows. Tests: `tree_groups_children_under_their_parents`, `a_fold_hides_the_subtree_and_reports_the_count`, `folding_needs_a_cursor_with_children`, `the_tree_render_indents_and_marks_folds`.
 - [ ] Incremental search (F3)
 - [x] Filter (F4) — F4 opens a prompt that edits live; an empty prompt matches everything; the active pattern shows in the status line. Tests: `the_name_filter_narrows_and_the_status_shows_it`.
 - [x] Follow a process (F) — j/k/arrows move a cursor over the visible rows; F pins follow to the cursor's pid across samples and re-pins when the cursor moves; a vanished followed process ends follow mode; the cursor row is highlighted and the list scrolls to keep it visible. Tests: `j_and_k_move_the_cursor_over_visible_rows`, `follow_reselects_the_pid_after_apply`, `follow_ends_when_the_process_vanishes`, `a_plain_cursor_keeps_its_pid_and_dies_with_it`, `the_cursor_scrolls_to_stay_visible`.
