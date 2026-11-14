@@ -14,3 +14,4 @@ ROADMAP.md names `ratatui` + `crossterm` as the expected TUI stack and asks for 
 - One immediate-mode render loop; TUI state lives in a plain struct the loop mutates.
 - Snapshot tests never touch a real terminal, so CI needs no pty and the 80x24 requirement is testable.
 - ratatui is the most actively maintained Rust TUI toolkit and what htop-style Rust tools converge on, which lowers the cost of the later parity milestones (M1, M3).
+- Update (2026-11-14): the workspace tracks `ratatui 0.30`, not 0.29. ratatui 0.29 pulled in `paste`, an archived (unmaintained) crate that raised a dependency advisory; 0.30 dropped it, so the minor bump clears the advisory with no API cost to the skeleton.
