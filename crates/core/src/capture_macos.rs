@@ -211,26 +211,48 @@ fn boottime() -> Option<(i64, i64)> {
 
 /// One `processes` entry: the libproc snapshot the collector parses.
 ///
-/// Lines are `pid ppid status threads name` with an integer status byte and
-/// the thread count from `PROC_PIDTASKINFO`. The committed fixture scrubs
-/// `name` (decision 0007); the live collector reads the real names.
+/// Lines are `pid ppid status uid utime stime rss threads name` with an
+/// integer status byte and the name last in quotes. `utime` and `stime`
+/// are cumulative CPU nanoseconds (mach absolute ticks converted with
+/// `mach_timebase_info`), `rss` resident bytes and `threads` the thread
+/// count, from `PROC_PIDTASKINFO`; the kernel denies that call for other
+/// users' processes, and then those four fields are `-` (decision 0009:
+/// unavailable, never faked). The committed fixture scrubs `name`
+/// (decision 0007); the live collector reads the real names.
 fn process_entry() -> CapturedInput {
     let pids = list_pids();
+    let tb = task_timebase();
     let mut text = String::new();
     for pid in pids {
         let Some(bsd) = bsd_info(pid) else {
             continue;
         };
-        let threads = thread_count(pid).unwrap_or(0);
         // Names can contain spaces; keep them in a quoted tail field.
         let name = bsd.comm.replace(['\\', '"'], " ");
+        let (utime, stime, rss, threads) = match task_info(pid) {
+            Some(task) => (
+                ticks_to_ns(task.total_user, tb).to_string(),
+                ticks_to_ns(task.total_system, tb).to_string(),
+                task.resident_size.to_string(),
+                task.threadnum.to_string(),
+            ),
+            None => (
+                UNAVAILABLE.to_string(),
+                UNAVAILABLE.to_string(),
+                UNAVAILABLE.to_string(),
+                UNAVAILABLE.to_string(),
+            ),
+        };
         text.push_str(&format!(
-            "{} {} {} {} \"{}\"\n",
-            pid, bsd.ppid, bsd.status, threads, name
+            "{} {} {} {} {} {} {} {} \"{}\"\n",
+            pid, bsd.ppid, bsd.status, bsd.uid, utime, stime, rss, threads, name
         ));
     }
     CapturedInput::text("processes", text)
 }
+
+/// Recorded in place of a value the OS would not give us (decision 0009).
+const UNAVAILABLE: &str = "-";
 
 /// All pids via `proc_listallpids`.
 fn list_pids() -> Vec<u32> {
@@ -259,6 +281,7 @@ fn list_pids() -> Vec<u32> {
 struct BsdInfo {
     ppid: u32,
     status: u32,
+    uid: u32,
     comm: String,
 }
 
@@ -302,6 +325,7 @@ fn bsd_info(pid: u32) -> Option<BsdInfo> {
         Some(BsdInfo {
             ppid: info.ppid,
             status: info.status,
+            uid: info.uid,
             comm,
         })
     }
@@ -310,6 +334,9 @@ fn bsd_info(pid: u32) -> Option<BsdInfo> {
 /// Thread count of one process via `PROC_PIDTASKINFO`.
 const PROC_PIDTASKINFO: u32 = 4;
 
+/// `struct proc_taskinfo` (96 bytes): byte and microsecond counts are u64,
+/// the counters i32, ending at `priority`. Matches the SDK layout; the size
+/// assert keeps it pinned to what the kernel actually returns.
 #[repr(C)]
 struct ProcTaskInfo {
     virtual_size: u64,
@@ -318,25 +345,24 @@ struct ProcTaskInfo {
     total_system: u64,
     threads_user: u64,
     threads_system: u64,
-    policy: [i32; 2],
-    faults: u64,
-    pageins: u64,
-    cow_faults: u64,
-    messages_sent: u64,
-    messages_received: u64,
-    syscalls_mach: u64,
-    syscalls_unix: u64,
-    csw: u64,
-    threadnum: u64,
-    numrunning: u64,
+    policy: i32,
+    faults: i32,
+    pageins: i32,
+    cow_faults: i32,
+    messages_sent: i32,
+    messages_received: i32,
+    syscalls_mach: i32,
+    syscalls_unix: i32,
+    csw: i32,
+    threadnum: i32,
+    numrunning: i32,
     priority: i32,
-    userpri: i32,
-    reserved: [i32; 3],
-    face: i32,
 }
+const _: () = assert!(std::mem::size_of::<ProcTaskInfo>() == 96);
 
-/// Read the thread count of one process.
-fn thread_count(pid: u32) -> Option<u64> {
+/// Read the task info of one process. Unprivileged callers are denied this
+/// for other users' processes; the caller then marks the fields unavailable.
+fn task_info(pid: u32) -> Option<ProcTaskInfo> {
     unsafe {
         let mut info = std::mem::zeroed::<ProcTaskInfo>();
         let n = proc_pidinfo(
@@ -349,8 +375,34 @@ fn thread_count(pid: u32) -> Option<u64> {
         if n as usize != std::mem::size_of::<ProcTaskInfo>() {
             return None;
         }
-        Some(info.threadnum)
+        Some(info)
     }
+}
+
+/// `struct mach_timebase_info`: nanoseconds per absolute-time tick is
+/// `numer / denom` (this host: 125/3, i.e. 24 MHz ticks). Boot-stable.
+#[repr(C)]
+struct MachTimebaseInfo {
+    numer: u32,
+    denom: u32,
+}
+
+/// The mach timebase used to convert absolute ticks to nanoseconds.
+fn task_timebase() -> (u32, u32) {
+    unsafe {
+        let mut tb = std::mem::zeroed::<MachTimebaseInfo>();
+        if mach_timebase_info(&mut tb) == 0 && tb.denom != 0 {
+            (tb.numer, tb.denom)
+        } else {
+            (1, 1)
+        }
+    }
+}
+
+/// Convert mach absolute ticks to nanoseconds. Wide math keeps a large
+/// cumulative counter from overflowing before the division.
+fn ticks_to_ns(ticks: u64, tb: (u32, u32)) -> u64 {
+    (u128::from(ticks) * u128::from(tb.0) / u128::from(tb.1)) as u64
 }
 
 unsafe extern "C" {
@@ -380,6 +432,7 @@ unsafe extern "C" {
         buffer: *mut core::ffi::c_void,
         buffersize: i32,
     ) -> i32;
+    fn mach_timebase_info(info: *mut MachTimebaseInfo) -> i32;
 }
 
 /// The subset of `vm_statistics64` zTop records, in pages.
@@ -532,5 +585,48 @@ mod tests {
         );
         // Name tail field is quoted.
         assert!(first.contains(" \""), "quoted name tail: {first}");
+    }
+
+    /// The processes entry has eight numeric-or-`-` fields before the
+    /// quoted name; pid 0 (kernel_task) runs as root, so its task fields
+    /// are `-`, and at least one same-user process has real values.
+    #[test]
+    fn processes_record_taskinfo_fields() {
+        let inputs = collect_inputs();
+        let procs = inputs
+            .iter()
+            .find(|i| i.name == "processes")
+            .expect("processes entry");
+        let FixtureData::Text(text) = &procs.data else {
+            panic!("processes is text");
+        };
+        let first = text.lines().next().expect("at least one process");
+        let fields: Vec<&str> = first.split(' ').collect();
+        assert_eq!(
+            fields.len(),
+            9,
+            "pid ppid status uid utime stime rss threads name: {first}"
+        );
+        assert_eq!(fields[0], "0", "first line is pid 0");
+        for f in &fields[4..8] {
+            assert_eq!(*f, "-", "root-owned kernel_task has no taskinfo: {first}");
+        }
+        // A same-user process (this test binary among them) has values.
+        assert!(
+            text.lines().any(|l| l
+                .split(' ')
+                .skip(4)
+                .take(4)
+                .all(|f| f.bytes().all(|b| b.is_ascii_digit()))),
+            "some process carries taskinfo values: {text}"
+        );
+    }
+
+    /// Absolute ticks convert to nanoseconds with the host timebase.
+    #[test]
+    fn ticks_to_ns_uses_timebase() {
+        assert_eq!(super::ticks_to_ns(12_000_000, (125, 3)), 500_000_000);
+        assert_eq!(super::ticks_to_ns(3, (1, 1)), 3);
+        assert_eq!(super::ticks_to_ns(0, (125, 3)), 0);
     }
 }
