@@ -1,0 +1,1035 @@
+{
+  "format": 1,
+  "platform": "linux",
+  "arch": "x86_64",
+  "kernel": "7.0.0-1019-azure",
+  "captured_at_unix": 1794630805,
+  "source": "ztop 0.1.0-scrubbed",
+  "entries": [
+    {
+      "name": "proc-1-cmdline",
+      "path": "data/proc-1-cmdline",
+      "kind": "text"
+    },
+    {
+      "name": "proc-1-comm",
+      "path": "data/proc-1-comm",
+      "kind": "text"
+    },
+    {
+      "name": "proc-1-stat",
+      "path": "data/proc-1-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-1-status",
+      "path": "data/proc-1-status",
+      "kind": "text"
+    },
+    {
+      "name": "proc-10-cmdline",
+      "path": "data/proc-10-cmdline",
+      "kind": "text"
+    },
+    {
+      "name": "proc-10-comm",
+      "path": "data/proc-10-comm",
+      "kind": "text"
+    },
+    {
+      "name": "proc-10-stat",
+      "path": "data/proc-10-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-10-status",
+      "path": "data/proc-10-status",
+      "kind": "text"
+    },
+    {
+      "name": "proc-1085-stat",
+      "path": "data/proc-1085-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-1087-stat",
+      "path": "data/proc-1087-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-109-stat",
+      "path": "data/proc-109-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-11-cmdline",
+      "path": "data/proc-11-cmdline",
+      "kind": "text"
+    },
+    {
+      "name": "proc-11-comm",
+      "path": "data/proc-11-comm",
+      "kind": "text"
+    },
+    {
+      "name": "proc-11-stat",
+      "path": "data/proc-11-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-11-status",
+      "path": "data/proc-11-status",
+      "kind": "text"
+    },
+    {
+      "name": "proc-110-stat",
+      "path": "data/proc-110-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-1102-stat",
+      "path": "data/proc-1102-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-1106-stat",
+      "path": "data/proc-1106-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-111-stat",
+      "path": "data/proc-111-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-1116-stat",
+      "path": "data/proc-1116-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-112-stat",
+      "path": "data/proc-112-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-1162-stat",
+      "path": "data/proc-1162-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-1173-stat",
+      "path": "data/proc-1173-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-1174-stat",
+      "path": "data/proc-1174-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-12-cmdline",
+      "path": "data/proc-12-cmdline",
+      "kind": "text"
+    },
+    {
+      "name": "proc-12-comm",
+      "path": "data/proc-12-comm",
+      "kind": "text"
+    },
+    {
+      "name": "proc-12-stat",
+      "path": "data/proc-12-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-12-status",
+      "path": "data/proc-12-status",
+      "kind": "text"
+    },
+    {
+      "name": "proc-1207-stat",
+      "path": "data/proc-1207-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-1230-stat",
+      "path": "data/proc-1230-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-1239-stat",
+      "path": "data/proc-1239-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-1275-stat",
+      "path": "data/proc-1275-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-1279-stat",
+      "path": "data/proc-1279-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-1282-stat",
+      "path": "data/proc-1282-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-1285-stat",
+      "path": "data/proc-1285-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-1298-stat",
+      "path": "data/proc-1298-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-13-stat",
+      "path": "data/proc-13-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-1309-stat",
+      "path": "data/proc-1309-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-1335-stat",
+      "path": "data/proc-1335-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-1373-stat",
+      "path": "data/proc-1373-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-1379-stat",
+      "path": "data/proc-1379-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-1391-stat",
+      "path": "data/proc-1391-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-14-stat",
+      "path": "data/proc-14-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-1435-stat",
+      "path": "data/proc-1435-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-1449-stat",
+      "path": "data/proc-1449-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-1450-stat",
+      "path": "data/proc-1450-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-15-stat",
+      "path": "data/proc-15-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-154-stat",
+      "path": "data/proc-154-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-16-stat",
+      "path": "data/proc-16-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-167-stat",
+      "path": "data/proc-167-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-17-stat",
+      "path": "data/proc-17-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-18-stat",
+      "path": "data/proc-18-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-182-stat",
+      "path": "data/proc-182-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-183-stat",
+      "path": "data/proc-183-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-19-stat",
+      "path": "data/proc-19-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-191-stat",
+      "path": "data/proc-191-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-2-cmdline",
+      "path": "data/proc-2-cmdline",
+      "kind": "text"
+    },
+    {
+      "name": "proc-2-comm",
+      "path": "data/proc-2-comm",
+      "kind": "text"
+    },
+    {
+      "name": "proc-2-stat",
+      "path": "data/proc-2-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-2-status",
+      "path": "data/proc-2-status",
+      "kind": "text"
+    },
+    {
+      "name": "proc-20-stat",
+      "path": "data/proc-20-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-21-stat",
+      "path": "data/proc-21-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-210-stat",
+      "path": "data/proc-210-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-217-stat",
+      "path": "data/proc-217-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-2182-stat",
+      "path": "data/proc-2182-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-22-stat",
+      "path": "data/proc-22-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-2262-stat",
+      "path": "data/proc-2262-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-2280-stat",
+      "path": "data/proc-2280-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-2294-stat",
+      "path": "data/proc-2294-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-23-stat",
+      "path": "data/proc-23-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-234-stat",
+      "path": "data/proc-234-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-236-stat",
+      "path": "data/proc-236-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-239-stat",
+      "path": "data/proc-239-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-24-stat",
+      "path": "data/proc-24-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-240-stat",
+      "path": "data/proc-240-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-2488-stat",
+      "path": "data/proc-2488-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-25-stat",
+      "path": "data/proc-25-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-26-stat",
+      "path": "data/proc-26-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-2640-stat",
+      "path": "data/proc-2640-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-2642-stat",
+      "path": "data/proc-2642-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-2660-stat",
+      "path": "data/proc-2660-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-2664-stat",
+      "path": "data/proc-2664-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-2695-stat",
+      "path": "data/proc-2695-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-27-stat",
+      "path": "data/proc-27-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-2713-stat",
+      "path": "data/proc-2713-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-28-stat",
+      "path": "data/proc-28-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-29-stat",
+      "path": "data/proc-29-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-2970-stat",
+      "path": "data/proc-2970-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-299-stat",
+      "path": "data/proc-299-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-3-cmdline",
+      "path": "data/proc-3-cmdline",
+      "kind": "text"
+    },
+    {
+      "name": "proc-3-comm",
+      "path": "data/proc-3-comm",
+      "kind": "text"
+    },
+    {
+      "name": "proc-3-stat",
+      "path": "data/proc-3-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-3-status",
+      "path": "data/proc-3-status",
+      "kind": "text"
+    },
+    {
+      "name": "proc-30-stat",
+      "path": "data/proc-30-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-31-stat",
+      "path": "data/proc-31-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-32-stat",
+      "path": "data/proc-32-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-33-stat",
+      "path": "data/proc-33-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-34-stat",
+      "path": "data/proc-34-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-35-stat",
+      "path": "data/proc-35-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-36-stat",
+      "path": "data/proc-36-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-37-stat",
+      "path": "data/proc-37-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-3779-stat",
+      "path": "data/proc-3779-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-38-stat",
+      "path": "data/proc-38-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-39-stat",
+      "path": "data/proc-39-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-4-cmdline",
+      "path": "data/proc-4-cmdline",
+      "kind": "text"
+    },
+    {
+      "name": "proc-4-comm",
+      "path": "data/proc-4-comm",
+      "kind": "text"
+    },
+    {
+      "name": "proc-4-stat",
+      "path": "data/proc-4-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-4-status",
+      "path": "data/proc-4-status",
+      "kind": "text"
+    },
+    {
+      "name": "proc-40-stat",
+      "path": "data/proc-40-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-403-stat",
+      "path": "data/proc-403-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-41-stat",
+      "path": "data/proc-41-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-414-stat",
+      "path": "data/proc-414-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-415-stat",
+      "path": "data/proc-415-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-42-stat",
+      "path": "data/proc-42-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-43-stat",
+      "path": "data/proc-43-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-431-stat",
+      "path": "data/proc-431-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-44-stat",
+      "path": "data/proc-44-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-45-stat",
+      "path": "data/proc-45-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-46-stat",
+      "path": "data/proc-46-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-47-stat",
+      "path": "data/proc-47-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-48-stat",
+      "path": "data/proc-48-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-49-stat",
+      "path": "data/proc-49-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-5-cmdline",
+      "path": "data/proc-5-cmdline",
+      "kind": "text"
+    },
+    {
+      "name": "proc-5-comm",
+      "path": "data/proc-5-comm",
+      "kind": "text"
+    },
+    {
+      "name": "proc-5-stat",
+      "path": "data/proc-5-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-5-status",
+      "path": "data/proc-5-status",
+      "kind": "text"
+    },
+    {
+      "name": "proc-50-stat",
+      "path": "data/proc-50-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-51-stat",
+      "path": "data/proc-51-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-52-stat",
+      "path": "data/proc-52-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-53-stat",
+      "path": "data/proc-53-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-54-stat",
+      "path": "data/proc-54-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-55-stat",
+      "path": "data/proc-55-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-56-stat",
+      "path": "data/proc-56-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-57-stat",
+      "path": "data/proc-57-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-58-stat",
+      "path": "data/proc-58-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-59-stat",
+      "path": "data/proc-59-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-591-stat",
+      "path": "data/proc-591-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-6-cmdline",
+      "path": "data/proc-6-cmdline",
+      "kind": "text"
+    },
+    {
+      "name": "proc-6-comm",
+      "path": "data/proc-6-comm",
+      "kind": "text"
+    },
+    {
+      "name": "proc-6-stat",
+      "path": "data/proc-6-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-6-status",
+      "path": "data/proc-6-status",
+      "kind": "text"
+    },
+    {
+      "name": "proc-60-stat",
+      "path": "data/proc-60-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-61-stat",
+      "path": "data/proc-61-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-62-stat",
+      "path": "data/proc-62-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-63-stat",
+      "path": "data/proc-63-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-64-stat",
+      "path": "data/proc-64-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-65-stat",
+      "path": "data/proc-65-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-66-stat",
+      "path": "data/proc-66-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-67-stat",
+      "path": "data/proc-67-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-68-stat",
+      "path": "data/proc-68-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-69-stat",
+      "path": "data/proc-69-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-694-stat",
+      "path": "data/proc-694-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-7-cmdline",
+      "path": "data/proc-7-cmdline",
+      "kind": "text"
+    },
+    {
+      "name": "proc-7-comm",
+      "path": "data/proc-7-comm",
+      "kind": "text"
+    },
+    {
+      "name": "proc-7-stat",
+      "path": "data/proc-7-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-7-status",
+      "path": "data/proc-7-status",
+      "kind": "text"
+    },
+    {
+      "name": "proc-70-stat",
+      "path": "data/proc-70-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-71-stat",
+      "path": "data/proc-71-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-72-stat",
+      "path": "data/proc-72-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-73-stat",
+      "path": "data/proc-73-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-74-stat",
+      "path": "data/proc-74-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-75-stat",
+      "path": "data/proc-75-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-76-stat",
+      "path": "data/proc-76-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-77-stat",
+      "path": "data/proc-77-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-78-stat",
+      "path": "data/proc-78-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-79-stat",
+      "path": "data/proc-79-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-795-stat",
+      "path": "data/proc-795-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-8-cmdline",
+      "path": "data/proc-8-cmdline",
+      "kind": "text"
+    },
+    {
+      "name": "proc-8-comm",
+      "path": "data/proc-8-comm",
+      "kind": "text"
+    },
+    {
+      "name": "proc-8-stat",
+      "path": "data/proc-8-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-8-status",
+      "path": "data/proc-8-status",
+      "kind": "text"
+    },
+    {
+      "name": "proc-80-stat",
+      "path": "data/proc-80-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-81-stat",
+      "path": "data/proc-81-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-82-stat",
+      "path": "data/proc-82-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-83-stat",
+      "path": "data/proc-83-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-84-stat",
+      "path": "data/proc-84-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-85-stat",
+      "path": "data/proc-85-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-86-stat",
+      "path": "data/proc-86-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-87-stat",
+      "path": "data/proc-87-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-88-stat",
+      "path": "data/proc-88-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-89-stat",
+      "path": "data/proc-89-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-9-cmdline",
+      "path": "data/proc-9-cmdline",
+      "kind": "text"
+    },
+    {
+      "name": "proc-9-comm",
+      "path": "data/proc-9-comm",
+      "kind": "text"
+    },
+    {
+      "name": "proc-9-stat",
+      "path": "data/proc-9-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-9-status",
+      "path": "data/proc-9-status",
+      "kind": "text"
+    },
+    {
+      "name": "proc-90-stat",
+      "path": "data/proc-90-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-91-stat",
+      "path": "data/proc-91-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-92-stat",
+      "path": "data/proc-92-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-93-stat",
+      "path": "data/proc-93-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-94-stat",
+      "path": "data/proc-94-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-95-stat",
+      "path": "data/proc-95-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-96-stat",
+      "path": "data/proc-96-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-98-stat",
+      "path": "data/proc-98-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-cpuinfo",
+      "path": "data/proc-cpuinfo",
+      "kind": "text"
+    },
+    {
+      "name": "proc-diskstats",
+      "path": "data/proc-diskstats",
+      "kind": "text"
+    },
+    {
+      "name": "proc-loadavg",
+      "path": "data/proc-loadavg",
+      "kind": "text"
+    },
+    {
+      "name": "proc-meminfo",
+      "path": "data/proc-meminfo",
+      "kind": "text"
+    },
+    {
+      "name": "proc-mounts",
+      "path": "data/proc-mounts",
+      "kind": "text"
+    },
+    {
+      "name": "proc-net-dev",
+      "path": "data/proc-net-dev",
+      "kind": "text"
+    },
+    {
+      "name": "proc-self-status",
+      "path": "data/proc-self-status",
+      "kind": "text"
+    },
+    {
+      "name": "proc-stat",
+      "path": "data/proc-stat",
+      "kind": "text"
+    },
+    {
+      "name": "proc-swaps",
+      "path": "data/proc-swaps",
+      "kind": "text"
+    },
+    {
+      "name": "proc-sys-kernel-osrelease",
+      "path": "data/proc-sys-kernel-osrelease",
+      "kind": "text"
+    },
+    {
+      "name": "proc-uptime",
+      "path": "data/proc-uptime",
+      "kind": "text"
+    },
+    {
+      "name": "proc-version",
+      "path": "data/proc-version",
+      "kind": "text"
+    }
+  ]
+}
