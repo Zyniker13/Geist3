@@ -12,7 +12,7 @@ use std::time::Duration;
 
 use ratatui::Frame;
 use ratatui::Terminal;
-use ratatui::backend::CrosstermBackend;
+use ratatui::backend::{CrosstermBackend, TestBackend};
 use ratatui::crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use ratatui::crossterm::execute;
 use ratatui::crossterm::terminal::{
@@ -181,6 +181,27 @@ fn event_loop(terminal: &mut Tui, collector: &mut dyn Collector) -> io::Result<(
             ui.apply(collector.sample());
         }
     }
+}
+
+/// Render `ui` into `width` x `height` lines of text, exactly as a real
+/// terminal of that size would show it.
+///
+/// This is one implementation for two users: the replay command prints the
+/// lines, and snapshot tests assert on them. No rendering logic is
+/// duplicated — both paths feed the same [`draw`] through a `TestBackend`.
+pub fn draw_lines(ui: &Ui, width: u16, height: u16) -> Vec<String> {
+    let mut terminal = Terminal::new(TestBackend::new(width, height)).expect("test backend");
+    terminal
+        .draw(|frame| draw(frame, ui))
+        .expect("draw into the test backend");
+    let buffer = terminal.backend().buffer().clone();
+    (0..buffer.area.height)
+        .map(|y| {
+            (0..buffer.area.width)
+                .map(|x| buffer[(x, y)].symbol().to_string())
+                .collect::<String>()
+        })
+        .collect()
 }
 
 /// Render the whole screen: header meters over the process table.
@@ -387,7 +408,6 @@ fn process_row(process: &Process) -> Row<'static> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ratatui::backend::TestBackend;
     use ztop_core::model::{Cpu, CpuTimes, Sensors};
 
     /// A 4-core, 12-process sample with spread-out values.
@@ -448,19 +468,9 @@ mod tests {
         }
     }
 
-    /// Render into a test backend and return the text of every buffer row.
+    /// Render through the public helper under test.
     fn render(ui: &Ui, width: u16, height: u16) -> Vec<String> {
-        let backend = TestBackend::new(width, height);
-        let mut terminal = Terminal::new(backend).expect("backend");
-        terminal.draw(|frame| draw(frame, ui)).expect("draw");
-        let buffer = terminal.backend().buffer().clone();
-        (0..buffer.area.height)
-            .map(|y| {
-                (0..buffer.area.width)
-                    .map(|x| buffer[(x, y)].symbol().to_string())
-                    .collect::<String>()
-            })
-            .collect()
+        draw_lines(ui, width, height)
     }
 
     fn ui_with(sample: Option<Sample>, error: Option<String>) -> Ui {

@@ -44,6 +44,11 @@ enum Command {
         /// Target to connect to, e.g. `127.0.0.1:7100`.
         target: String,
     },
+    /// Render one TUI frame from a recorded fixture and print it.
+    Replay {
+        /// Fixture directory to load (a `ztop capture` output).
+        dir: PathBuf,
+    },
 }
 
 fn main() -> ExitCode {
@@ -86,6 +91,18 @@ fn run() -> Result<(), Box<dyn Error>> {
         Some(Command::Connect { .. }) => {
             return Err("connect lands with the protocol work in milestone M4".into());
         }
+        Some(Command::Replay { dir }) => {
+            // One rendered frame through the production draw path: the same
+            // journey a live sample would take, without needing a terminal.
+            let sample = ztop_core::linux::sample_from_fixture(&dir)?;
+            let ui = ztop_tui::Ui {
+                sample: Some(sample),
+                ..ztop_tui::Ui::new()
+            };
+            for line in ztop_tui::draw_lines(&ui, 80, 24) {
+                println!("{line}");
+            }
+        }
     }
     Ok(())
 }
@@ -93,6 +110,7 @@ fn run() -> Result<(), Box<dyn Error>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::Path;
 
     #[test]
     fn no_subcommand_is_the_tui() {
@@ -119,5 +137,14 @@ mod tests {
     fn connect_takes_a_target() {
         let cli = Cli::try_parse_from(["ztop", "connect", "host-b:7100"]).expect("parses");
         assert!(matches!(cli.command, Some(Command::Connect { .. })));
+    }
+
+    #[test]
+    fn replay_takes_a_fixture_dir() {
+        let cli = Cli::try_parse_from(["ztop", "replay", "/tmp/fixture"]).expect("parses");
+        assert!(matches!(
+            cli.command,
+            Some(Command::Replay { dir }) if dir == Path::new("/tmp/fixture")
+        ));
     }
 }
