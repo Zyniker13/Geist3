@@ -43,8 +43,9 @@ are not readable without admin credentials.
   acceptable as a machine fixture.
 - **Scrub policy for process data.** A committed fixture keeps the
   verbatim numeric files (`stat`, `statm`, and `status` minus its
-  `Name:` line); per-process `cmdline`, `comm` and the `status` `Name:`
-  value are replaced with obviously fake names (`proc-a-123`, `proc-b`)
+  `Name:` line); per-process `cmdline`, `comm`, the `status` `Name:`
+  value and the `stat` comm field (the second, parenthesised field) are
+  replaced with obviously fake names (`proc-a-123`, `proc-b`)
   and the manifest `source` field gains a `-scrubbed` suffix noting it, because a runner's process list is not
   publishable data. The parsers must accept both real and scrubbed text,
   so the scrub never becomes parser load-bearing.

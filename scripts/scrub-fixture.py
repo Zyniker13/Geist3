@@ -23,7 +23,7 @@ from pathlib import Path
 
 FAKE_NAMES = [f"proc-{c}" for c in "abcdefghijklmnopqrstuvwxyz"]
 
-PROC_PID_RE = re.compile(r"^proc-(\d+)-(cmdline|comm|status)$")
+PROC_PID_RE = re.compile(r"^proc-(\d+)-(cmdline|comm|status|stat)$")
 
 
 def scrub_pid_name(pid: int, index: int) -> str:
@@ -35,12 +35,25 @@ def scrub_status(text: str, fake: str) -> str:
     return re.sub(r"(?m)^Name:\t.*$", f"Name:\t{fake}", text, count=1)
 
 
+def scrub_stat(text: str, fake: str) -> str:
+    """Replace the parenthesised comm field (second field) of a stat file."""
+    head, sep, tail = text.partition(" (")
+    if not sep:
+        return text
+    _comm, sep2, rest = tail.rpartition(") ")
+    if not sep2:
+        return text
+    return f"{head} ({fake}) {rest}"
+
+
 def scrub_text(name: str, text: str, fake: str) -> str:
     kind = name.rsplit("-", 1)[-1]
     if kind == "cmdline":
         return fake + "\0"
     if kind == "comm":
         return fake + "\n"
+    if kind == "stat":
+        return scrub_stat(text, fake)
     return scrub_status(text, fake)
 
 
