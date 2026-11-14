@@ -34,7 +34,9 @@ use crate::fixture::{Fixture, FixtureError};
 use crate::model::core_percents;
 #[cfg(any(target_os = "linux", test))]
 use crate::model::{Battery, BatteryState, Fan, TempSensor};
-use crate::model::{Cpu, CpuTimes, Disk, Memory, Metric, NetIf, Process, Sample, Sensors, Unit};
+use crate::model::{
+    Cpu, CpuTimes, Disk, Memory, Metric, NetIf, Process, ProcessIo, Sample, Sensors, Unit,
+};
 
 /// Jiffies per second: the fixed `USER_HZ` of the kernel/user ABI.
 const USER_HZ: f64 = 100.0;
@@ -315,12 +317,69 @@ fn parse_pid_stat(text: &str) -> Option<PidStat> {
     })
 }
 
+/// Disk I/O counters from `/proc/<pid>/io` for one process.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct PidIo {
+    pub(crate) read_bytes: u64,
+    pub(crate) write_bytes: u64,
+}
+
+/// Parses the `read_bytes` and `write_bytes` lines of `/proc/<pid>/io`.
+///
+/// Returns `None` when either counter is missing or unparsable: an `io`
+/// file the kernel did not fill completely is better treated as
+/// unavailable than half-known. `rchar`/`wchar` (cached traffic) and
+/// `cancelled_write_bytes` are ignored, as is everything else.
+pub(crate) fn parse_pid_io(text: &str) -> Option<PidIo> {
+    let mut read_bytes = None;
+    let mut write_bytes = None;
+    for line in text.lines() {
+        if let Some(rest) = line.strip_prefix("read_bytes:") {
+            read_bytes = rest.trim().parse().ok();
+        } else if let Some(rest) = line.strip_prefix("write_bytes:") {
+            write_bytes = rest.trim().parse().ok();
+        }
+    }
+    Some(PidIo {
+        read_bytes: read_bytes?,
+        write_bytes: write_bytes?,
+    })
+}
+
+/// Disk I/O rates between two samples, in bytes per second.
+///
+/// Rates are `Some` only when both samples saw the counters and the
+/// interval is known and positive. A counter that went backwards, which
+/// happens when a container's cgroup is reset, reports zero rather than
+/// a negative rate.
+#[cfg(any(target_os = "linux", test))]
+pub(crate) fn io_rates(
+    current: Option<PidIo>,
+    previous: Option<PidIo>,
+    seconds: Option<f64>,
+) -> (Option<f64>, Option<f64>) {
+    let (Some(current), Some(previous), Some(secs)) = (current, previous, seconds) else {
+        return (None, None);
+    };
+    if secs <= 0.0 {
+        return (None, None);
+    }
+    let rate = |current_bytes: u64, previous_bytes: u64| {
+        Some((current_bytes.saturating_sub(previous_bytes) as f64) / secs)
+    };
+    (
+        rate(current.read_bytes, previous.read_bytes),
+        rate(current.write_bytes, previous.write_bytes),
+    )
+}
+
 /// Everything recorded for one process, keyed by pid.
 #[derive(Debug, Default)]
 pub(crate) struct PidData {
     pub(crate) status: Option<PidStatus>,
     pub(crate) stat: Option<PidStat>,
     pub(crate) comm: Option<String>,
+    pub(crate) io: Option<PidIo>,
 }
 
 /// Builds one [`Process`] row.
@@ -363,6 +422,12 @@ fn process_row(pid: u32, data: &PidData, total_mem_bytes: u64, cpu_percent: f64)
         virtual_bytes,
         resident_bytes,
         threads,
+        io: ProcessIo {
+            read_bytes: data.io.map(|io| io.read_bytes),
+            write_bytes: data.io.map(|io| io.write_bytes),
+            read_rate: None,
+            write_rate: None,
+        },
     }
 }
 
@@ -625,6 +690,7 @@ pub fn sample_from_fixture(dir: &Path) -> Result<Sample, FixtureSampleError> {
                 "stat" => data.stat = parse_pid_stat(&text),
                 "status" => data.status = Some(parse_pid_status(&text)),
                 "comm" => data.comm = Some(text),
+                "io" => data.io = parse_pid_io(&text),
                 _ => {} // cmdline: nothing beyond `comm` is useful here
             }
             continue;
@@ -697,10 +763,10 @@ mod live {
     use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
     use super::{
-        CpuTimes, PidData, PidStat, USER_HZ, core_percents, memory_from, parse_hwmon,
-        parse_pid_stat, parse_pid_status, parse_power_supply, parse_proc_diskstats,
-        parse_proc_loadavg, parse_proc_meminfo, parse_proc_net_dev, parse_proc_stat,
-        parse_proc_uptime, process_row,
+        CpuTimes, PidData, PidIo, PidStat, USER_HZ, core_percents, io_rates, memory_from,
+        parse_hwmon, parse_pid_io, parse_pid_stat, parse_pid_status, parse_power_supply,
+        parse_proc_diskstats, parse_proc_loadavg, parse_proc_meminfo, parse_proc_net_dev,
+        parse_proc_stat, parse_proc_uptime, process_row,
     };
     use crate::collector::{CollectError, Collector};
     use crate::model::{Cpu, Fan, Metric, Process, Sample, Sensors, TempSensor, Unit};
@@ -720,6 +786,7 @@ mod live {
     struct Prev {
         at: Instant,
         pids: HashMap<u32, PidStat>,
+        ios: HashMap<u32, PidIo>,
         cores: Vec<CpuTimes>,
     }
 
@@ -798,6 +865,9 @@ mod live {
                     .ok()
                     .map(|text| parse_pid_status(&text));
                 data.comm = fs::read_to_string(base.join("comm")).ok();
+                data.io = fs::read_to_string(base.join("io"))
+                    .ok()
+                    .and_then(|text| parse_pid_io(&text));
             }
 
             let mut temps: Vec<TempSensor> = Vec::new();
@@ -817,7 +887,9 @@ mod live {
                 })
                 .next();
 
-            let prev_pids = self.prev.as_ref().map(|prev| &prev.pids);
+            let prev = self.prev.as_ref();
+            let prev_pids = prev.map(|prev| &prev.pids);
+            let prev_ios = prev.map(|prev| &prev.ios);
             let total_mem_bytes = meminfo.total;
             let mut processes: Vec<Process> = Vec::new();
             for (pid, data) in &pids {
@@ -834,13 +906,25 @@ mod live {
                     }
                     _ => 0.0,
                 };
-                processes.push(process_row(*pid, data, total_mem_bytes, cpu_percent));
+                let mut row = process_row(*pid, data, total_mem_bytes, cpu_percent);
+                let (read_rate, write_rate) = io_rates(
+                    data.io,
+                    prev_ios.and_then(|ios| ios.get(pid)).copied(),
+                    interval_secs,
+                );
+                row.io.read_rate = read_rate;
+                row.io.write_rate = write_rate;
+                processes.push(row);
             }
             self.prev = Some(Prev {
                 at: now,
                 pids: pids
                     .iter()
                     .filter_map(|(pid, data)| data.stat.as_ref().map(|stat| (*pid, *stat)))
+                    .collect(),
+                ios: pids
+                    .iter()
+                    .filter_map(|(pid, data)| data.io.map(|io| (*pid, io)))
                     .collect(),
                 cores: stat.cores.clone(),
             });
@@ -930,6 +1014,37 @@ mod tests {
         assert!(parse_proc_stat("cpuX 1 0 1 4 0 0 0 0 0\n").is_none());
         assert!(parse_proc_stat("intr 123\n").is_none());
         assert!(parse_proc_stat("").is_none());
+    }
+
+    #[test]
+    fn pid_io_parses_read_and_write_bytes_and_rejects_partial_files() {
+        let text = "rchar: 1000\nwchar: 2000\nread_bytes: 4096\nwrite_bytes: 8192\ncancelled_write_bytes: 0\n";
+        let io = parse_pid_io(text).expect("io parses");
+        assert_eq!(io.read_bytes, 4096);
+        assert_eq!(io.write_bytes, 8192);
+        // A file missing either counter is unusable, not half-known.
+        assert!(parse_pid_io("rchar: 1000\n").is_none());
+        assert!(parse_pid_io("read_bytes: not-a-number\nwrite_bytes: 8\n").is_none());
+        assert!(parse_pid_io("").is_none());
+    }
+
+    #[test]
+    fn io_rates_needs_both_samples_and_a_positive_interval() {
+        let now = PidIo {
+            read_bytes: 3_000_000,
+            write_bytes: 2_000,
+        };
+        let old = PidIo {
+            read_bytes: 1_000_000,
+            write_bytes: 6_000,
+        };
+        let (read, write) = io_rates(Some(now), Some(old), Some(2.0));
+        assert_eq!(read, Some(1_000_000.0));
+        assert_eq!(write, Some(0.0)); // counters never go backwards
+        assert_eq!(io_rates(Some(now), None, Some(2.0)), (None, None));
+        assert_eq!(io_rates(None, Some(old), Some(2.0)), (None, None));
+        assert_eq!(io_rates(Some(now), Some(old), None), (None, None));
+        assert_eq!(io_rates(Some(now), Some(old), Some(0.0)), (None, None));
     }
 
     #[test]
@@ -1177,6 +1292,7 @@ mod tests {
             status: Some(status),
             stat: None,
             comm: Some("proc-a-1\n".to_string()),
+            io: None,
         };
         let row = process_row(1, &data, 16366640 * 1024, 0.0);
         assert_eq!(row.pid, 1);
@@ -1195,6 +1311,7 @@ mod tests {
             status: None,
             stat: None,
             comm: Some("worker-a\n".to_string()),
+            io: None,
         };
         let row = process_row(9, &data, 1000 * 1024, 0.0);
         assert_eq!(row.name, "worker-a");

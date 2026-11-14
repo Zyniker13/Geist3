@@ -264,6 +264,28 @@ pub struct Process {
     pub virtual_bytes: u64,
     pub resident_bytes: u64,
     pub threads: u32,
+    /// Per-process disk I/O, when the platform reports it (Linux).
+    pub io: ProcessIo,
+}
+
+/// Per-process disk I/O counters and rates.
+///
+/// Totals are the disk bytes the OS reports for the process (on Linux
+/// `/proc/<pid>/io`, which excludes cached traffic). Rates are bytes per
+/// second between two live samples and stay `None` for fixtures and for
+/// a collector's first sample, where there is no interval to measure.
+/// Every field is `None` when the platform does not report it, such as
+/// macOS today.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
+pub struct ProcessIo {
+    /// Disk bytes read since process start, when readable.
+    pub read_bytes: Option<u64>,
+    /// Disk bytes written since process start, when readable.
+    pub write_bytes: Option<u64>,
+    /// Disk read rate in bytes per second, when computable.
+    pub read_rate: Option<f64>,
+    /// Disk write rate in bytes per second, when computable.
+    pub write_rate: Option<f64>,
 }
 
 #[cfg(test)]
@@ -314,6 +336,12 @@ mod tests {
                 virtual_bytes: 1 << 30,
                 resident_bytes: 1 << 20,
                 threads: 4,
+                io: ProcessIo {
+                    read_bytes: Some(1024),
+                    write_bytes: Some(2048),
+                    read_rate: Some(10.5),
+                    write_rate: Some(20.5),
+                },
             }],
             disks: vec![Disk {
                 name: "sda".into(),

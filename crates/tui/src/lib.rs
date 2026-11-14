@@ -975,6 +975,32 @@ fn bytes_text(bytes: f64) -> String {
     }
 }
 
+/// Compact per-second rate for the I/O columns: `3.5Mi`-style, at most
+/// five characters, so the table stays usable at 80 columns. `None`
+/// (no rate, e.g. the first sample) renders as blank.
+fn rate_text(rate: Option<f64>) -> String {
+    const TIB: f64 = 1024.0 * GIB;
+    let Some(rate) = rate else {
+        return String::new();
+    };
+    let (value, suffix) = if rate >= TIB {
+        (rate / TIB, "Ti")
+    } else if rate >= GIB {
+        (rate / GIB, "Gi")
+    } else if rate >= MIB {
+        (rate / MIB, "Mi")
+    } else if rate >= KIB {
+        (rate / KIB, "Ki")
+    } else {
+        (rate, "B")
+    };
+    if value >= 10.0 {
+        format!("{value:.0}{suffix}")
+    } else {
+        format!("{value:.1}{suffix}")
+    }
+}
+
 /// Uptime as `3d 04:05:06` or `04:05:06`.
 fn uptime_text(metric: &Metric) -> String {
     if !metric.available || metric.unit != Unit::Seconds {
@@ -1062,9 +1088,17 @@ fn status_line(ui: &Ui) -> Line<'static> {
 }
 
 fn draw_processes(frame: &mut Frame, ui: &Ui, area: ratatui::layout::Rect) {
-    let header = Row::new(["PID", "USER", "STATE", "CPU%", "MEM%", "THR", "RES", "NAME"]).bold();
-    let mut rows: Vec<Row<'static>> = Vec::new();
+    // I/O columns appear only when some visible process actually moves
+    // data: otherwise they are two mostly blank columns at 80 columns.
     let procs = ui.ordered_rows();
+    let show_io = procs_io_visible(&procs);
+    let mut header_names = vec!["PID", "USER", "STATE", "CPU%", "MEM%", "THR", "RES", "NAME"];
+    if show_io {
+        // Inserted before NAME, which stays the flexible last column.
+        header_names.splice(7..7, ["RD/s", "WR/s"]);
+    }
+    let header = Row::new(header_names).bold();
+    let mut rows: Vec<Row<'static>> = Vec::new();
     // Keep the cursor in view: scroll only far enough. The fold is what fits
     // under the table header (the block's top border takes one line).
     let fold = area.height.saturating_sub(2) as usize;
@@ -1074,13 +1108,18 @@ fn draw_processes(frame: &mut Frame, ui: &Ui, area: ratatui::layout::Rect) {
         _ => 0,
     };
     for row_view in procs.iter().skip(offset).take(fold) {
-        let mut row = process_row(row_view, ui.tree, ui.tags.contains(&row_view.process.pid));
+        let mut row = process_row(
+            row_view,
+            ui.tree,
+            ui.tags.contains(&row_view.process.pid),
+            show_io,
+        );
         if Some(row_view.process.pid) == ui.cursor {
             row = row.style(ratatui::style::Style::default().reversed());
         }
         rows.push(row);
     }
-    let widths = [
+    let mut widths = vec![
         Constraint::Length(8),
         Constraint::Length(10),
         Constraint::Length(7),
@@ -1088,16 +1127,28 @@ fn draw_processes(frame: &mut Frame, ui: &Ui, area: ratatui::layout::Rect) {
         Constraint::Length(7),
         Constraint::Length(5),
         Constraint::Length(9),
-        Constraint::Min(1),
     ];
+    if show_io {
+        widths.extend([Constraint::Length(5), Constraint::Length(5)]);
+    }
+    widths.push(Constraint::Min(1));
     let table = Table::new(rows, widths)
         .header(header)
         .block(Block::new().borders(Borders::TOP));
     frame.render_widget(table, area);
 }
 
+/// Whether the I/O rate columns are worth showing: at least one row in
+/// the visible set moves data in either direction.
+fn procs_io_visible<'a>(rows: impl IntoIterator<Item = &'a TreeRow<'a>>) -> bool {
+    rows.into_iter().any(|row| {
+        row.process.io.read_rate.unwrap_or(0.0) > 0.0
+            || row.process.io.write_rate.unwrap_or(0.0) > 0.0
+    })
+}
+
 /// One table row. Tagged processes carry a `*` before the name, htop-style.
-fn process_row(row_view: &TreeRow<'_>, tree: bool, tagged: bool) -> Row<'static> {
+fn process_row(row_view: &TreeRow<'_>, tree: bool, tagged: bool, show_io: bool) -> Row<'static> {
     let name = if tree {
         let indent = "  ".repeat(row_view.depth);
         let branch = if row_view.depth > 0 { "└─ " } else { "" };
@@ -1111,7 +1162,7 @@ fn process_row(row_view: &TreeRow<'_>, tree: bool, tagged: bool) -> Row<'static>
         row_view.process.name.clone()
     };
     let name = if tagged { format!("* {name}") } else { name };
-    Row::new(vec![
+    let mut cells = vec![
         Cell::from(format!("{:>7}", row_view.process.pid)),
         Cell::from(format!("{:>9}", row_view.process.user)),
         Cell::from(row_view.process.state.clone()),
@@ -1122,14 +1173,25 @@ fn process_row(row_view: &TreeRow<'_>, tree: bool, tagged: bool) -> Row<'static>
             "{:>8}",
             bytes_text(row_view.process.resident_bytes as f64)
         )),
-        Cell::from(name),
-    ])
+    ];
+    if show_io {
+        cells.push(Cell::from(format!(
+            "{:>5}",
+            rate_text(row_view.process.io.read_rate)
+        )));
+        cells.push(Cell::from(format!(
+            "{:>5}",
+            rate_text(row_view.process.io.write_rate)
+        )));
+    }
+    cells.push(Cell::from(name));
+    Row::new(cells)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ztop_core::model::{Cpu, CpuTimes, Fan, Metric, Sensors, TempSensor, Unit};
+    use ztop_core::model::{Cpu, CpuTimes, Fan, Metric, ProcessIo, Sensors, TempSensor, Unit};
 
     /// A 4-core, 12-process sample with spread-out values.
     fn sample() -> Sample {
@@ -1158,6 +1220,7 @@ mod tests {
                 virtual_bytes: pid as u64 * 1_000_000,
                 resident_bytes: pid as u64 * 100_000,
                 threads: pid,
+                io: ProcessIo::default(),
             })
             .collect();
         Sample {
@@ -1198,6 +1261,25 @@ mod tests {
         for (pid, parent) in [(2u32, Some(1u32)), (3, Some(1)), (4, Some(2))] {
             s.processes[(pid - 1) as usize].parent = parent;
         }
+        s
+    }
+
+    /// A sample with real I/O rates on worker-01 and totals-only data on
+    /// worker-02.
+    fn sample_with_io() -> Sample {
+        let mut s = sample();
+        s.processes[0].io = ProcessIo {
+            read_bytes: Some(1_500_000),
+            write_bytes: Some(300_000),
+            read_rate: Some(1.5 * MIB),
+            write_rate: Some(300.0 * KIB),
+        };
+        s.processes[1].io = ProcessIo {
+            read_bytes: Some(100),
+            write_bytes: Some(50),
+            read_rate: Some(0.0),
+            write_rate: Some(0.0),
+        };
         s
     }
 
@@ -1243,6 +1325,46 @@ mod tests {
             rows[header_row + 1].contains("100.0"),
             "{:?}",
             rows[header_row + 1]
+        );
+    }
+
+    #[test]
+    fn the_io_columns_appear_when_a_process_moves_data() {
+        let ui = ui_with(Some(sample_with_io()), None);
+        let rows = render(&ui, 80, 24);
+        let header_row = rows
+            .iter()
+            .position(|row| row.contains("RD/s") && row.contains("WR/s"))
+            .expect("io header row");
+        let first = &rows[header_row + 1];
+        // worker-01 sorts first; its rates render compactly, read before
+        // write, in the order the header promises. At 80 columns the two
+        // new columns squeeze the name down to eight characters.
+        assert!(first.contains("worker-0"), "{first:?}");
+        assert!(first.contains("1.5Mi"), "{first:?}");
+        assert!(first.contains("300Ki"), "{first:?}");
+        assert!(
+            first.find("1.5Mi") < first.find("300Ki"),
+            "read rate should come before the write rate: {first:?}"
+        );
+    }
+
+    #[test]
+    fn the_io_columns_stay_hidden_without_rates() {
+        // Totals alone do not open the columns: fixture replay carries
+        // totals and must keep rendering exactly as before.
+        let mut s = sample();
+        s.processes[0].io = ProcessIo {
+            read_bytes: Some(100),
+            write_bytes: Some(50),
+            read_rate: None,
+            write_rate: None,
+        };
+        let ui = ui_with(Some(s), None);
+        let rows = render(&ui, 80, 24);
+        assert!(
+            !rows.iter().any(|row| row.contains("RD/s")),
+            "io columns should stay hidden: {rows:?}"
         );
     }
 

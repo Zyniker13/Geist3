@@ -7,6 +7,7 @@
 
 use std::path::{Path, PathBuf};
 
+use ztop_core::model::ProcessIo;
 use ztop_core::sample_from_fixture;
 use ztop_tui::{Ui, draw_lines};
 
@@ -56,6 +57,35 @@ fn renders_both_recorded_fixtures_at_80x24() {
                 "{arch} frame is missing process {name:?}"
             );
         }
+    }
+}
+
+#[test]
+fn replayed_fixtures_carry_no_io_and_render_without_the_io_columns() {
+    for arch in ARCHES {
+        let dir = fixture_dir(arch);
+        let sample =
+            sample_from_fixture(&dir).unwrap_or_else(|err| panic!("{arch} should parse: {err}"));
+        // The recorded captures predate per-process I/O: replaying them
+        // must leave every io field unset, so the recorded 80x24 renders
+        // stay byte-identical with or without the new columns.
+        for proc in &sample.processes {
+            assert_eq!(
+                proc.io,
+                ProcessIo::default(),
+                "{arch} {} should replay without io data",
+                proc.name
+            );
+        }
+        let ui = Ui {
+            sample: Some(sample),
+            ..Ui::new()
+        };
+        let lines = draw_lines(&ui, 80, 24);
+        assert!(
+            !lines.iter().any(|line| line.contains("RD/s")),
+            "{arch} must not open the io columns without io data"
+        );
     }
 }
 
