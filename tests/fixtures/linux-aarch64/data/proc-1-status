@@ -16,19 +16,19 @@ NSpgid:	1
 NSsid:	1
 Kthread:	0
 VmPeak:	   23572 kB
-VmSize:	   22760 kB
+VmSize:	   22848 kB
 VmLck:	       0 kB
 VmPin:	       0 kB
-VmHWM:	   13608 kB
-VmRSS:	   13608 kB
-RssAnon:	    4512 kB
-RssFile:	    9096 kB
+VmHWM:	   13508 kB
+VmRSS:	   13508 kB
+RssAnon:	    4468 kB
+RssFile:	    9040 kB
 RssShmem:	       0 kB
-VmData:	    3788 kB
+VmData:	    3876 kB
 VmStk:	     132 kB
 VmExe:	      84 kB
 VmLib:	   15964 kB
-VmPTE:	      88 kB
+VmPTE:	      92 kB
 VmSwap:	       0 kB
 HugetlbPages:	       0 kB
 CoreDumping:	0
@@ -55,5 +55,5 @@ Cpus_allowed:	f
 Cpus_allowed_list:	0-3
 Mems_allowed:	00000000,00000001
 Mems_allowed_list:	0
-voluntary_ctxt_switches:	2009
-nonvoluntary_ctxt_switches:	1456
+voluntary_ctxt_switches:	2092
+nonvoluntary_ctxt_switches:	1338
