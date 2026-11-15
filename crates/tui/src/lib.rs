@@ -1336,22 +1336,11 @@ fn draw_thermal(frame: &mut Frame, ui: &Ui, area: ratatui::layout::Rect) {
         lines.push(Line::from(format!("  {:<12} {}", fan.label, rpm(&fan.rpm))));
     }
     if let Some(battery) = &sensors.battery {
-        let state = match battery.state {
-            ztop_core::model::BatteryState::Charging => "charging",
-            ztop_core::model::BatteryState::Discharging => "discharging",
-            ztop_core::model::BatteryState::Full => "full",
-            ztop_core::model::BatteryState::Unknown => "unknown",
-        };
-        let percent = if battery.percent.available {
-            format!("{:.0}%", battery.percent.value)
-        } else {
-            "-".to_string()
-        };
         lines.push(Line::from("Battery".bold()));
         lines.push(Line::from(format!(
             "  {} {} · {}",
-            percent,
-            state,
+            battery_percent_text(&battery.percent),
+            battery_state_text(battery.state),
             watt(&battery.power_watts)
         )));
     }
@@ -1410,6 +1399,7 @@ fn draw_header(frame: &mut Frame, ui: &Ui, area: ratatui::layout::Rect) {
         Constraint::Length(1),
         Constraint::Length(1),
         Constraint::Length(1),
+        Constraint::Length(1),
         if with_sensors {
             Constraint::Length(1)
         } else {
@@ -1421,15 +1411,16 @@ fn draw_header(frame: &mut Frame, ui: &Ui, area: ratatui::layout::Rect) {
     frame.render_widget(Paragraph::new(title_line(ui)), rows[0]);
     draw_cpu_row(frame, ui, rows[1]);
     draw_memory_row(frame, ui, rows[2]);
+    frame.render_widget(Paragraph::new(info_line(ui)), rows[3]);
     if with_sensors {
-        frame.render_widget(Paragraph::new(sensors_line(ui)), rows[3]);
+        frame.render_widget(Paragraph::new(sensors_line(ui)), rows[4]);
     }
     let status = Paragraph::new(status_line(ui));
     let status = match ui.config.theme {
         Theme::Color => status.style(Style::new().dim()),
         Theme::Mono => status,
     };
-    frame.render_widget(status, rows[4]);
+    frame.render_widget(status, rows[5]);
 }
 
 /// The setup screen (F2): the saved options, edited in place and saved to
@@ -1504,6 +1495,54 @@ fn cpu_label(sample: &Sample) -> String {
     }
 }
 
+/// The header's info line: the local clock, the task counts, the system
+/// string and the battery — each shown only when the sample carries it.
+fn info_line(ui: &Ui) -> Line<'static> {
+    let Some(sample) = &ui.sample else {
+        return Line::from("");
+    };
+    let mut spans = vec![Span::from(ztop_core::clock::local_time_text(sample.timestamp_ms)).bold()];
+    spans.push(Span::from(format!(
+        "  Tasks: {}, {} running",
+        sample.processes.len(),
+        sample
+            .processes
+            .iter()
+            .filter(|process| process.state == "R")
+            .count(),
+    )));
+    if !sample.system.is_empty() {
+        spans.push(Span::from(format!("  {}", sample.system)));
+    }
+    if let Some(battery) = &sample.sensors.battery {
+        spans.push(Span::from(format!(
+            "  bat {} {}",
+            battery_percent_text(&battery.percent),
+            battery_state_text(battery.state),
+        )));
+    }
+    Line::from(spans)
+}
+
+/// Battery percentage text: `NN%` or `-` when the machine reports none.
+fn battery_percent_text(percent: &Metric) -> String {
+    if percent.available {
+        format!("{:.0}%", percent.value)
+    } else {
+        "-".to_string()
+    }
+}
+
+/// The battery state as a word.
+fn battery_state_text(state: ztop_core::model::BatteryState) -> &'static str {
+    match state {
+        ztop_core::model::BatteryState::Charging => "charging",
+        ztop_core::model::BatteryState::Discharging => "discharging",
+        ztop_core::model::BatteryState::Full => "full",
+        ztop_core::model::BatteryState::Unknown => "unknown",
+    }
+}
+
 fn cpu_percent_mean(sample: &Sample) -> Option<f64> {
     let busy = &sample.cpu.busy_percent;
     if busy.is_empty() {
@@ -1545,7 +1584,7 @@ fn draw_memory_row(frame: &mut Frame, ui: &Ui, area: ratatui::layout::Rect) {
     };
     let halves =
         Layout::horizontal([Constraint::Percentage(60), Constraint::Percentage(40)]).split(area);
-    let (ratio, label) = memory_gauge(&sample.memory);
+    let (ratio, label) = memory_gauge(&sample.memory, halves[0].width as usize);
     frame.render_widget(
         Gauge::default()
             .ratio(ratio)
@@ -1563,14 +1602,40 @@ fn draw_memory_row(frame: &mut Frame, ui: &Ui, area: ratatui::layout::Rect) {
     );
 }
 
-fn memory_gauge(memory: &Memory) -> (f64, String) {
+/// The memory gauge: the used/total ratio and the label for the gauge's
+/// width. The breakdown joins the label only as far as the width allows
+/// (keeping a few columns for the bar to show itself), so a narrow
+/// terminal drops the trailing parts instead of hiding the meter.
+fn memory_gauge(memory: &Memory, width: usize) -> (f64, String) {
     match (metric_bytes(&memory.used), metric_bytes(&memory.total)) {
-        (Some(used), Some(total)) if total > 0.0 => (
-            used / total,
-            format!("{} / {}", bytes_text(used), bytes_text(total)),
-        ),
+        (Some(used), Some(total)) if total > 0.0 => {
+            let mut label = format!("{} / {}", bytes_text(used), bytes_text(total));
+            for part in breakdown_parts(memory) {
+                let separator = if label.contains(" · ") { " " } else { " · " };
+                let candidate = format!("{label}{separator}{part}");
+                if candidate.chars().count() > width.saturating_sub(4) {
+                    break;
+                }
+                label = candidate;
+            }
+            (used / total, label)
+        }
         _ => (0.0, "n/a".to_string()),
     }
+}
+
+/// The Linux memory breakdown parts for the gauge label: buffers, shared
+/// and cache, only when the platform reports them. macOS reports none, so
+/// its label stays the plain used/total pair.
+fn breakdown_parts(memory: &Memory) -> Vec<String> {
+    [
+        ("buf", metric_bytes(&memory.buffers)),
+        ("shmem", metric_bytes(&memory.shared)),
+        ("cache", metric_bytes(&memory.cache)),
+    ]
+    .into_iter()
+    .filter_map(|(name, bytes)| bytes.map(|value| format!("{name} {}", bytes_text(value))))
+    .collect()
 }
 
 fn swap_gauge(memory: &Memory) -> (f64, String) {
@@ -1794,7 +1859,7 @@ fn split_table_area(
     ui: &Ui,
     total: ratatui::layout::Rect,
 ) -> (ratatui::layout::Rect, ratatui::layout::Rect) {
-    let header = Constraint::Length(4 + u16::from(sensors_present(ui)));
+    let header = Constraint::Length(5 + u16::from(sensors_present(ui)));
     let areas = Layout::vertical([header, Constraint::Min(1)]).split(total);
     (areas[0], areas[1])
 }
@@ -1926,7 +1991,7 @@ fn handle_mouse(
     let (header, table) = split_table_area(ui, total);
     // The function bar is the header area's last row (the status line);
     // a click there replays the hint's key, like pressing the label.
-    if header.y + 3 + u16::from(sensors_present(ui)) == row {
+    if header.y + 4 + u16::from(sensors_present(ui)) == row {
         return match kind {
             MouseEventKind::Down(MouseButton::Left) => status_hint_at(ui, column),
             _ => None,
@@ -2041,6 +2106,7 @@ mod tests {
         Sample {
             timestamp_ms: 1_700_000_000_000,
             hostname: "host-a".to_string(),
+            system: "Linux 6.8.0-test".to_string(),
             cpu: Cpu {
                 cores,
                 busy_percent: vec![10.0, 25.0, 50.0, 100.0],
@@ -2050,6 +2116,9 @@ mod tests {
                 total: Metric::available(16.0 * GIB, Unit::Bytes),
                 used: Metric::available(6.0 * GIB, Unit::Bytes),
                 free: Metric::available(10.0 * GIB, Unit::Bytes),
+                buffers: Metric::available(340.0 * MIB, Unit::Bytes),
+                shared: Metric::available(89.0 * MIB, Unit::Bytes),
+                cache: Metric::available(2.0 * GIB, Unit::Bytes),
                 swap_total: Metric::available(4.0 * GIB, Unit::Bytes),
                 swap_used: Metric::available(GIB, Unit::Bytes),
                 compressed: Metric::unavailable(Unit::Bytes),
@@ -2276,9 +2345,9 @@ mod tests {
         let ui = ui_with(None, Some("collector is down".to_string()));
         let rows = render(&ui, 80, 24);
         assert!(
-            rows[3].contains("error: collector is down"),
+            rows[4].contains("error: collector is down"),
             "{:?}",
-            rows[3]
+            rows[4]
         );
         // The table still renders its header with no sample to show.
         assert!(rows.iter().any(|row| row.contains("CPU%")));
@@ -2288,18 +2357,18 @@ mod tests {
     fn sensors_row_applies_only_when_the_sample_has_readings() {
         let mut sample = sample();
 
-        // Without readings the header keeps its four rows: status on row 3.
+        // Without readings the header keeps its five rows: status on row 4.
         let ui = ui_with(Some(sample.clone()), None);
         let rows = render(&ui, 80, 24);
         assert_eq!(rows.len(), 24);
         assert!(
-            rows[3].contains("q: quit"),
-            "status stays on row 3: {:?}",
-            rows[3]
+            rows[4].contains("q: quit"),
+            "status stays on row 4: {:?}",
+            rows[4]
         );
-        assert!(!rows[3].contains("°C"));
+        assert!(!rows[4].contains("°C"));
 
-        // With readings a fifth header row appears between memory and status.
+        // With readings a sixth header row appears between memory and status.
         sample.sensors.temps = vec![
             TempSensor {
                 label: "CPU composite".to_string(),
@@ -2320,24 +2389,98 @@ mod tests {
         let rows = render(&ui, 80, 24);
         assert_eq!(rows.len(), 24);
         assert!(
-            rows[3].starts_with("CPU composite 78.7°C"),
-            "sensors row on row 3: {:?}",
-            rows[3]
-        );
-        assert!(
-            rows[3].contains("Fan 0 1001rpm"),
-            "fan reading present: {:?}",
-            rows[3]
-        );
-        assert!(
-            rows[3].contains("Sys 17.0W"),
-            "system power present: {:?}",
-            rows[3]
-        );
-        assert!(
-            rows[4].contains("q: quit"),
-            "status moves to row 4: {:?}",
+            rows[4].starts_with("CPU composite 78.7°C"),
+            "sensors row on row 4: {:?}",
             rows[4]
+        );
+        assert!(
+            rows[4].contains("Fan 0 1001rpm"),
+            "fan reading present: {:?}",
+            rows[4]
+        );
+        assert!(
+            rows[4].contains("Sys 17.0W"),
+            "system power present: {:?}",
+            rows[4]
+        );
+        assert!(
+            rows[5].contains("q: quit"),
+            "status moves to row 5: {:?}",
+            rows[5]
+        );
+    }
+
+    /// The header's info line shows the local clock (its exact value
+    /// follows the machine's time zone, so the test matches the shape),
+    /// the task counts and the system string.
+    #[test]
+    fn the_header_info_line_shows_clock_tasks_and_system() {
+        let ui = ui_with(Some(sample()), None);
+        let rows = render(&ui, 80, 24);
+        let clock = &rows[3][..8.min(rows[3].len())];
+        assert!(
+            clock.len() == 8
+                && clock.chars().nth(2) == Some(':')
+                && clock.chars().nth(5) == Some(':')
+                && clock.chars().all(|c| c.is_ascii_digit() || c == ':'),
+            "the info line opens with a clock: {:?}",
+            rows[3]
+        );
+        assert!(
+            rows[3].contains("Tasks: 12, 6 running"),
+            "task counts present: {:?}",
+            rows[3]
+        );
+        assert!(
+            rows[3].contains("Linux 6.8.0-test"),
+            "system string present: {:?}",
+            rows[3]
+        );
+        assert!(
+            !rows[3].contains("bat"),
+            "no battery, no claim: {:?}",
+            rows[3]
+        );
+    }
+
+    /// When the sample carries a battery the info line reports its
+    /// percentage and state.
+    #[test]
+    fn the_header_info_line_shows_the_battery_when_present() {
+        let mut sample = sample();
+        sample.sensors.battery = Some(Battery {
+            percent: Metric::available(87.0, Unit::Percent),
+            state: BatteryState::Discharging,
+            power_watts: Metric::available(12.5, Unit::Watts),
+        });
+        let ui = ui_with(Some(sample), None);
+        let rows = render(&ui, 80, 24);
+        assert!(
+            rows[3].contains("bat 87% discharging"),
+            "battery present: {:?}",
+            rows[3]
+        );
+    }
+
+    /// The memory gauge label fits the gauge's width and keeps a few
+    /// columns for the bar: the breakdown joins only as far as it fits,
+    /// while the used/total pair always stays.
+    #[test]
+    fn the_memory_gauge_label_fits_the_gauge_and_keeps_the_bar_room() {
+        let sample = sample();
+        let gib = 1024.0 * 1024.0 * 1024.0;
+        let (ratio, wide) = memory_gauge(&sample.memory, 72);
+        assert!((ratio - 6.0 * gib / (16.0 * gib)).abs() < 1e-9, "ratio");
+        assert_eq!(
+            wide,
+            "6.0 GiB / 16.0 GiB · buf 340.0 MiB shmem 89.0 MiB cache 2.0 GiB"
+        );
+        let (_, narrow) = memory_gauge(&sample.memory, 48);
+        assert_eq!(narrow, "6.0 GiB / 16.0 GiB · buf 340.0 MiB");
+        let (_, tiny) = memory_gauge(&sample.memory, 12);
+        assert!(
+            tiny.starts_with("6.0 GiB / 16.0 GiB"),
+            "used/total survives a tiny gauge: {tiny}"
         );
     }
 
@@ -2564,7 +2707,7 @@ mod tests {
             ui.select_next();
         }
         assert_eq!(ui.cursor, Some(8)); // worker-08
-        let rows = render(&ui, 80, 10);
+        let rows = render(&ui, 80, 11);
         assert!(rows.iter().any(|row| row.contains("worker-08")));
         assert!(
             !rows.iter().any(|row| row.contains("worker-01")),
@@ -3140,19 +3283,19 @@ mod tests {
     fn clicking_a_row_selects_it() {
         let mut ui = ui_with(Some(sample()), None);
         let screen = ratatui::layout::Rect::new(0, 0, 80, 24);
-        // Sensorless fixture: the table starts at y 4 — border, column
-        // header, then the rows — so the first row sits at y 6.
+        // Sensorless fixture: the table starts at y 5 — border, column
+        // header, then the rows — so the first row sits at y 7.
         let first = ui.ordered_rows()[0].process.pid;
         let second = ui.ordered_rows()[1].process.pid;
         handle_mouse(
             &mut ui,
             MouseEventKind::Down(MouseButton::Left),
             0,
-            6,
+            7,
             screen,
         );
         assert_eq!(ui.cursor, Some(first));
-        handle_mouse(&mut ui, MouseEventKind::ScrollDown, 0, 6, screen);
+        handle_mouse(&mut ui, MouseEventKind::ScrollDown, 0, 7, screen);
         assert_eq!(ui.cursor, Some(second));
     }
 
@@ -3168,7 +3311,7 @@ mod tests {
             &mut ui,
             MouseEventKind::Down(MouseButton::Left),
             0,
-            5,
+            6,
             screen,
         );
         assert_eq!(
@@ -3179,7 +3322,7 @@ mod tests {
             &mut ui,
             MouseEventKind::Down(MouseButton::Left),
             0,
-            5,
+            6,
             screen,
         );
         assert_eq!(
@@ -3204,7 +3347,7 @@ mod tests {
             &mut ui,
             MouseEventKind::Down(MouseButton::Left),
             x,
-            3,
+            4,
             screen,
         )
         .expect("the i hint replays i");
@@ -3343,7 +3486,7 @@ mod tests {
             &mut ui,
             MouseEventKind::Down(MouseButton::Left),
             x,
-            3,
+            4,
             screen,
         )
         .expect("the d hint replays d");
@@ -3362,7 +3505,7 @@ mod tests {
             &mut ui,
             MouseEventKind::Down(MouseButton::Left),
             0,
-            3,
+            4,
             screen,
         )
         .expect("the q hint replays q");
@@ -3392,7 +3535,7 @@ mod tests {
                 &mut ui,
                 MouseEventKind::Down(MouseButton::Left),
                 0,
-                3,
+                4,
                 screen
             ),
             None

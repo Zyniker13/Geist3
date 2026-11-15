@@ -8,7 +8,7 @@ Check an item only when it works and a test or a recorded check shows it. Add th
 - [ ] Average CPU meter; CPU frequency and temperature in meters where available
 - [ ] Memory meter (used, buffers, shared, cache, compressed on macOS) and swap meter
 - [ ] Load average, uptime, task, thread, running and kernel-thread counts
-- [ ] Battery, clock, hostname and system meters
+- [x] Battery, clock, hostname and system meters — the info line shows the local clock (`HH:MM:SS`, host time zone, `n/a` when the timestamp cannot be converted), the system string (Linux from `/proc/sys/kernel/osrelease`, macOS from `kern.ostype`/`kern.osrelease`) and the battery (percentage and state) when the sample carries one; the hostname is in the title line. Tests: `the_header_info_line_shows_clock_tasks_and_system`, `the_header_info_line_shows_the_battery_when_present`, `renders_the_header_and_table_at_80x24`.
 - [ ] Pressure stall (PSI) meters (Linux); disk I/O and network I/O meters
 - [ ] Meter styles: bar, text, graph and LED; configurable columns of meters
 - [ ] Screen tabs, including a dedicated I/O screen
