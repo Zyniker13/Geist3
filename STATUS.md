@@ -3,13 +3,17 @@
 Updated after every working session.
 
 - **Current milestone:** M3 (Full TUI Parity).
-|- **Last done:** M3 batch 7a (`f3b9ad5`): the `-p` pid filter (`ztop -p 7,42`) narrows the table in flat and tree view, the status line shows `pids:N`, and `K` opens the signal menu alongside F9 (`k` stays cursor-up per decision 0012). Six tests; gate plus both cross-target clippies green.
-|- **Next step:** M3 batch 7b — Apple Silicon screen with charts.
-|- **Blocked on:** nothing.
+- **Last done:** M3 batch 7b (`4492932`): the Apple Silicon screen — `a` flips between the process table and a screen showing chip name, P/E core counts (name-gated, decision 0013), per-core utilization, whole-system power with current/average/peak and a 60-point history chart, GPU power and memory/swap, with an explicit note for what the unprivileged collector cannot read. Gate plus both cross-target clippies green.
+- **Next step:** M3 batch 7c — setup screens and the config file.
+- **Blocked on:** nothing.
 
 ## Log
 
 Newest first. One or two lines per session: what changed, what is next.
+
+- 2026-11-14: M3 batch 7b (`4492932`): the Apple Silicon screen — `a` flips between the process table and a screen showing chip name, P/E core counts (name-gated per decision 0013), per-core utilization, whole-system power (PSTR) with current/average/peak and a 60-point history chart, GPU power and memory/swap; unreadable sources render as an explicit unavailability note. `chip_name` became `Option<String>` with serde defaults, the macOS collector parses the topology from sysctls and feeds power history through `MacOsPower`. Nine tests; gate plus both cross-target clippies green; parity ticks the chip-and-counts item. Next: setup screens, config file, mouse.
+
+- 2026-11-14: M3 batch 7b model layer (`64bd92e`, import fix `2e4a52c`): `AppleSilicon` on `Sample` at every construction site across collectors, the Linux live path included (a `#[cfg]`-guarded import used unconditionally broke the Linux cross-clippy and CI; fixed). CI green on `2e4a52c`.
 
 |- 2026-11-14: M3 batch 7a (`f3b9ad5`): the `-p` pid filter (`ztop -p 7,42`) narrows the table in flat and tree view, the status line shows `pids:N`, and `K` opens the signal menu alongside F9 (`k` stays cursor-up per decision 0012). Six tests; gate plus both cross-target clippies green.
 
