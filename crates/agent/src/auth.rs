@@ -43,6 +43,16 @@ pub struct TokenRecord {
     pub label: String,
     /// When the token was created (unix ms).
     pub created_ms: u64,
+    /// What this token may do: `"read"` always, plus `"control"` when
+    /// the agent pairs with control allowed. Records saved before the
+    /// rights existed read as read-only.
+    #[serde(default = "default_rights")]
+    pub rights: Vec<String>,
+}
+
+/// The rights every token has at least.
+fn default_rights() -> Vec<String> {
+    vec!["read".to_string()]
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
@@ -55,6 +65,7 @@ struct Pending {
     code: String,
     label: String,
     expires_ms: u64,
+    rights: Vec<String>,
 }
 
 /// The pairing and token state behind the agent's auth.
@@ -148,7 +159,12 @@ impl Auth {
 
     /// Start a pairing: return the code to show the person at the
     /// machine. One code at a time — a new pairing replaces the old.
-    pub fn start_pairing(&mut self, label: String, now_ms: u64) -> Result<String, AuthError> {
+    pub fn start_pairing(
+        &mut self,
+        label: String,
+        now_ms: u64,
+        rights: Vec<String>,
+    ) -> Result<String, AuthError> {
         let mut bytes = [0u8; 16];
         getrandom::fill(&mut bytes).map_err(|_| {
             AuthError::Io(std::io::Error::other("no randomness for the pairing code"))
@@ -162,6 +178,7 @@ impl Auth {
             code,
             label,
             expires_ms: now_ms + PAIRING_TTL.as_millis() as u64,
+            rights,
         });
         Ok(self.pending.as_ref().expect("just set").code.clone())
     }
@@ -175,6 +192,7 @@ impl Auth {
                 code: pending.code.clone(),
                 label: pending.label.clone(),
                 expires_ms: pending.expires_ms,
+                rights: pending.rights.clone(),
             },
             _ => return Err(AuthError::BadCode),
         };
@@ -189,6 +207,7 @@ impl Auth {
             id: hash[..8].to_string(),
             label: pending.label,
             created_ms: now_ms,
+            rights: pending.rights,
         };
         self.tokens.insert(hash, record);
         self.save();
@@ -205,6 +224,17 @@ impl Auth {
     pub fn check(&self, token: &str) -> bool {
         self.tokens
             .contains_key(&hex(&Sha256::digest(token.as_bytes())))
+    }
+
+    /// Does this bearer token carry the `control` right?
+    pub fn can_control(&self, token: &str) -> bool {
+        self.record_of(token)
+            .is_some_and(|record| record.rights.iter().any(|right| right == "control"))
+    }
+
+    /// The record a bearer token belongs to.
+    fn record_of(&self, token: &str) -> Option<&TokenRecord> {
+        self.tokens.get(&hex(&Sha256::digest(token.as_bytes())))
     }
 
     /// The accepted clients, oldest first.
@@ -254,7 +284,9 @@ mod tests {
     #[test]
     fn pairing_issues_a_single_use_token() {
         let mut auth = Auth::in_memory();
-        let code = auth.start_pairing("the app".into(), NOW).expect("code");
+        let code = auth
+            .start_pairing("the app".into(), NOW, vec!["read".to_string()])
+            .expect("code");
         assert_eq!(code.len(), 6);
         assert!(!code.contains('0') && !code.contains('l'));
 
@@ -274,7 +306,8 @@ mod tests {
     #[test]
     fn a_wrong_or_stale_code_is_refused() {
         let mut auth = Auth::in_memory();
-        auth.start_pairing("the app".into(), NOW).expect("code");
+        auth.start_pairing("the app".into(), NOW, vec!["read".to_string()])
+            .expect("code");
         assert!(matches!(auth.pair("wrong!", NOW), Err(AuthError::BadCode)));
         // Expired: five minutes and one millisecond.
         let code = auth.pending_code().expect("pending");
@@ -288,8 +321,11 @@ mod tests {
     #[test]
     fn a_replaced_pairing_kills_the_older_code() {
         let mut auth = Auth::in_memory();
-        let first = auth.start_pairing("first".into(), NOW).expect("code");
-        auth.start_pairing("second".into(), NOW).expect("code");
+        let first = auth
+            .start_pairing("first".into(), NOW, vec!["read".to_string()])
+            .expect("code");
+        auth.start_pairing("second".into(), NOW, vec!["read".to_string()])
+            .expect("code");
         assert!(matches!(auth.pair(&first, NOW), Err(AuthError::BadCode)));
         assert_eq!(auth.list().len(), 0);
     }
@@ -303,7 +339,8 @@ mod tests {
 
         let token = {
             let mut auth = Auth::at(path.clone()).expect("auth");
-            auth.start_pairing("the app".into(), NOW).expect("code");
+            auth.start_pairing("the app".into(), NOW, vec!["read".to_string()])
+                .expect("code");
             let code = auth.pending_code().expect("pending");
             auth.pair(&code, NOW).expect("token")
         };

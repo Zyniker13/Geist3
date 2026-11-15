@@ -65,6 +65,9 @@ enum Command {
         /// Show a pairing code a client can trade for a token.
         #[arg(long)]
         pair: bool,
+        /// Let paired tokens send signals and renice here.
+        #[arg(long)]
+        allow_control: bool,
         /// Serve HTTPS with a self-signed certificate and require tokens.
         #[arg(long)]
         tls: bool,
@@ -159,11 +162,16 @@ fn run() -> Result<(), Box<dyn Error>> {
             let count = ztop_core::capture::capture_to(&out)?;
             println!("wrote {count} entries to {}", out.display());
         }
-        Some(Command::Agent { port, pair, tls }) => {
+        Some(Command::Agent {
+            port,
+            pair,
+            allow_control,
+            tls,
+        }) => {
             let runtime = tokio::runtime::Builder::new_multi_thread()
                 .enable_all()
                 .build()?;
-            runtime.block_on(ztop_agent::serve(port, pair, tls))?;
+            runtime.block_on(ztop_agent::serve(port, pair, tls, allow_control))?;
         }
         Some(Command::Hub { port }) => {
             let runtime = tokio::runtime::Builder::new_multi_thread()
@@ -265,6 +273,7 @@ mod tests {
             Some(Command::Agent {
                 port: 8000,
                 pair: false,
+                allow_control: false,
                 tls: false
             })
         ));

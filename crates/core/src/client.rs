@@ -22,6 +22,7 @@ use std::time::Duration;
 use sha2::Digest;
 
 use crate::collector::{CollectError, Collector};
+use crate::control::Plan;
 use crate::model::Sample;
 
 /// The protocol version this client speaks; agents and hubs answer in
@@ -30,6 +31,9 @@ pub const PROTOCOL_VERSION: u32 = 1;
 
 /// The protocol paths the client fetches.
 pub const SNAPSHOT_PATH: &str = "/v1/snapshot";
+
+/// The control route a remote plan is POSTed to.
+const CONTROL_PATH: &str = "/v1/control";
 
 /// A collector that samples a remote agent or hub instead of the local
 /// host. One connection per fetch (HTTP/1.1 with `Connection: close`):
@@ -185,6 +189,7 @@ fn https_post(
     path: &str,
     body: &str,
     config: &Arc<rustls::ClientConfig>,
+    token: Option<&str>,
     timeout: Duration,
 ) -> Result<(u16, String), CollectError> {
     let name = server_name_of(target).ok_or(CollectError::Unavailable {
@@ -202,7 +207,7 @@ fn https_post(
             tcp
         },
     );
-    exchange(&mut stream, "POST", target, path, Some(body), None)
+    exchange(&mut stream, "POST", target, path, Some(body), token)
 }
 
 /// The TLS handshake or session layer failed before HTTP.
@@ -261,6 +266,100 @@ impl Collector for RemoteCollector {
             what: "an understandable sample",
         })
     }
+
+    /// Forward the plan to the agent. Control needs the authenticated
+    /// channel: a plaintext connect refuses, and the agent answers
+    /// per-pid results that become the same `Vec` the local path
+    /// produces, so the status line reads identically either way.
+    fn execute_plan(&mut self, plan: &Plan) -> Vec<(u32, Result<(), String>)> {
+        let refuse = |message: String| {
+            plan.pids
+                .iter()
+                .map(|pid| (*pid, Err(message.clone())))
+                .collect()
+        };
+        let Some(config) = self.tls.clone() else {
+            return refuse(
+                "control needs --tls: the action would cross an unauthenticated channel"
+                    .to_string(),
+            );
+        };
+        let Some(token) = self.token.clone() else {
+            return refuse("a paired token (401): pair with --code".to_string());
+        };
+        let body = match serde_json::to_string(plan) {
+            Ok(body) => body,
+            Err(error) => return refuse(format!("serializing the plan failed: {error}")),
+        };
+        let (status, text) = match https_post(
+            &self.target,
+            CONTROL_PATH,
+            &body,
+            &config,
+            Some(&token),
+            self.timeout,
+        ) {
+            Ok(answer) => answer,
+            Err(error) => return refuse(error.to_string()),
+        };
+        match status {
+            200 => parse_control_reply(&text, &plan.pids),
+            401 => refuse("a paired token (401): pair with --code".to_string()),
+            403 => refuse(if text.trim().is_empty() {
+                "the agent refuses control for this token".to_string()
+            } else {
+                format!("the agent refuses: {}", text.trim())
+            }),
+            _ => refuse(format!(
+                "the agent answered {status} to the control request"
+            )),
+        }
+    }
+}
+
+/// The agent's per-pid answer to a control plan.
+#[derive(Debug, serde::Deserialize)]
+struct ControlOutcome {
+    pid: u32,
+    ok: bool,
+    #[serde(default)]
+    error: Option<String>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct ControlReply {
+    results: Vec<ControlOutcome>,
+}
+
+/// Map the agent's reply onto the plan's pids: every pid the agent did
+/// not answer for reads as a failure, so the counts always add up.
+fn parse_control_reply(text: &str, pids: &[u32]) -> Vec<(u32, Result<(), String>)> {
+    let reply: ControlReply = serde_json::from_str(text).unwrap_or(ControlReply {
+        results: Vec::new(),
+    });
+    let answered: std::collections::HashMap<u32, Result<(), String>> = reply
+        .results
+        .into_iter()
+        .map(|outcome| {
+            let result = if outcome.ok {
+                Ok(())
+            } else {
+                Err(outcome.error.unwrap_or_else(|| "refused".to_string()))
+            };
+            (outcome.pid, result)
+        })
+        .collect();
+    pids.iter()
+        .map(|pid| {
+            (
+                *pid,
+                answered
+                    .get(pid)
+                    .cloned()
+                    .unwrap_or_else(|| Err("the agent did not answer for this pid".to_string())),
+            )
+        })
+        .collect()
 }
 
 /// One HTTP/1.1 GET against `host:port` over pinned TLS, returning the
@@ -297,7 +396,7 @@ pub fn pair_with(target: &str, pin: &str, code: &str) -> Result<String, String> 
         "the pin must look like what the agent prints: SHA256:<64 hex>".to_string()
     })?;
     let body = serde_json::json!({ "code": code }).to_string();
-    let (status, text) = https_post(target, "/v1/pair", &body, &config, PAIR_TIMEOUT)
+    let (status, text) = https_post(target, "/v1/pair", &body, &config, None, PAIR_TIMEOUT)
         .map_err(|error| error.to_string())?;
     if status == 403 {
         return Err("the pairing code does not match, is used up or expired".to_string());
@@ -571,5 +670,22 @@ mod tests {
     #[test]
     fn a_truncated_chunk_is_an_error() {
         assert!(dechunk("5\r\nshort\r\n").is_err());
+    }
+
+    #[test]
+    fn control_replies_map_back_onto_the_plan() {
+        let pids = [10, 20, 30];
+        let reply =
+            r#"{"results":[{"pid":10,"ok":true},{"pid":20,"ok":false,"error":"no such process"}]}"#;
+        let results = parse_control_reply(reply, &pids);
+        assert_eq!(results[0], (10, Ok(())));
+        assert_eq!(results[1], (20, Err("no such process".to_string())));
+        assert_eq!(
+            results[2].1.as_ref().err().map(String::as_str),
+            Some("the agent did not answer for this pid")
+        );
+        // A garbage body leaves every pid unanswered, never ok.
+        let results = parse_control_reply("not json", &pids);
+        assert!(results.iter().all(|(_, result)| result.is_err()));
     }
 }

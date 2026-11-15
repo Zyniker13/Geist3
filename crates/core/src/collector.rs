@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //! The collector interface every platform source implements.
 
+use crate::control::{self, Plan};
 use crate::model::Sample;
 
 /// Errors a collector can hit.
@@ -29,4 +30,14 @@ pub enum CollectError {
 pub trait Collector {
     /// Take one sample of the host.
     fn sample(&mut self) -> Result<Sample, CollectError>;
+
+    /// Execute a control plan (signals, renice, and the Linux-only
+    /// tweaks). The default runs the action on this machine — the local
+    /// collector's behavior, unchanged since before remote views
+    /// existed. A replay collector refuses instead (its pids are not
+    /// real), and a remote collector forwards the plan to its agent,
+    /// which decides by its own rules.
+    fn execute_plan(&mut self, plan: &Plan) -> Vec<(u32, Result<(), String>)> {
+        control::execute(plan)
+    }
 }

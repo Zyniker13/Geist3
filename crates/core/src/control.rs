@@ -9,7 +9,7 @@
 use std::io;
 
 /// One control action.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Control {
     /// Send this signal number (as returned by [`common_signals`]).
     Signal(i32),
@@ -27,7 +27,7 @@ pub enum Control {
 /// One control action applied to a set of processes: the pids to act on
 /// (every tagged process, or the cursor's process when nothing is tagged)
 /// and the action itself.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Plan {
     /// Every pid the action applies to.
     pub pids: Vec<u32>,

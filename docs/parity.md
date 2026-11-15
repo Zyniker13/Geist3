@@ -247,9 +247,16 @@ Check an item only when it works and a test or a recorded check shows it. Add th
     Tests: `the_remote_collector_reads_a_live_agent`,
     `the_remote_collector_reports_a_warm_up_agent_as_unavailable`.
   - The CLI drives the regular TUI loop with the remote collector;
-    connect is observation-only until control actions exist over the
-    protocol (they would otherwise hit the local process table).
-    Test: `connect_takes_a_target`.
+    control keys work through the same seam: the remote collector
+    forwards the plan to its agent and reports the per-pid answers in
+    the status line like a local run. Control over the wire needs TLS
+    (a plaintext connect refuses), an agent started with
+    `--allow-control`, and a token carrying the `control` right
+    (decision 0042). Client-side: `RemoteCollector::execute_plan`
+    (401/403/status handling) and `parse_control_reply`; a replay
+    frame (`ztop replay`) never builds a collector, so recorded
+    fixtures can never act.
+    Tests: `connect_takes_a_target`, `control_replies_map_back_onto_the_plan`.
   - Over TLS: `connect --tls --pin ... --code ...` pairs through a
     pinned TLS 1.3 session and saves `(pin, token)` per host in
     `state_dir()/hosts/` (0600, name sanitized to `[A-Za-z0-9._-]`
@@ -286,7 +293,18 @@ Check an item only when it works and a test or a recorded check shows it. Add th
     pairing (decision 0003). Test:
     `the_remote_collector_reads_a_live_agent` connects over 127.0.0.1.
 - [ ] Bonjour discovery
-- [ ] Signals and renice only when the config and the token allow
+- [x] Signals and renice only when the config and the token allow
+  - `POST /v1/control` carries a plan (`pids` + action, the same
+    `Control`/`Plan` the TUI builds) and answers per-pid results. Three
+    gates, in order: the serving agent must run with `--allow-control`
+    (off by default), the channel must be TLS (enforced again inside
+    the handler), and the bearer token must carry the `control` right,
+    granted to codes issued by a control-allowing agent (decision
+    0042). Signal 0 is the permission probe: it sends nothing, so the
+    UI's plan probe is safe even when the gates would refuse.
+    Tests: `control_needs_tls_the_allowance_and_the_right`,
+    `control_answers_per_pid_when_all_the_gates_pass`,
+    `control_replies_map_back_onto_the_plan`.
 - [ ] `ztop hub` with SQLite history, serving the same protocol
 - [ ] launchd and systemd services
 

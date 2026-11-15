@@ -168,10 +168,19 @@ snapshot, the process list, a ring\-buffer history (an hour at the
 one\-second default) and a live WebSocket stream. Loopback only until
 TLS and pairing arrive.
 .TP
+.B ztop agent \-\-tls \-\-pair \-\-allow\-control
+Serve the same protocol over TLS, print a pairing code, and let
+tokens paired from this agent send signals and renice here. Without
+.B \-\-allow\-control
+an agent is read\-only to every client, however it was started;
+control requests also need TLS, so a plain (non\-TLS) agent never
+executes them.
+.TP
 .B ztop connect 127.0.0.1:7100
 Drive the TUI from a remote agent or hub instead of the local host.
-The same keys and screens work; the view is observation\-only until
-control actions exist over the protocol.
+The same keys and screens work, including signals and renice when the
+remote agent allows control and the token carries the right; a
+refusal is reported in the status line like a local failure.
 .TP
 .B ztop connect \-\-tls \-\-pin \fIPIN\fP \-\-code \fICODE\fP 127.0.0.1:7100
 Talk to a TLS agent: the pin is the

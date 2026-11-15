@@ -52,6 +52,10 @@ pub struct AgentState {
     /// Whether `/v1` routes (except pairing) demand a bearer token.
     /// Off for plain loopback serving, on wherever TLS is on.
     pub enforce_auth: bool,
+    /// Whether paired tokens may act on this machine (signals, renice,
+    /// and the Linux-only tweaks). Off by default: watching is safe,
+    /// acting is a decision (decision 0042).
+    pub allow_control: bool,
 }
 
 impl Default for AgentState {
@@ -65,6 +69,7 @@ impl Default for AgentState {
             sender,
             auth: Mutex::new(auth::Auth::in_memory()),
             enforce_auth: false,
+            allow_control: false,
         }
     }
 }
@@ -118,6 +123,7 @@ pub fn router(state: Arc<AgentState>) -> Router {
     Router::new()
         .route("/healthz", get(health))
         .route("/v1/pair", post(pair))
+        .route("/v1/control", post(control))
         .route("/v1/tokens", get(tokens_list))
         .route("/v1/tokens/{id}", delete(tokens_revoke))
         .route("/v1/snapshot", get(snapshot))
@@ -167,13 +173,22 @@ async fn enforce_auth(
 /// With `pair`, print a pairing code the person can trade for a token.
 /// With `tls`, serve HTTPS with the agent's self-signed certificate and
 /// enforce tokens (decision 0003: TLS is the trust boundary).
-pub async fn serve(port: u16, pair: bool, tls: bool) -> std::io::Result<()> {
+pub async fn serve(port: u16, pair: bool, tls: bool, allow_control: bool) -> std::io::Result<()> {
     let mut auth = match ztop_core::paths::state_dir() {
         Some(dir) => auth::Auth::at(dir.join("tokens.json")).unwrap_or_default(),
         None => auth::Auth::in_memory(),
     };
     if pair {
-        match auth.start_pairing("pairing from the command line".into(), auth::now_ms()) {
+        let rights = if allow_control {
+            vec!["read".to_string(), "control".to_string()]
+        } else {
+            vec!["read".to_string()]
+        };
+        match auth.start_pairing(
+            "pairing from the command line".into(),
+            auth::now_ms(),
+            rights,
+        ) {
             Ok(code) => println!("Pairing code: {code} (valid for 5 minutes)"),
             Err(error) => eprintln!("ztop-agent: pairing is unavailable: {error}"),
         }
@@ -186,6 +201,7 @@ pub async fn serve(port: u16, pair: bool, tls: bool) -> std::io::Result<()> {
         // Plain loopback serving runs unauthenticated; TLS flips this
         // on (decision 0003).
         enforce_auth: tls,
+        allow_control,
     });
     spawn_sampler(state.clone(), DEFAULT_INTERVAL);
     let listener = tokio::net::TcpListener::bind(("127.0.0.1", port)).await?;
@@ -277,6 +293,81 @@ async fn pair(State(state): State<Arc<AgentState>>, Json(body): Json<PairBody>) 
         )
             .into_response(),
     }
+}
+
+/// The body of `POST /v1/control`: a control plan for this machine.
+#[derive(Debug, serde::Deserialize)]
+struct ControlBody {
+    pids: Vec<u32>,
+    action: ztop_core::control::Control,
+}
+
+/// How many pids one control request may touch: the TUI plans cover a
+/// screen's tags, so this is generous, but an unbounded list is a
+/// request to hang the agent's kill loop.
+const CONTROL_PID_LIMIT: usize = 256;
+
+/// `POST /v1/control`: run a plan here, when the agent allows control
+/// and the token carries the right. Signal 0 is the permission probe:
+/// it sends nothing, so it is the safe way to check both gates.
+async fn control(
+    State(state): State<Arc<AgentState>>,
+    headers: axum::http::HeaderMap,
+    Json(body): Json<ControlBody>,
+) -> Response {
+    if !state.enforce_auth {
+        return (
+            StatusCode::FORBIDDEN,
+            "control needs --tls: the action would cross an unauthenticated channel",
+        )
+            .into_response();
+    }
+    let bearer = headers
+        .get(axum::http::header::AUTHORIZATION)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.strip_prefix("Bearer "));
+    if !state
+        .auth
+        .lock()
+        .expect("auth")
+        .can_control(bearer.unwrap_or(""))
+    {
+        return (
+            StatusCode::FORBIDDEN,
+            "this token may read but not control: pair again from an agent started with --allow-control",
+        )
+            .into_response();
+    }
+    if !state.allow_control {
+        return (
+            StatusCode::FORBIDDEN,
+            "this agent does not allow control: start it with --allow-control",
+        )
+            .into_response();
+    }
+    if body.pids.len() > CONTROL_PID_LIMIT {
+        return (
+            StatusCode::BAD_REQUEST,
+            format!("too many pids: the limit is {CONTROL_PID_LIMIT}"),
+        )
+            .into_response();
+    }
+    let plan = ztop_core::control::Plan {
+        pids: body.pids,
+        action: body.action,
+    };
+    let results: Vec<serde_json::Value> = ztop_core::control::execute(&plan)
+        .into_iter()
+        .map(|(pid, result)| match result {
+            Ok(()) => serde_json::json!({ "pid": pid, "ok": true }),
+            Err(error) => serde_json::json!({ "pid": pid, "ok": false, "error": error }),
+        })
+        .collect();
+    Json(serde_json::json!({
+        "protocol": PROTOCOL_VERSION,
+        "results": results,
+    }))
+    .into_response()
 }
 
 /// `GET /v1/tokens`: the accepted clients, oldest first.
@@ -506,6 +597,135 @@ mod tests {
         let mut sample = a_sample();
         sample.processes = (0..count).map(|i| a_process(100 + i as u32)).collect();
         sample
+    }
+
+    #[tokio::test]
+    async fn control_needs_tls_the_allowance_and_the_right() {
+        // A plain loopback agent: control is refused outright.
+        let state = Arc::new(AgentState::default());
+        let response = control(
+            State(state),
+            axum::http::HeaderMap::new(),
+            Json(ControlBody {
+                pids: vec![std::process::id()],
+                action: ztop_core::control::Control::Signal(0),
+            }),
+        )
+        .await
+        .into_response();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        assert!(body_text(response).await.contains("--tls"));
+
+        // TLS is on but the agent does not allow control.
+        let mut inner = AgentState {
+            allow_control: false,
+            ..AgentState::default()
+        };
+        inner.enforce_auth = true;
+        let state = Arc::new(inner);
+        let token = control_token(&state, vec!["read".to_string(), "control".to_string()]);
+        let response = control(
+            State(state),
+            bearer(&token),
+            Json(ControlBody {
+                pids: vec![std::process::id()],
+                action: ztop_core::control::Control::Signal(0),
+            }),
+        )
+        .await
+        .into_response();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        assert!(body_text(response).await.contains("--allow-control"));
+
+        // TLS and the allowance are on, but the token reads only.
+        let mut inner = AgentState {
+            allow_control: true,
+            ..AgentState::default()
+        };
+        inner.enforce_auth = true;
+        let state = Arc::new(inner);
+        let token = control_token(&state, vec!["read".to_string()]);
+        let response = control(
+            State(state),
+            bearer(&token),
+            Json(ControlBody {
+                pids: vec![std::process::id()],
+                action: ztop_core::control::Control::Signal(0),
+            }),
+        )
+        .await
+        .into_response();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        assert!(body_text(response).await.contains("not control"));
+    }
+
+    #[tokio::test]
+    async fn control_answers_per_pid_when_all_the_gates_pass() {
+        let mut inner = AgentState {
+            allow_control: true,
+            ..AgentState::default()
+        };
+        inner.enforce_auth = true;
+        let state = Arc::new(inner);
+        let token = control_token(&state, vec!["read".to_string(), "control".to_string()]);
+        // Signal 0 probes permission without acting: our own pid answers
+        // ok, a pid that cannot exist answers with the OS's error text.
+        let response = control(
+            State(state),
+            bearer(&token),
+            Json(ControlBody {
+                pids: vec![std::process::id(), 999_999_999],
+                action: ztop_core::control::Control::Signal(0),
+            }),
+        )
+        .await
+        .into_response();
+        assert_eq!(response.status(), StatusCode::OK);
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body");
+        let value: serde_json::Value = serde_json::from_slice(&bytes).expect("json");
+        assert_eq!(value["protocol"], PROTOCOL_VERSION);
+        let results = value["results"].as_array().expect("results");
+        assert_eq!(results.len(), 2);
+        assert_eq!(results[0]["pid"], std::process::id());
+        assert_eq!(results[0]["ok"], true);
+        assert_eq!(results[1]["pid"], 999_999_999);
+        assert_eq!(results[1]["ok"], false);
+        assert!(results[1]["error"].as_str().is_some_and(|e| !e.is_empty()));
+    }
+
+    /// Pair a fresh token with exactly `rights` into the state's auth.
+    fn control_token(state: &AgentState, rights: Vec<String>) -> String {
+        let code = {
+            let mut auth = state.auth.lock().expect("auth");
+            auth.start_pairing("tests".into(), auth::now_ms(), rights)
+                .expect("code")
+        };
+        state
+            .auth
+            .lock()
+            .expect("auth")
+            .pair(&code, auth::now_ms())
+            .expect("token")
+    }
+
+    /// Authorization headers carrying `token` as a bearer.
+    fn bearer(token: &str) -> axum::http::HeaderMap {
+        let mut headers = axum::http::HeaderMap::new();
+        headers.insert(
+            axum::http::header::AUTHORIZATION,
+            format!("Bearer {token}").parse().expect("header value"),
+        );
+        headers
+    }
+
+    /// The response body as text.
+    async fn body_text(response: axum::response::Response) -> String {
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body");
+        String::from_utf8_lossy(&bytes).into_owned()
     }
 
     #[tokio::test]
@@ -777,7 +997,7 @@ mod tests {
             .auth
             .lock()
             .expect("auth")
-            .start_pairing("the app".into(), auth::now_ms())
+            .start_pairing("the app".into(), auth::now_ms(), vec!["read".to_string()])
             .expect("code");
         let state = Arc::new(inner);
         state.push(a_sample());
@@ -864,7 +1084,7 @@ mod tests {
             .auth
             .lock()
             .expect("auth")
-            .start_pairing("the app".into(), auth::now_ms())
+            .start_pairing("the app".into(), auth::now_ms(), vec!["read".to_string()])
             .expect("code");
         let state = Arc::new(inner);
         state.push(a_sample());
@@ -1162,7 +1382,11 @@ mod tests {
         let saved_token = {
             let mut auth = state.auth.lock().expect("auth");
             let code = auth
-                .start_pairing("earlier pairing".into(), auth::now_ms())
+                .start_pairing(
+                    "earlier pairing".into(),
+                    auth::now_ms(),
+                    vec!["read".to_string()],
+                )
                 .expect("code");
             auth.pair(&code, auth::now_ms()).expect("pairs")
         };
@@ -1196,8 +1420,12 @@ mod tests {
         // yields a token the agent accepts.
         let code = {
             let mut auth = state.auth.lock().expect("auth");
-            auth.start_pairing("pairing over the wire".into(), auth::now_ms())
-                .expect("code")
+            auth.start_pairing(
+                "pairing over the wire".into(),
+                auth::now_ms(),
+                vec!["read".to_string()],
+            )
+            .expect("code")
         };
         let code_target = target.clone();
         let code_pin = pin.clone();
