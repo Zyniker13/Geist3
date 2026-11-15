@@ -177,6 +177,49 @@ pub struct Detail {
     pub top: usize,
 }
 
+/// The syscall-trace overlay: the tracer runs on its own thread and
+/// this state carries its recorded lines to the screen. `back` is how
+/// many lines back from the newest the view ends at — 0 follows the
+/// tail, so new syscalls appear as they happen. Dropping the state
+/// (which drops the tracer handle) stops the tracer thread and
+/// detaches from the process.
+pub struct TraceUi {
+    /// The traced pid.
+    pub pid: u32,
+    /// The process name when the sample still has it, else `pid N`.
+    pub name: String,
+    /// The recorded lines, oldest first, capped at 10,000.
+    pub lines: Vec<String>,
+    /// How far back from the newest line the view ends at.
+    pub back: usize,
+    handle: Option<ztop_core::trace::TraceHandle>,
+}
+
+impl std::fmt::Debug for TraceUi {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TraceUi")
+            .field("pid", &self.pid)
+            .field("name", &self.name)
+            .field("lines", &self.lines.len())
+            .field("back", &self.back)
+            .finish()
+    }
+}
+
+impl Clone for TraceUi {
+    // A clone carries no tracer: the thread is owned once, by the
+    // original. A clone is a display-only snapshot.
+    fn clone(&self) -> Self {
+        Self {
+            pid: self.pid,
+            name: self.name.clone(),
+            lines: self.lines.clone(),
+            back: self.back,
+            handle: None,
+        }
+    }
+}
+
 /// Everything the render needs: the last sample, the last error, the sort,
 /// and the active filters.
 ///
@@ -220,6 +263,9 @@ pub struct Ui {
     pub menu_kind: MenuKind,
     /// The open detail overlay (environment or open files).
     pub detail: Option<Detail>,
+    /// The open syscall-trace overlay: the tracer thread records the
+    /// traced process's syscalls into it until it is closed.
+    pub trace: Option<TraceUi>,
     /// The F1 help overlay is open; every key closes it.
     pub help: bool,
     /// The last control action's outcome, shown in the status line until
@@ -285,6 +331,7 @@ impl Default for Ui {
             menu: None,
             menu_kind: MenuKind::Signals,
             detail: None,
+            trace: None,
             help: false,
             show_user_threads: false,
             show_kernel_threads: true,
@@ -727,6 +774,84 @@ impl Ui {
                 detail.top = (detail.top + 1).min(last);
             } else {
                 detail.top = detail.top.saturating_sub(1);
+            }
+        }
+    }
+
+    /// Start tracing the first tagged row (else the cursor's row): the
+    /// tracer attaches with ptrace on its own thread and records one
+    /// line per completed syscall. Failures (another user's process,
+    /// a gone pid, a platform without tracing) report on the status
+    /// line and leave the overlay closed. Observation only, so
+    /// read-only mode allows it.
+    pub fn open_trace(&mut self) {
+        let Some(pid) = self.targets().into_iter().next() else {
+            return;
+        };
+        let name = self
+            .sample
+            .as_ref()
+            .and_then(|s| s.processes.iter().find(|p| p.pid == pid))
+            .map(|p| p.name.clone())
+            .unwrap_or_else(|| format!("pid {pid}"));
+        match ztop_core::trace::start(pid) {
+            Ok(handle) => {
+                self.trace = Some(TraceUi {
+                    pid,
+                    name,
+                    lines: Vec::new(),
+                    back: 0,
+                    handle: Some(handle),
+                });
+            }
+            Err(error) => self.notice = Some(error),
+        }
+    }
+
+    /// Close the trace overlay (Esc or q): dropping the tracer stops
+    /// its thread and detaches from the process.
+    pub fn close_trace(&mut self) {
+        self.trace = None;
+    }
+
+    /// Take the tracer's new lines into the overlay. While the view is
+    /// scrolled back, new lines do not move the window (they land
+    /// below it); the ring cap drops old lines and shifts the window
+    /// with them.
+    pub fn poll_trace(&mut self) {
+        const MAX_LINES: usize = 10_000;
+        let Some(trace) = &mut self.trace else {
+            return;
+        };
+        let Some(handle) = &trace.handle else {
+            return;
+        };
+        let drained = handle.drain();
+        let added = drained.len();
+        if added == 0 {
+            return;
+        }
+        if trace.back > 0 {
+            trace.back += added;
+        }
+        trace.lines.extend(drained);
+        if trace.lines.len() > MAX_LINES {
+            let dropped = trace.lines.len() - MAX_LINES;
+            trace.lines.drain(..dropped);
+            trace.back = trace.back.saturating_sub(dropped);
+        }
+    }
+
+    /// Scroll the trace overlay one line toward the tail (j) or away
+    /// from it (k). Scrolling back to the newest line resumes tail
+    /// following.
+    pub fn trace_scroll(&mut self, up: bool) {
+        if let Some(trace) = &mut self.trace {
+            if up {
+                let last = trace.lines.len().saturating_sub(1);
+                trace.back = (trace.back + 1).min(last);
+            } else {
+                trace.back = trace.back.saturating_sub(1);
             }
         }
     }
@@ -1225,6 +1350,13 @@ fn handle_key(ui: &mut Ui, key: KeyEvent) -> bool {
             }
         }
         _ if ui.menu.is_some() => {}
+        // While a trace overlay is open the keys scroll it: Esc or q
+        // closes (which also stops the tracer), j/k move, everything
+        // else does nothing.
+        KeyCode::Esc | KeyCode::Char('q') if ui.trace.is_some() => ui.close_trace(),
+        KeyCode::Char('j') | KeyCode::Down if ui.trace.is_some() => ui.trace_scroll(false),
+        KeyCode::Char('k') | KeyCode::Up if ui.trace.is_some() => ui.trace_scroll(true),
+        _ if ui.trace.is_some() => {}
         // While a detail overlay is open the keys scroll it: Esc or q
         // closes, j/k move, everything else does nothing.
         KeyCode::Esc | KeyCode::Char('q') if ui.detail.is_some() => ui.close_detail(),
@@ -1246,6 +1378,7 @@ fn handle_key(ui: &mut Ui, key: KeyEvent) -> bool {
         // from the OS: the environment, the open files.
         KeyCode::Char('e') => ui.open_detail(DetailKind::Environment),
         KeyCode::Char('l') => ui.open_detail(DetailKind::OpenFiles),
+        KeyCode::Char('s') => ui.open_trace(),
         // `Z` pauses sampling: the picture freezes but the keys keep
         // working; a second press resumes. Global, like the screens.
         KeyCode::Char('Z') => ui.paused = !ui.paused,
@@ -1322,9 +1455,20 @@ fn event_loop(
     apply_flags(&mut ui, &flags);
     ui.pid_filter = pids.iter().copied().collect();
     ui.apply(collector.sample());
+    // While a trace overlay is open the loop wakes in short slices so
+    // the tracer's lines reach the screen promptly; samples still land
+    // on the normal cadence.
+    let slice = flags.delay.min(Duration::from_millis(150));
+    let mut last_sample = std::time::Instant::now();
     loop {
         let area = terminal.draw(|frame| draw(frame, &ui))?.area;
-        if event::poll(flags.delay)? {
+        ui.poll_trace();
+        let wait = if ui.trace.is_some() {
+            slice
+        } else {
+            flags.delay
+        };
+        if event::poll(wait)? {
             let event = event::read()?;
             if let Event::Key(key) = event {
                 if key.kind == KeyEventKind::Press && handle_key(&mut ui, key) {
@@ -1337,6 +1481,15 @@ fn event_loop(
                         return Ok(());
                     }
                 }
+            }
+        } else if ui.trace.is_some() {
+            // A slice expired: the next draw drains the trace. Sample
+            // only when a whole delay has passed, as usual.
+            if last_sample.elapsed() >= flags.delay {
+                if !ui.paused {
+                    ui.apply(collector.sample());
+                }
+                last_sample = std::time::Instant::now();
             }
         } else if !ui.paused {
             ui.apply(collector.sample());
@@ -1470,6 +1623,53 @@ fn draw_detail(frame: &mut Frame, ui: &Ui, area: ratatui::layout::Rect) {
     frame.render_widget(panel, popup);
 }
 
+/// Render the syscall-trace overlay: a bordered popup that tails the
+/// tracer's lines, scrolled back with j/k. Empty until the traced
+/// process does something the tracer has seen.
+fn draw_trace(frame: &mut Frame, ui: &Ui, area: ratatui::layout::Rect) {
+    let Some(trace) = &ui.trace else {
+        return;
+    };
+    let width = 100.min(area.width).max(20);
+    let height = 20.min(area.height).max(6);
+    let popup = ratatui::layout::Rect {
+        x: area.x + (area.width.saturating_sub(width)) / 2,
+        y: area.y + (area.height.saturating_sub(height)) / 2,
+        width,
+        height,
+    };
+    frame.render_widget(ratatui::widgets::Clear, popup);
+    let title = format!("trace of {} (pid {}) — Esc closes", trace.name, trace.pid);
+    let mut lines = vec![Line::from(title).bold()];
+    let count = trace.lines.len();
+    if count == 0 {
+        lines.push(Line::from("(no syscalls yet)"));
+    } else {
+        // The window leaves room for the borders, the title and the
+        // scroll hint.
+        let visible = popup.height.saturating_sub(4) as usize;
+        let end = count.saturating_sub(trace.back);
+        let start = end.saturating_sub(visible);
+        lines.extend(
+            trace.lines[start..end]
+                .iter()
+                .map(|line| Line::from(line.clone())),
+        );
+        if end == count && start > 0 {
+            lines.push(Line::from(format!("… of {count} (j/k scroll)")));
+        } else if start > 0 {
+            lines.push(Line::from(format!(
+                "… lines {}–{} of {} (j/k scroll)",
+                start + 1,
+                end,
+                count
+            )));
+        }
+    }
+    let panel = Paragraph::new(lines).block(Block::new().borders(Borders::ALL));
+    frame.render_widget(panel, popup);
+}
+
 /// Render one screen (the process table or an extra screen), with the
 /// signal menu over it when the menu is open.
 fn draw_screen(frame: &mut Frame, ui: &Ui) {
@@ -1486,6 +1686,9 @@ fn draw_screen(frame: &mut Frame, ui: &Ui) {
         }
         if ui.detail.is_some() {
             draw_detail(frame, ui, frame.area());
+        }
+        if ui.trace.is_some() {
+            draw_trace(frame, ui, frame.area());
         }
         return;
     }
@@ -1513,6 +1716,9 @@ fn draw_screen(frame: &mut Frame, ui: &Ui) {
     }
     if ui.detail.is_some() {
         draw_detail(frame, ui, frame.area());
+    }
+    if ui.trace.is_some() {
+        draw_trace(frame, ui, frame.area());
     }
 }
 
@@ -2034,6 +2240,7 @@ fn help_lines() -> Vec<Line<'static>> {
         ("I, A", "io priority, cpu affinity (Linux)"),
         ("H, p", "threads cycle, program path"),
         ("e, l", "environment, open files of the cursor/tags"),
+        ("s", "syscall trace of the cursor/tags (Linux)"),
         ("a, d, n, o, t", "silicon, disks, network, io, thermal"),
     ];
     let mut lines = vec![Line::from("Keys (any key closes)").bold()];
@@ -2814,7 +3021,7 @@ fn status_parts(ui: &Ui) -> Vec<String> {
         parts.push(notice.clone());
     }
     parts.push(format!(
-        "q: quit · tab: sort {} · i: reverse · f3: search · f4: filter · u: user · space: tag · j/k: select · f: follow · f5: tree · enter: fold · f9: signal · f7/f8: renice · I: ionice · A: affinity · H: threads · p: path · e: env · l: files · a: silicon · d: disks · n: net · o: io · t: temps",
+        "q: quit · tab: sort {} · i: reverse · f3: search · f4: filter · u: user · space: tag · j/k: select · f: follow · f5: tree · enter: fold · f9: signal · f7/f8: renice · I: ionice · A: affinity · H: threads · p: path · e: env · l: files · s: trace · a: silicon · d: disks · n: net · o: io · t: temps",
         sort_label(ui.sort, ui.descending)
     ));
     parts
@@ -2883,6 +3090,7 @@ fn hint_key(label: &str) -> Option<KeyEvent> {
         "A" => KeyCode::Char('A'),
         "e" => KeyCode::Char('e'),
         "l" => KeyCode::Char('l'),
+        "s" => KeyCode::Char('s'),
         _ => return None,
     };
     Some(KeyEvent::from(code))
@@ -3111,6 +3319,7 @@ fn handle_mouse(
         || ui.search.is_some()
         || ui.help
         || ui.detail.is_some()
+        || ui.trace.is_some()
     {
         return None;
     }
@@ -5230,6 +5439,116 @@ mod tests {
             .collect::<Vec<_>>()
             .join("\n");
         assert!(help.contains("environment, open files"), "{help}");
+    }
+
+    /// The trace overlay renders its lines, scrolls back with k, and
+    /// following resumes at the tail. Built directly — no tracer needed.
+    #[test]
+    fn the_trace_overlay_renders_and_scrolls() {
+        let mut ui = ui_with(Some(sample()), None);
+        ui.trace = Some(TraceUi {
+            pid: 101,
+            name: "worker-01".to_string(),
+            lines: (0..40).map(|i| format!("read = {i:#x}")).collect(),
+            back: 0,
+            handle: None,
+        });
+        let rows = render(&ui, 80, 24);
+        assert!(
+            rows.iter()
+                .any(|row| row.contains("trace of worker-01 (pid 101)"))
+        );
+        // Tail view: the newest lines are the last table rows.
+        assert!(rows.iter().any(|row| row.contains("read = 0x27")));
+        // k scrolls away from the tail; the window shows older lines
+        // (16 visible rows: 24–39 of 40).
+        ui.trace_scroll(true);
+        let rows = render(&ui, 80, 24);
+        assert!(rows.iter().any(|row| row.contains("lines 24–39 of 40")));
+        // j back to the tail resumes following.
+        ui.trace_scroll(false);
+        ui.trace_scroll(false);
+        let rows = render(&ui, 80, 24);
+        assert!(rows.iter().any(|row| row.contains("read = 0x27")));
+        // Esc closes.
+        handle_key(&mut ui, KeyEvent::from(KeyCode::Esc));
+        assert!(ui.trace.is_none());
+    }
+
+    /// An empty trace overlay says so.
+    #[test]
+    fn the_trace_overlay_starts_empty() {
+        let mut ui = ui_with(Some(sample()), None);
+        ui.trace = Some(TraceUi {
+            pid: 42,
+            name: "quiet".to_string(),
+            lines: Vec::new(),
+            back: 0,
+            handle: None,
+        });
+        let rows = render(&ui, 80, 24);
+        assert!(rows.iter().any(|row| row.contains("(no syscalls yet)")));
+    }
+
+    /// Pressing `s` on a pid the OS refuses (a gone pid on Linux; on
+    /// macOS every pid) reports the OS's error in the status line and
+    /// leaves the overlay closed.
+    #[test]
+    fn s_reports_a_failed_start_and_stays_closed() {
+        let mut ui = ui_with(Some(sample()), None);
+        ui.cursor = Some(NO_SUCH_PID);
+        handle_key(&mut ui, KeyEvent::from(KeyCode::Char('s')));
+        assert!(ui.trace.is_none());
+        let notice = ui.notice.clone().expect("trace error notice");
+        assert!(
+            notice.contains("ptrace") || notice.contains("not available"),
+            "{notice}"
+        );
+    }
+
+    /// With a live tracer (CI Linux: the test's own sleep child), `s`
+    /// opens the overlay, lines arrive, and Esc stops the tracer.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn s_traces_a_child_and_esc_stops() {
+        let mut child = std::process::Command::new("/bin/sleep")
+            .arg("30")
+            .spawn()
+            .expect("spawn the traced child");
+        let pid = child.id();
+        let mut ui = ui_with(Some(sample()), None);
+        ui.cursor = Some(pid);
+        handle_key(&mut ui, KeyEvent::from(KeyCode::Char('s')));
+        assert!(ui.trace.is_some(), "the tracer should attach to a child");
+        // The child is in nanosleep; give the tracer time to record an
+        // exit line.
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        ui.poll_trace();
+        let trace = ui.trace.as_ref().expect("trace");
+        assert!(
+            trace.lines.iter().any(|line| line.contains("nanosleep")),
+            "{:?}",
+            trace.lines
+        );
+        handle_key(&mut ui, KeyEvent::from(KeyCode::Esc));
+        assert!(ui.trace.is_none());
+        child.kill().expect("kill the traced child");
+        let _ = child.wait();
+    }
+
+    /// The status hints and help carry the trace key.
+    #[test]
+    fn the_status_hints_replay_the_trace_key() {
+        let line = status_parts(&ui_with(Some(sample()), None)).join(" · ");
+        assert!(line.contains("s: trace"), "{line}");
+        let key = hint_key("s").expect("s hint");
+        assert_eq!(key.code, KeyCode::Char('s'));
+        let help = help_lines()
+            .iter()
+            .map(|line| line.to_string())
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(help.contains("syscall trace"), "{help}");
     }
 
     #[test]

@@ -123,6 +123,14 @@ what the OS allows decides the outcome \- a same\-user process works
 unprivileged, another user's process needs privileges, and the OS error
 shows in the status line
 .TP
+.BR s
+trace the tagged rows' (else the cursor's row) syscalls into a popup: one
+line per completed syscall with its name and return value, the tail
+followed as it arrives, j/k scrolls back, Esc or q stops the tracer and
+closes; Linux only (ptrace), and only where the OS allows the attach \-
+a child of ztop always works, another user's process needs privileges,
+and macOS reports unavailable
+.TP
 .BR a ", " d ", " n ", " o ", " t
 silicon, disks, network, io, thermal
 .PP

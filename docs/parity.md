@@ -74,9 +74,21 @@ Check an item only when it works and a test or a recorded check shows it. Add th
       `the_open_files_overlay_lists_fds`,
       `e_and_l_report_a_failed_read_and_stay_closed`,
       `the_status_hints_replay_the_detail_keys`; snapshots byte-identical)
-- [ ] Syscall trace (s) of the selected process where the OS allows
-      (the ptrace tracer ships as its own batch; Linux-only, macOS
-      reports unavailable; needs its own decision)
+- [x] Syscall trace (s) of the selected process where the OS allows
+      (decision 0030; `crates/core/src/trace.rs`: Linux-only ptrace
+      tracer — `PTRACE_SEIZE` + `PTRACE_GET_SYSCALL_INFO` on its own
+      thread, one `name = ret` line per completed syscall, curated
+      x86_64/aarch64 name tables with a numeric fallback, 512-line
+      ring, real signals passed through, `PTRACE_INTERRUPT` +
+      `PTRACE_DETACH` on close; macOS reports unavailable; failures
+      reported on the status line, read-only mode allows the
+      observation-only read; popup tails the lines, j/k scrolls back,
+      Esc/q stops and closes; tests `the_tracer_records_syscalls_of_a_child`,
+      `the_tracer_refuses_a_gone_pid`, `syscall_names_cover_the_hot_path`,
+      `the_trace_overlay_renders_and_scrolls`, `the_trace_overlay_starts_empty`,
+      `s_reports_a_failed_start_and_stays_closed`, `s_traces_a_child_and_esc_stops`,
+      `the_status_hints_replay_the_trace_key` — the live ptrace tests
+      run on CI Linux, which ptraces its own children unprivileged)
 - [x] Highlight new and dying processes, and large numbers
       (new: yellow row, pid not in the previous sample's set; dying:
       red row for state `Z`; large numbers: CPU% >= 100 and MEM% >= 50

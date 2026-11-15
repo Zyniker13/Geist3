@@ -22,6 +22,7 @@ pub mod macos_live;
 pub mod macos_power;
 pub mod model;
 pub mod power;
+pub mod trace;
 
 /// Reads a recorded fixture into a [`Sample`], choosing the platform
 /// reader by the manifest's `platform` field.
