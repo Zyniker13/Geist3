@@ -64,6 +64,18 @@ closed, a live child trace records lines and Esc stops it (Linux-cfg'd),
 and the status hints replay the trace key. CI Linux runs the live
 ptrace tests; macOS runs the refusal path.
 
+## Amendment 2026-11-15 — the attach kick
+
+CI's first run of the live test failed with an empty ring: after
+`PTRACE_SEIZE`, a tracee that is already running produces no stops on
+its own, so waiting alone never sees a syscall. The tracer now sends
+one `PTRACE_INTERRUPT` at attach; the group-stop that answers it is
+where `PTRACE_SYSCALL` stepping begins, and the syscall the tracee was
+interrupted in is reported as exiting — the first recorded line. The
+live test polls with a 3 s deadline instead of a fixed sleep, and a
+failed trace-thread spawn now detaches the tracee instead of leaving
+it attached and stopped.
+
 ## Consequences
 
 - The detail line of `docs/parity.md` is now fully checked once this

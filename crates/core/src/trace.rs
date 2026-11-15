@@ -116,7 +116,14 @@ pub fn start(pid: u32) -> Result<TraceHandle, String> {
     let thread = std::thread::Builder::new()
         .name(format!("ztop-trace-{pid}"))
         .spawn(move || trace_loop(pid_t, thread_stop, thread_lines))
-        .map_err(|e| format!("trace thread: {e}"))?;
+        .map_err(|e| {
+            // The tracee must not stay attached (and group-stopped by
+            // the tracer's first interrupt) when no tracer runs.
+            unsafe {
+                libc::ptrace(libc::PTRACE_DETACH, pid_t, 0, 0);
+            }
+            format!("trace thread: {e}")
+        })?;
     Ok(Trace {
         pid,
         stop,
@@ -133,6 +140,14 @@ fn trace_loop(
     stop: std::sync::Arc<std::sync::atomic::AtomicBool>,
     lines: std::sync::Arc<std::sync::Mutex<std::collections::VecDeque<String>>>,
 ) {
+    // Kick the tracee: a seized tracee that is already running produces
+    // no stops on its own, so waiting alone would never see a syscall.
+    // The interrupt's group-stop is where syscall stepping begins — the
+    // resume logic in the loop below steps it through every boundary,
+    // and the syscall it was interrupted in is reported as exiting.
+    unsafe {
+        libc::ptrace(libc::PTRACE_INTERRUPT, pid, 0, 0);
+    }
     // PTRACE_SEIZE stops report through waitpid even though the tracee
     // is not a child; __WALL covers the tracee's threads. Waiting on the
     // tracee's pid specifically — never -1 — so the tracer can never
@@ -440,10 +455,19 @@ mod tests {
         let mut child = traceable_child();
         let pid = child.id();
         let trace = start(pid).expect("trace the child");
-        // The child is in nanosleep; the entry stop arrives first, the
-        // exit stop completes the line. Wait long enough for both.
-        std::thread::sleep(std::time::Duration::from_millis(500));
-        let lines = trace.drain();
+        // The tracer interrupts the tracee out of its nanosleep; the
+        // interrupted syscall's exit is the first recorded line. Poll
+        // with a deadline instead of sleeping a fixed slice — CI
+        // machines vary in speed.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+        let mut lines: Vec<String> = Vec::new();
+        while std::time::Instant::now() < deadline {
+            lines = trace.drain();
+            if lines.iter().any(|line| line.contains("nanosleep")) {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
         assert!(
             lines.iter().any(|line| line.contains("nanosleep")),
             "expected a nanosleep line, got {lines:?}"
