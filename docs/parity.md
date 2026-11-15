@@ -39,8 +39,8 @@ Check an item only when it works and a test or a recorded check shows it. Add th
 ## htop: Setup and Options
 
 - [ ] Setup screen (F2) for meters, display options, colors and columns
-- [ ] Config file saved and reloaded
-- [ ] Color schemes, including monochrome; `--no-color`
+- [x] Config file saved and reloaded — F2 saves JSON to the user's config directory (Application Support on macOS, XDG elsewhere) when the setup screen closes; `ztop` loads it at startup and a missing or malformed file means defaults, with unknown fields from a future version tolerated. Tests: `config::tests::config_roundtrips_through_a_file`, `a_missing_config_file_means_defaults`, `a_malformed_config_file_means_defaults`, `unknown_fields_and_missing_fields_are_tolerated`, `tests::open_setup_remembers_where_it_returned`.
+- [x] Color schemes, including monochrome; `--no-color` — `Theme::Color` (default) and `Theme::Mono` picked on the setup screen; the theme colors the CPU/memory/swap gauges and dims the status line, and `--no-color` forces mono for one run without saving the override. Tests: `tests::gauge_style_follows_the_theme`, `tests::the_setup_screen_shows_its_options_and_help`, `ztop: no_color_flag_parses`.
 - [ ] Mouse support: click to select, sort and use the function bar
 - [ ] Command-line options: delay (`-d`), user (`-u`), PIDs (`-p`), sort key (`-s`), tree (`-t`)
 - [ ] Help screen (F1) and a man page
