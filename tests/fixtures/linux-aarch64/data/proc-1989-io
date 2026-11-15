@@ -1,7 +1,7 @@
-rchar: 186338512
-wchar: 494472657
-syscr: 704
-syscw: 23197
+rchar: 186321754
+wchar: 494472116
+syscr: 690
+syscw: 23196
 read_bytes: 185835520
 write_bytes: 516816896
 cancelled_write_bytes: 0
