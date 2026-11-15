@@ -113,16 +113,20 @@ pub enum ColumnKind {
     /// The command line.
     #[serde(rename = "command")]
     Command,
+    /// The container the process runs in (Linux cgroups).
+    #[serde(rename = "container")]
+    Container,
 }
 
 /// All optional column kinds in the tier ladder's draw order (the order
 /// they appear in as the terminal widens).
-pub const COLUMN_KINDS: [ColumnKind; 7] = [
+pub const COLUMN_KINDS: [ColumnKind; 8] = [
     ColumnKind::Start,
     ColumnKind::Processor,
     ColumnKind::Virtual,
     ColumnKind::Shared,
     ColumnKind::Parent,
+    ColumnKind::Container,
     ColumnKind::Priority,
     ColumnKind::Command,
 ];
@@ -136,6 +140,7 @@ impl ColumnKind {
             Self::Virtual => "virtual",
             Self::Shared => "shared",
             Self::Parent => "parent",
+            Self::Container => "container",
             Self::Priority => "priority",
             Self::Command => "command",
         }

@@ -229,6 +229,14 @@ pub struct Sample {
     /// deserialize.
     #[serde(default)]
     pub apple_silicon: AppleSilicon,
+    /// Discrete GPUs (Linux: NVIDIA via NVML loaded at runtime and AMD
+    /// via sysfs; macOS reports none today). Empty when the host has no
+    /// discrete GPU or the driver is not loadable.
+    ///
+    /// Defaults so samples recorded before this field existed still
+    /// deserialize.
+    #[serde(default)]
+    pub gpus: Vec<Gpu>,
 }
 
 /// One resource's pressure stall percentages: the share of wall time in
@@ -298,6 +306,30 @@ pub struct NetIf {
     pub rx_rate: Option<f64>,
     /// Transmit rate in bytes per second between two live samples.
     pub tx_rate: Option<f64>,
+}
+
+/// One discrete GPU as the platform reports it.
+///
+/// Every metric is a [`Metric`], so a card that does not expose a value
+/// (fanless cards, power without the NVML permission) shows `-` rather
+/// than a zero.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Gpu {
+    /// What the platform calls the card, e.g. the NVML product name or
+    /// `AMD GPU (card1)`.
+    pub name: String,
+    /// Utilization of the GPU's compute engines, 0–100%.
+    pub utilization: Metric,
+    /// Memory in use.
+    pub memory_used: Metric,
+    /// Memory installed on the card.
+    pub memory_total: Metric,
+    /// Board power draw.
+    pub watts: Metric,
+    /// Core temperature.
+    pub temperature: Metric,
+    /// Cooling fan speed as a percent of maximum.
+    pub fan_percent: Metric,
 }
 
 /// One temperature reading.
@@ -451,6 +483,24 @@ pub struct Process {
     pub kernel_thread: bool,
     /// Per-process disk I/O, when the platform reports it (Linux).
     pub io: ProcessIo,
+    /// The container the process runs in, when its cgroup path names
+    /// one (Linux). `None` covers every host process: zTop shows a
+    /// container only when the path says so, never by guessing.
+    #[serde(default)]
+    pub container: Option<Container>,
+}
+
+/// One container as the process table and detail screen show it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Container {
+    /// The runtime's identifier for the container: the first 12 hex
+    /// characters of the full id for docker/podman/containerd/cri-o
+    /// (the shape `docker ps` prints), the container or machine name
+    /// for LXC and systemd-nspawn.
+    pub id: String,
+    /// The runtime the cgroup path names: `docker`, `podman`,
+    /// `containerd`, `cri-o`, `lxc` or `systemd-nspawn`.
+    pub runtime: String,
 }
 
 /// Per-process disk I/O counters and rates.
@@ -627,6 +677,7 @@ mod tests {
                 command: None,
                 is_thread: false,
                 kernel_thread: false,
+                container: None,
                 io: ProcessIo {
                     read_bytes: Some(1024),
                     write_bytes: Some(2048),
@@ -690,6 +741,7 @@ mod tests {
                     watts: 5.0,
                 }],
             },
+            gpus: Vec::new(),
             pressure: None,
         };
         let json = serde_json::to_string(&sample).expect("serialize");

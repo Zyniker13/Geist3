@@ -251,6 +251,7 @@ mod linux {
         Source::Glob("/proc/[0-9]*/io"),
         Source::Glob("/proc/[0-9]*/statm"),
         Source::Glob("/proc/[0-9]*/comm"),
+        Source::Glob("/proc/[0-9]*/cgroup"),
         Source::Glob("/sys/class/hwmon/*/name"),
         Source::Glob("/sys/class/hwmon/*/temp*_input"),
         Source::Glob("/sys/class/hwmon/*/temp*_label"),

@@ -34,8 +34,8 @@ use crate::fixture::{Fixture, FixtureError};
 #[cfg(any(target_os = "linux", test))]
 use crate::model::core_percents;
 use crate::model::{
-    AppleSilicon, Cpu, CpuTimes, Disk, Memory, Metric, NetIf, Pressure, Process, ProcessIo, Psi,
-    PsiAvg, Sample, Sensors, Unit,
+    AppleSilicon, Container, Cpu, CpuTimes, Disk, Memory, Metric, NetIf, Pressure, Process,
+    ProcessIo, Psi, PsiAvg, Sample, Sensors, Unit,
 };
 #[cfg(any(target_os = "linux", test))]
 use crate::model::{Battery, BatteryState, Fan, TempSensor};
@@ -611,6 +611,120 @@ pub(crate) struct PidData {
     /// `PPid` as the process's own parent, so the group has to travel
     /// with the entry.
     pub(crate) tgid: Option<u32>,
+    /// The container this pid runs in, from `/proc/<pid>/cgroup`;
+    /// `None` when the file is unreadable or names no container.
+    pub(crate) cgroup: Option<Container>,
+}
+
+/// The container a cgroup path points into, when the path marks one.
+///
+/// Recognizes the layouts the common runtimes leave in the cgroup
+/// hierarchy: docker's `/docker/<64 hex>` and `docker-<hex>.scope`
+/// (which also covers Kubernetes pods that name their containers after
+/// docker), podman's `libpod-<hex>.scope` and `/podman/<id>`,
+/// containerd's `cri-containerd-<hex>.scope`, cri-o's `crio-<hex>.scope`,
+/// LXC's `/lxc/<name>` and systemd-nspawn's `machine-<name>.scope`.
+/// Everything else — plain systemd services, user sessions, the root
+/// cgroup — is `None`: zTop shows a container only when the path says
+/// so, never by guessing.
+///
+/// The id is the first 12 hex characters of the full run id, the shape
+/// `docker ps` and friends print; LXC and nspawn have names instead.
+pub(crate) fn detect_container(text: &str) -> Option<Container> {
+    // `12:pids:/docker/abc…` (v1) or `0::/docker/abc…` (v2): the path
+    // is everything after the last colon; cgroup paths cannot contain
+    // one.
+    let path = text.trim().rsplit(':').next()?.trim();
+    // The id inside a scope or directory: the hex characters of the
+    // segment, needing at least the 12 `docker ps` prints.
+    let id_of = |segment: &str| -> Option<String> {
+        let hex: String = segment.chars().filter(char::is_ascii_hexdigit).collect();
+        (hex.len() >= 12).then(|| hex[..12].to_string())
+    };
+    let segments: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
+    for (index, segment) in segments.iter().enumerate() {
+        let next = segments.get(index + 1).copied().unwrap_or("");
+        // Docker: `docker-<hex>.scope` under a systemd slice, or a
+        // `docker` directory followed by the full id.
+        let docker_scope = segment
+            .strip_prefix("docker-")
+            .and_then(|rest| rest.strip_suffix(".scope"))
+            .and_then(id_of);
+        if let Some(id) = docker_scope {
+            return Some(Container {
+                id,
+                runtime: "docker".into(),
+            });
+        }
+        if *segment == "docker" {
+            if let Some(id) = id_of(next) {
+                return Some(Container {
+                    id,
+                    runtime: "docker".into(),
+                });
+            }
+        }
+        // Podman keeps its own scope shape and podman-prefixed dirs.
+        let podman_scope = segment
+            .strip_prefix("libpod-")
+            .and_then(|rest| rest.strip_suffix(".scope"))
+            .and_then(id_of);
+        if let Some(id) = podman_scope {
+            return Some(Container {
+                id,
+                runtime: "podman".into(),
+            });
+        }
+        if *segment == "podman" || *segment == "libpod" {
+            if let Some(id) = id_of(next) {
+                return Some(Container {
+                    id,
+                    runtime: "podman".into(),
+                });
+            }
+        }
+        // The container runtimes behind Kubernetes name their scopes
+        // after themselves.
+        let cri_scope = segment
+            .strip_prefix("cri-containerd-")
+            .and_then(|rest| rest.strip_suffix(".scope"))
+            .and_then(id_of);
+        if let Some(id) = cri_scope {
+            return Some(Container {
+                id,
+                runtime: "containerd".into(),
+            });
+        }
+        let crio_scope = segment
+            .strip_prefix("crio-")
+            .and_then(|rest| rest.strip_suffix(".scope"))
+            .and_then(id_of);
+        if let Some(id) = crio_scope {
+            return Some(Container {
+                id,
+                runtime: "cri-o".into(),
+            });
+        }
+        // LXC: `/lxc/<container-name>` — a name, not a hex id.
+        if *segment == "lxc" && !next.is_empty() {
+            return Some(Container {
+                id: next.to_string(),
+                runtime: "lxc".into(),
+            });
+        }
+        // systemd-nspawn: `machine-<name>.scope` under machine.slice.
+        let machine_scope = segment
+            .strip_prefix("machine-")
+            .and_then(|rest| rest.strip_suffix(".scope"))
+            .map(str::to_string);
+        if let Some(name) = machine_scope {
+            return Some(Container {
+                id: name,
+                runtime: "systemd-nspawn".into(),
+            });
+        }
+    }
+    None
 }
 
 /// Builds one [`Process`] row.
@@ -686,6 +800,7 @@ fn process_row(
         command: data.command.clone(),
         is_thread: data.is_thread,
         kernel_thread,
+        container: data.cgroup.clone(),
         io: ProcessIo {
             read_bytes: data.io.map(|io| io.read_bytes),
             write_bytes: data.io.map(|io| io.write_bytes),
@@ -1005,6 +1120,7 @@ pub fn sample_from_fixture(dir: &Path) -> Result<Sample, FixtureSampleError> {
                 "cmdline" => data.command = parse_pid_cmdline(&text),
                 "io" => data.io = parse_pid_io(&text),
                 "statm" => data.statm = parse_pid_statm(&text),
+                "cgroup" => data.cgroup = detect_container(&text),
                 _ => {}
             }
             continue;
@@ -1104,6 +1220,9 @@ pub fn sample_from_fixture(dir: &Path) -> Result<Sample, FixtureSampleError> {
             ..Sensors::default()
         },
         apple_silicon: AppleSilicon::default(),
+        // Recorded captures predate GPU collection: a replay shows no
+        // GPU rows rather than a half-populated picture (decision 0034).
+        gpus: Vec::new(),
         pressure,
     })
 }
@@ -1124,8 +1243,8 @@ mod live {
     use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
     use super::{
-        CpuTimes, PidData, PidIo, PidStat, USER_HZ, core_percents, counter_rate, disk_usage,
-        io_rates, memory_from, parse_cpuinfo_frequencies, parse_hwmon, parse_pid_io,
+        CpuTimes, PidData, PidIo, PidStat, USER_HZ, core_percents, counter_rate, detect_container,
+        disk_usage, io_rates, memory_from, parse_cpuinfo_frequencies, parse_hwmon, parse_pid_io,
         parse_pid_stat, parse_pid_statm, parse_pid_status, parse_power_supply, parse_pressure,
         parse_proc_diskstats, parse_proc_loadavg, parse_proc_loadavg_entities, parse_proc_meminfo,
         parse_proc_mounts, parse_proc_net_dev, parse_proc_stat, parse_proc_uptime, process_row,
@@ -1253,6 +1372,14 @@ mod live {
                 data.statm = fs::read_to_string(base.join("statm"))
                     .ok()
                     .and_then(|text| parse_pid_statm(&text));
+                // Container membership: tasks of a process share its
+                // cgroup, so the group's value is cloned here (before
+                // the task loop re-borrows the map) and copied onto the
+                // thread rows below rather than re-read per task.
+                data.cgroup = fs::read_to_string(base.join("cgroup"))
+                    .ok()
+                    .and_then(|text| detect_container(&text));
+                let group_container = data.cgroup.clone();
                 // Thread rows: every numeric task below the process
                 // except the leader (the process's own row) becomes a
                 // row of its own, keyed by tid; the group travels in
@@ -1269,6 +1396,7 @@ mod live {
                     let thread = pids.entry(tid).or_default();
                     thread.is_thread = true;
                     thread.tgid = Some(pid);
+                    thread.cgroup = group_container.clone();
                     thread.stat = fs::read_to_string(task_base.join("stat"))
                         .ok()
                         .and_then(|text| parse_pid_stat(&text));
@@ -1428,6 +1556,7 @@ mod live {
                 },
                 pressure,
                 apple_silicon: AppleSilicon::default(),
+                gpus: crate::linux_gpu::collect(),
             })
         }
     }
@@ -1661,6 +1790,54 @@ mod tests {
         assert!(parse_pressure("odd avg10=1.0 avg60=0.0 avg300=0.0 total=1\n").is_none());
         // Empty.
         assert!(parse_pressure("").is_none());
+    }
+
+    /// The cgroup reader names the common runtimes and nothing else:
+    /// each layout parses to the right runtime and id, and host-shaped
+    /// paths (services, sessions, the root) stay `None`.
+    #[test]
+    fn detect_container_names_the_common_runtimes_and_nothing_else() {
+        let full = "4a2b1c9d8e7f00112233445566778899aabbccddeeff0011";
+        // v1 hierarchy line with the full id under docker/.
+        let got = detect_container(&format!("12:pids:/docker/{full}\n")).expect("docker v1");
+        assert_eq!(got.runtime, "docker");
+        assert_eq!(got.id, "4a2b1c9d8e7f");
+        // v2 line with the systemd scope shape.
+        let got = detect_container(&format!("0::/system.slice/docker-{full}.scope\n"))
+            .expect("docker scope");
+        assert_eq!(got.runtime, "docker");
+        assert_eq!(got.id, "4a2b1c9d8e7f");
+        // Podman's libpod scope.
+        let got = detect_container(&format!(
+            "0::/user.slice/user-1000.slice/user@1000.service/libpod-{full}.scope\n"
+        ))
+        .expect("podman");
+        assert_eq!(got.runtime, "podman");
+        assert_eq!(got.id, "4a2b1c9d8e7f");
+        // containerd and cri-o behind Kubernetes.
+        let got = detect_container(&format!(
+            "0::/kubepods.slice/kubepods-burstable.slice/cri-containerd-{full}.scope\n"
+        ))
+        .expect("containerd");
+        assert_eq!(got.runtime, "containerd");
+        let got =
+            detect_container(&format!("0::/kubepods.slice/crio-{full}.scope\n")).expect("cri-o");
+        assert_eq!(got.runtime, "cri-o");
+        // LXC keeps a name, not a hex id.
+        let got = detect_container("0::/lxc/web-frontend\n").expect("lxc");
+        assert_eq!(got.runtime, "lxc");
+        assert_eq!(got.id, "web-frontend");
+        // systemd-nspawn machines.
+        let got = detect_container("0::/machine.slice/machine-buildvm.scope\n").expect("nspawn");
+        assert_eq!(got.runtime, "systemd-nspawn");
+        assert_eq!(got.id, "buildvm");
+        // Host-shaped paths name nothing.
+        assert!(detect_container("12:pids:/system.slice/sshd.service\n").is_none());
+        assert!(detect_container("0::/user.slice/user-1000.slice/session-2.scope\n").is_none());
+        assert!(detect_container("0::/\n").is_none());
+        // An unreadable file never reaches here, but an empty string is
+        // the same as nothing.
+        assert!(detect_container("").is_none());
     }
 
     #[test]

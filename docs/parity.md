@@ -216,8 +216,23 @@ Check an item only when it works and a test or a recorded check shows it. Add th
       reports no interfaces today). Tests:
       `the_network_panel_shows_interfaces_and_rates`.
 - [x] Temperatures and fans — TUI header row: temps (up to 3), fans (up to 1), system/GPU watts. Snapshot test at 80x24 (5-row header), plus fixture replay at 80x24 (4-row header when no sensors).
-- [ ] Linux GPUs: NVIDIA through NVML, AMD through sysfs
-- [ ] cgroup and container awareness (Linux)
+- [x] Linux GPUs: NVIDIA through NVML, AMD through sysfs — `Sample.gpus` fills from
+      NVML **dlopen'd at runtime** (no build-time SDK; all-or-nothing symbol load,
+      failed load remembered so no per-refresh retries) and AMD sysfs
+      `/sys/class/drm/card*/device`, both unprivileged; the `g` screen lists each
+      card's utilization, memory, watts, temperature and fan with `-` for
+      unavailable metrics (decision 0034). NVML/AMD paths verified by tests against
+      recorded shapes (no Linux GPU hardware in CI): `amd_card_reads_busy_vram_power_temp_and_fan`,
+      TUI
+      `the_gpu_screen_lists_cards_with_metrics`,
+      `the_gpu_screen_explains_an_empty_list`, `g_toggles_the_gpu_screen`.
+- [x] cgroup and container awareness (Linux) — `/proc/<pid>/cgroup` parsed per
+      process (threads inherit the group's); only the six recognized runtime
+      layouts produce a container (docker, podman, containerd, cri-o, lxc,
+      systemd-nspawn), host-shaped paths stay blank rather than guessed; optional
+      `CTR` column (140+ columns, F2-toggleable) shows `runtime id` (decision 0034).
+      Test: `detect_container_names_the_common_runtimes_and_nothing_else`,
+      `the_container_column_identifies_containerized_processes`.
 - [ ] `ztop connect` shows a remote agent in the TUI
 
 ## Agent and Hub

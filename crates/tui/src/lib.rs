@@ -125,12 +125,14 @@ fn sort_label(sort: SortKey, descending: bool) -> String {
 
 /// Which screen the UI shows. The process table is the default; the Apple
 /// Silicon screen (`a`) shows chip, power and cluster metrics that only make
-/// sense on Apple Silicon Macs, and the setup screen (F2) edits the options
+/// sense on Apple Silicon Macs, the GPU screen (`g`) lists discrete cards
+/// (Linux), and the setup screen (F2) edits the options
 /// that are saved to the config file.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Screen {
     ProcessTable,
     AppleSilicon,
+    Gpus,
     Disk,
     Network,
     /// Per-process disk I/O: who is reading and writing, at what rate.
@@ -1530,6 +1532,7 @@ fn handle_key(ui: &mut Ui, key: KeyEvent) -> bool {
         KeyCode::Char('n') => ui.goto_screen(Screen::Network),
         KeyCode::Char('o') => ui.goto_screen(Screen::Io),
         KeyCode::Char('t') => ui.goto_screen(Screen::Thermal),
+        KeyCode::Char('g') => ui.goto_screen(Screen::Gpus),
         // `e` and `l` read the first tagged row (else the cursor's) live
         // from the OS: the environment, the open files.
         KeyCode::Char('e') => ui.open_detail(DetailKind::Environment),
@@ -1861,6 +1864,7 @@ fn draw_screen(frame: &mut Frame, ui: &Ui) {
     frame.render_widget(Paragraph::new(tab_bar(ui)), strip);
     match ui.screen {
         Screen::AppleSilicon => draw_silicon(frame, ui, panel),
+        Screen::Gpus => draw_gpus(frame, ui, panel),
         Screen::Disk => draw_disks(frame, ui, panel),
         Screen::Network => draw_network(frame, ui, panel),
         Screen::Io => draw_io(frame, ui, panel),
@@ -1881,9 +1885,10 @@ fn draw_screen(frame: &mut Frame, ui: &Ui) {
 /// The tab strip's text: the screens in tab order with the active one
 /// bracketed. Setup is a modal screen with its own keys, so it has no tab.
 fn tab_bar(ui: &Ui) -> Line<'static> {
-    const TABS: [(Screen, &str); 6] = [
+    const TABS: [(Screen, &str); 7] = [
         (Screen::ProcessTable, "main"),
         (Screen::AppleSilicon, "silicon"),
+        (Screen::Gpus, "gpus"),
         (Screen::Disk, "disks"),
         (Screen::Network, "net"),
         (Screen::Io, "io"),
@@ -1908,9 +1913,10 @@ fn tab_bar(ui: &Ui) -> Line<'static> {
 /// The screen a click on the tab strip's row lands on: the label under
 /// the column, or `None` between labels. Mirrors `tab_bar`'s widths.
 fn tab_at(ui: &Ui, column: u16) -> Option<Screen> {
-    const TABS: [(Screen, &str); 6] = [
+    const TABS: [(Screen, &str); 7] = [
         (Screen::ProcessTable, "main"),
         (Screen::AppleSilicon, "silicon"),
+        (Screen::Gpus, "gpus"),
         (Screen::Disk, "disks"),
         (Screen::Network, "net"),
         (Screen::Io, "io"),
@@ -1929,6 +1935,77 @@ fn tab_at(ui: &Ui, column: u16) -> Option<Screen> {
         }
     }
     None
+}
+
+/// The GPU panel: one row per discrete card with utilization, memory,
+/// power draw, temperature and fan speed. macOS has no discrete cards on
+/// the machines zTop targets (its integrated GPU appears on the silicon
+/// screen), and replays of recorded captures carry no GPUs, so the panel
+/// explains the empty state either way.
+fn draw_gpus(frame: &mut Frame, ui: &Ui, area: ratatui::layout::Rect) {
+    let titled = |title: &'static str| Block::default().borders(Borders::ALL).title(title);
+    let Some(sample) = ui.sample.as_ref() else {
+        frame.render_widget(
+            Paragraph::new(vec![Line::from("no sample yet")]).block(titled("GPUs")),
+            area,
+        );
+        return;
+    };
+    if sample.gpus.is_empty() {
+        frame.render_widget(panel_empty("GPUs", "discrete GPU", 'g'), area);
+        return;
+    }
+    let percent = |metric: &Metric| {
+        if metric.available {
+            format!("{:.0}%", metric.value)
+        } else {
+            "-".to_string()
+        }
+    };
+    let celsius = |metric: &Metric| {
+        if metric.available {
+            format!("{:.0} °C", metric.value)
+        } else {
+            "-".to_string()
+        }
+    };
+    let watt = |metric: &Metric| {
+        if metric.available {
+            format!("{:.1} W", metric.value)
+        } else {
+            "-".to_string()
+        }
+    };
+    let mut lines = vec![Line::from(
+        format!(
+            "{:<16} {:>6} {:>18} {:>9} {:>8} {:>6}",
+            "GPU", "util", "memory", "power", "temp", "fan"
+        )
+        .bold(),
+    )];
+    for gpu in sample.gpus.iter() {
+        let memory = if gpu.memory_used.available || gpu.memory_total.available {
+            format!(
+                "{}/{}",
+                bytes_text(gpu.memory_used.value),
+                bytes_text(gpu.memory_total.value)
+            )
+        } else {
+            "-".to_string()
+        };
+        lines.push(Line::from(format!(
+            "{:<16.16} {:>6} {:>18} {:>9} {:>8} {:>6}",
+            gpu.name,
+            percent(&gpu.utilization),
+            memory,
+            watt(&gpu.watts),
+            celsius(&gpu.temperature),
+            percent(&gpu.fan_percent),
+        )));
+    }
+    lines.push(Line::from(""));
+    lines.push(Line::from("o process table · q quit"));
+    frame.render_widget(Paragraph::new(lines).block(titled("GPUs")), area);
 }
 
 /// The per-process I/O panel: who is reading and writing, at what rate,
@@ -2428,7 +2505,10 @@ fn help_lines() -> Vec<Line<'static>> {
         ("H, p", "threads cycle, program path"),
         ("e, l", "environment, open files of the cursor/tags"),
         ("s", "syscall trace of the cursor/tags (Linux)"),
-        ("a, d, n, o, t", "silicon, disks, network, io, thermal"),
+        (
+            "a, d, n, o, t, g",
+            "silicon, disks, network, io, thermal, gpus",
+        ),
     ];
     let mut lines = vec![Line::from("Keys (any key closes)").bold()];
     for (keys, what) in rows {
@@ -3424,7 +3504,7 @@ fn status_parts(ui: &Ui) -> Vec<String> {
         parts.push(notice.clone());
     }
     parts.push(format!(
-        "q: quit · tab: sort {} · i: reverse · f3: search · f4: filter · u: user · space: tag · j/k: select · f: follow · f5: tree · enter: fold · f9: signal · f7/f8: renice · I: ionice · A: affinity · H: threads · p: path · e: env · l: files · s: trace · a: silicon · d: disks · n: net · o: io · t: temps",
+        "q: quit · tab: sort {} · i: reverse · f3: search · f4: filter · u: user · space: tag · j/k: select · f: follow · f5: tree · enter: fold · f9: signal · f7/f8: renice · I: ionice · A: affinity · H: threads · p: path · e: env · l: files · s: trace · a: silicon · d: disks · n: net · o: io · t: temps · g: gpus",
         sort_label(ui.sort, ui.descending)
     ));
     parts
@@ -3487,6 +3567,7 @@ fn hint_key(label: &str) -> Option<KeyEvent> {
         "n" => KeyCode::Char('n'),
         "o" => KeyCode::Char('o'),
         "t" => KeyCode::Char('t'),
+        "g" => KeyCode::Char('g'),
         "H" => KeyCode::Char('H'),
         "p" => KeyCode::Char('p'),
         "I" => KeyCode::Char('I'),
@@ -3649,6 +3730,9 @@ impl Columns {
         }
         if shows(config::ColumnKind::Parent, area_width >= 140) {
             extend(&[("PPID", 7, Some(SortKey::Parent))]);
+        }
+        if shows(config::ColumnKind::Container, area_width >= 140) {
+            extend(&[("CTR", 19, None)]);
         }
         if shows(config::ColumnKind::Priority, area_width >= 160) {
             extend(&[("PRI", 4, Some(SortKey::Priority))]);
@@ -3904,6 +3988,15 @@ fn process_row(
                 Some(parent) => Cell::from(format!("{:>7}", parent)),
                 None => Cell::from(""),
             },
+            // The container: runtime plus id or name, blank on hosts and
+            // platforms where the collector could not tell.
+            "CTR" => match &process.container {
+                Some(container) => Cell::from(format!(
+                    "{:>19}",
+                    format!("{} {}", container.runtime, container.id)
+                )),
+                None => Cell::from(""),
+            },
             "RD/s" => Cell::from(format!("{:>5}", rate_text(process.io.read_rate))),
             "WR/s" => Cell::from(format!("{:>5}", rate_text(process.io.write_rate))),
             "NAME" => Cell::from(name.clone()),
@@ -3931,8 +4024,8 @@ fn process_row(
 mod tests {
     use super::*;
     use ztop_core::model::{
-        Battery, BatteryState, Cpu, CpuTimes, Disk, Fan, Metric, NetIf, Pressure, ProcessIo, Psi,
-        PsiAvg, Sensors, TempSensor, Unit,
+        Battery, BatteryState, Container, Cpu, CpuTimes, Disk, Fan, Gpu, Metric, NetIf, Pressure,
+        ProcessIo, Psi, PsiAvg, Sensors, TempSensor, Unit,
     };
 
     /// A 4-core, 12-process sample with spread-out values.
@@ -3971,6 +4064,7 @@ mod tests {
                 command: None,
                 is_thread: false,
                 kernel_thread: false,
+                container: None,
                 io: ProcessIo::default(),
             })
             .collect();
@@ -4010,6 +4104,7 @@ mod tests {
                 system_watts: Metric::unavailable(Unit::Watts),
             },
             apple_silicon: ztop_core::model::AppleSilicon::default(),
+            gpus: Vec::new(),
             pressure: None,
         }
     }
@@ -4086,6 +4181,33 @@ mod tests {
             power_watts: Metric::available(4.25, Unit::Watts),
             state: BatteryState::Charging,
         });
+        s
+    }
+
+    /// A sample with one NVIDIA-style card (all metrics) and one card with
+    /// an unavailable fan, matching the core test fixture values.
+    fn sample_with_gpus() -> Sample {
+        let mut s = sample();
+        s.gpus = vec![
+            Gpu {
+                name: "NVIDIA GeForce RTX 3080".to_string(),
+                utilization: Metric::available(63.0, Unit::Percent),
+                memory_used: Metric::available(4_294_967_296.0, Unit::Bytes),
+                memory_total: Metric::available(10_737_418_240.0, Unit::Bytes),
+                watts: Metric::available(212.5, Unit::Watts),
+                temperature: Metric::available(71.0, Unit::Celsius),
+                fan_percent: Metric::available(45.0, Unit::Percent),
+            },
+            Gpu {
+                name: "AMD GPU (card1)".to_string(),
+                utilization: Metric::available(0.0, Unit::Percent),
+                memory_used: Metric::unavailable(Unit::Bytes),
+                memory_total: Metric::unavailable(Unit::Bytes),
+                watts: Metric::unavailable(Unit::Watts),
+                temperature: Metric::available(52.0, Unit::Celsius),
+                fan_percent: Metric::unavailable(Unit::Percent),
+            },
+        ];
         s
     }
 
@@ -6160,6 +6282,98 @@ mod tests {
         );
     }
 
+    /// The GPU panel lists one row per card with its metrics, and a card
+    /// whose memory is unavailable shows a dash there, not a zero.
+    #[test]
+    fn the_gpu_screen_lists_cards_with_metrics() {
+        let mut ui = ui_with(Some(sample_with_gpus()), None);
+        ui.screen = Screen::Gpus;
+        let rows = render(&ui, 110, 24);
+        assert!(rows.iter().any(|row| row.contains("[gpus]")));
+        assert!(rows.iter().any(|row| row.contains("NVIDIA GeForce")));
+        assert!(rows.iter().any(|row| row.contains("63%")));
+        assert!(rows.iter().any(|row| row.contains("212.5 W")));
+        assert!(rows.iter().any(|row| row.contains("4.0 GiB/10.0 GiB")));
+        assert!(rows.iter().any(|row| row.contains("71 °C")));
+        assert!(rows.iter().any(|row| row.contains("AMD GPU (card1)")));
+        let amd = rows
+            .iter()
+            .find(|row| row.contains("AMD GPU (card1)"))
+            .unwrap();
+        assert!(amd.contains(" 52 °C"));
+        assert!(amd.contains(" 0%"));
+        // Unavailable fan and memory: dashes in the columns, at their place.
+        assert!(!amd.contains("rpm"));
+        let dash_row = amd;
+        assert!(dash_row.contains("- -") || dash_row.matches('-').count() >= 2);
+        assert!(rows.iter().any(|row| row.contains("o process table")));
+    }
+
+    /// A sample without GPUs (macOS, replays, no driver) explains itself
+    /// instead of drawing an empty table.
+    #[test]
+    fn the_gpu_screen_explains_an_empty_list() {
+        let mut ui = ui_with(Some(sample()), None);
+        ui.screen = Screen::Gpus;
+        let rows = render(&ui, 80, 24);
+        assert!(
+            rows.iter().any(|row| row.contains("No discrete GPU data")),
+            "the explanation shows: {rows:?}"
+        );
+    }
+
+    /// `g` opens the GPU screen and the key closes it again; the tab strip
+    /// click on `gpus` lands on the same screen.
+    #[test]
+    fn g_toggles_the_gpu_screen() {
+        let mut ui = Ui::new();
+        ui.sample = Some(sample_with_gpus());
+        handle_key(&mut ui, KeyEvent::from(KeyCode::Char('g')));
+        assert_eq!(ui.screen, Screen::Gpus);
+        assert!(
+            render(&ui, 110, 24)
+                .iter()
+                .any(|row| row.contains("[gpus]"))
+        );
+        handle_key(&mut ui, KeyEvent::from(KeyCode::Char('g')));
+        assert_eq!(ui.screen, Screen::ProcessTable);
+        // A click on the strip's `gpus` label from another sub-screen.
+        ui.screen = Screen::Disk;
+        handle_mouse(
+            &mut ui,
+            MouseEventKind::Down(MouseButton::Left),
+            16,
+            0,
+            ratatui::layout::Rect::new(0, 0, 110, 24),
+        );
+        assert_eq!(ui.screen, Screen::Gpus);
+    }
+
+    /// The container column names the runtime and id of containerized
+    /// processes at 140 columns and stays hidden below that.
+    #[test]
+    fn the_container_column_identifies_containerized_processes() {
+        let mut boxed = sample();
+        if let Some(process) = boxed.processes.iter_mut().find(|process| process.pid == 5) {
+            process.container = Some(Container {
+                id: "4a2b1c9d8e7f".to_string(),
+                runtime: "docker".to_string(),
+            });
+        }
+        let rows = render(&ui_with(Some(boxed), None), 140, 24);
+        assert!(rows.iter().any(|row| row.contains("CTR")));
+        assert!(
+            rows.iter().any(|row| row.contains("docker 4a2b1c9d8e7f")),
+            "the container cell shows: {rows:?}"
+        );
+        assert!(
+            !render(&ui_with(Some(sample()), None), 120, 24)
+                .iter()
+                .any(|row| row.contains("CTR")),
+            "the column hides below 140 columns"
+        );
+    }
+
     /// `toggle_screen` flips between the table and the Apple Silicon screen
     /// and back; the draw dispatch follows it in both directions.
     #[test]
@@ -6852,7 +7066,7 @@ mod tests {
         let event = handle_mouse(
             &mut ui,
             MouseEventKind::Down(MouseButton::Left),
-            23, // inside "net": main(4+2) silicon(7+2) disks(5+2)=20..23
+            29, // inside "net": main(4+2) silicon(7+2) gpus(4+2) disks(5+2)=28..
             0,
             ratatui::layout::Rect::new(0, 0, 80, 24),
         );
@@ -6864,7 +7078,7 @@ mod tests {
         handle_mouse(
             &mut ui,
             MouseEventKind::Down(MouseButton::Left),
-            15, // inside "disks"
+            23, // inside "disks": main(4+2) silicon(7+2) gpus(4+2)=21..26
             0,
             ratatui::layout::Rect::new(0, 0, 80, 24),
         );

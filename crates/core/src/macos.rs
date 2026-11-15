@@ -474,6 +474,7 @@ pub(crate) fn sample_from_parts(
                 command: mac.command.clone(),
                 is_thread: false,
                 kernel_thread: false,
+                container: None,
                 io: ProcessIo::default(),
             }
         })
@@ -526,6 +527,10 @@ pub(crate) fn sample_from_parts(
         net: Vec::new(),
         sensors: Sensors::default(),
         apple_silicon: AppleSilicon::default(),
+        // macOS's integrated GPU is reported on the SoC screen; this
+        // Sample constructor predates that wiring and lists no discrete
+        // cards.
+        gpus: Vec::new(),
         pressure: None,
     })
 }
