@@ -316,6 +316,9 @@ pub fn sample_from_fixture(dir: &Path) -> Result<Sample, FixtureSampleError> {
         dir.file_name()
             .and_then(|name| name.to_str())
             .unwrap_or("unknown"),
+        // Recorded macOS fixtures do not carry the system string yet;
+        // the header omits it rather than guessing.
+        "",
         fixture.manifest().captured_at_unix * 1000,
         Vec::new(),
     )
@@ -365,6 +368,7 @@ pub(crate) fn sample_from_parts(
     procs: Vec<MacProcess>,
     memsize: u64,
     hostname: &str,
+    system: &str,
     timestamp_ms: u64,
     cpu_busy: Vec<f64>,
 ) -> Result<Sample, SourceError> {
@@ -428,6 +432,7 @@ pub(crate) fn sample_from_parts(
     Ok(Sample {
         timestamp_ms,
         hostname: hostname.to_string(),
+        system: system.to_string(),
         cpu: Cpu {
             busy_percent: if cpu_busy.len() == cores.len() {
                 cpu_busy
@@ -441,6 +446,9 @@ pub(crate) fn sample_from_parts(
             total: Metric::available(total_mem, Unit::Bytes),
             used: Metric::available((vm.wired + vm.active + vm.compressed) as f64, Unit::Bytes),
             free: Metric::available(vm.free as f64, Unit::Bytes),
+            buffers: Metric::unavailable(Unit::Bytes),
+            shared: Metric::unavailable(Unit::Bytes),
+            cache: Metric::unavailable(Unit::Bytes),
             swap_total: Metric::available(swap.total as f64, Unit::Bytes),
             swap_used: Metric::available(swap.used as f64, Unit::Bytes),
             compressed: Metric::available(vm.compressed as f64, Unit::Bytes),

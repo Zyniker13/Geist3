@@ -121,6 +121,9 @@ pub(crate) struct ProcMem {
     pub(crate) total: u64,
     pub(crate) available: u64,
     pub(crate) free: Option<u64>,
+    pub(crate) buffers: Option<u64>,
+    pub(crate) shared: Option<u64>,
+    pub(crate) cache: Option<u64>,
     pub(crate) swap_total: u64,
     pub(crate) swap_free: u64,
 }
@@ -153,6 +156,9 @@ fn parse_proc_meminfo(text: &str) -> Option<ProcMem> {
                 seen_available = true;
             }
             "MemFree" => mem.free = Some(kib * 1024),
+            "Buffers" => mem.buffers = Some(kib * 1024),
+            "Shmem" => mem.shared = Some(kib * 1024),
+            "Cached" => mem.cache = Some(kib * 1024),
             "SwapTotal" => mem.swap_total = kib * 1024,
             "SwapFree" => mem.swap_free = kib * 1024,
             _ => {}
@@ -179,6 +185,18 @@ fn parse_proc_loadavg(text: &str) -> Option<[f64; 3]> {
 /// Parses the first field of `/proc/uptime`, in seconds.
 fn parse_proc_uptime(text: &str) -> Option<f64> {
     text.split_whitespace().next()?.parse().ok()
+}
+
+/// Builds the `Sample.system` string from `/proc/sys/kernel/osrelease`
+/// text: "Linux <release>". Empty when the file is absent, so recorded
+/// fixtures that predate the field stay honest instead of guessing.
+fn system_text(osrelease: &str) -> String {
+    let release = osrelease.trim();
+    if release.is_empty() {
+        String::new()
+    } else {
+        format!("Linux {release}")
+    }
 }
 
 /// Parses `/proc/mounts` into a map of device name → mount point.
@@ -532,6 +550,18 @@ fn memory_from(mem: ProcMem) -> Memory {
             Some(free) => Metric::available(free as f64, Unit::Bytes),
             None => Metric::unavailable(Unit::Bytes),
         },
+        buffers: match mem.buffers {
+            Some(buffers) => Metric::available(buffers as f64, Unit::Bytes),
+            None => Metric::unavailable(Unit::Bytes),
+        },
+        shared: match mem.shared {
+            Some(shared) => Metric::available(shared as f64, Unit::Bytes),
+            None => Metric::unavailable(Unit::Bytes),
+        },
+        cache: match mem.cache {
+            Some(cache) => Metric::available(cache as f64, Unit::Bytes),
+            None => Metric::unavailable(Unit::Bytes),
+        },
         swap_total: Metric::available(mem.swap_total as f64, Unit::Bytes),
         swap_used: Metric::available(
             mem.swap_total.saturating_sub(mem.swap_free) as f64,
@@ -807,6 +837,11 @@ pub fn sample_from_fixture(dir: &Path) -> Result<Sample, FixtureSampleError> {
             .and_then(|name| name.to_str())
             .unwrap_or("unknown")
             .to_string(),
+        system: system_text(
+            &fixture
+                .entry_text("proc-sys-kernel-osrelease")
+                .unwrap_or_default(),
+        ),
         cpu: Cpu {
             busy_percent: vec![0.0; stat.cores.len()],
             cores: stat.cores,
@@ -848,6 +883,7 @@ mod live {
         io_rates, memory_from, parse_hwmon, parse_pid_io, parse_pid_stat, parse_pid_status,
         parse_power_supply, parse_proc_diskstats, parse_proc_loadavg, parse_proc_meminfo,
         parse_proc_mounts, parse_proc_net_dev, parse_proc_stat, parse_proc_uptime, process_row,
+        system_text,
     };
     use crate::collector::{CollectError, Collector};
     use crate::model::{
@@ -1061,6 +1097,9 @@ mod live {
             Ok(Sample {
                 timestamp_ms,
                 hostname,
+                system: system_text(
+                    &fs::read_to_string("/proc/sys/kernel/osrelease").unwrap_or_default(),
+                ),
                 cpu: Cpu {
                     busy_percent: per_core_percent,
                     cores: stat.cores,
@@ -1215,6 +1254,9 @@ mod tests {
             total: 1000 * 1024,
             available: 800 * 1024,
             free: Some(700 * 1024),
+            buffers: Some(30 * 1024),
+            shared: Some(10 * 1024),
+            cache: Some(200 * 1024),
             swap_total: 100 * 1024,
             swap_free: 60 * 1024,
         };

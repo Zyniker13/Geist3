@@ -130,6 +130,11 @@ pub struct Sample {
     /// Milliseconds since the Unix epoch.
     pub timestamp_ms: u64,
     pub hostname: String,
+    /// The operating system name and kernel version, when the platform
+    /// reports it, such as "Linux 6.8.0-45" or "Darwin 24.0.0". Empty
+    /// for samples recorded before this field existed.
+    #[serde(default)]
+    pub system: String,
     pub cpu: Cpu,
     pub memory: Memory,
     /// 1, 5 and 15 minute load averages.
@@ -269,6 +274,12 @@ pub struct Memory {
     pub total: Metric,
     pub used: Metric,
     pub free: Metric,
+    /// Kernel buffer cache (Linux `Buffers`); unavailable on macOS.
+    pub buffers: Metric,
+    /// Shared memory (Linux `Shmem`); unavailable on macOS.
+    pub shared: Metric,
+    /// Page cache (Linux `Cached`); unavailable on macOS.
+    pub cache: Metric,
     pub swap_total: Metric,
     pub swap_used: Metric,
     /// macOS compressed memory; unavailable elsewhere.
@@ -386,6 +397,7 @@ mod tests {
         let sample = Sample {
             timestamp_ms: 1_700_000_000_000,
             hostname: "host-a".into(),
+            system: "Linux 6.8.0-test".into(),
             cpu: Cpu {
                 cores: vec![CpuTimes {
                     user: 1.5,
@@ -399,6 +411,9 @@ mod tests {
                 total: Metric::available(16.0 * 1024.0 * 1024.0 * 1024.0, Unit::Bytes),
                 used: Metric::available(8.0 * 1024.0 * 1024.0 * 1024.0, Unit::Bytes),
                 free: Metric::available(8.0 * 1024.0 * 1024.0 * 1024.0, Unit::Bytes),
+                buffers: Metric::available(340.0 * 1024.0 * 1024.0, Unit::Bytes),
+                shared: Metric::available(89.0 * 1024.0 * 1024.0, Unit::Bytes),
+                cache: Metric::available(2.0 * 1024.0 * 1024.0 * 1024.0, Unit::Bytes),
                 swap_total: Metric::unavailable(Unit::Bytes),
                 swap_used: Metric::unavailable(Unit::Bytes),
                 compressed: Metric::unavailable(Unit::Bytes),

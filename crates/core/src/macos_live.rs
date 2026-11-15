@@ -97,11 +97,26 @@ impl Collector for MacOsCollector {
             cpu_by_pid.insert(proc.pid, percent);
         }
 
-        let mut sample = sample_from_parts(host, procs, memsize, &hostname, timestamp_ms, cpu_busy)
-            .map_err(|source| CollectError::Unavailable {
-                origin: source.origin,
-                what: source.what,
-            })?;
+        let system = match (
+            crate::capture_macos::sysctl_text("kern.ostype"),
+            crate::capture_macos::sysctl_text("kern.osrelease"),
+        ) {
+            (Some(ostype), Some(release)) => format!("{ostype} {release}"),
+            _ => String::new(),
+        };
+        let mut sample = sample_from_parts(
+            host,
+            procs,
+            memsize,
+            &hostname,
+            &system,
+            timestamp_ms,
+            cpu_busy,
+        )
+        .map_err(|source| CollectError::Unavailable {
+            origin: source.origin,
+            what: source.what,
+        })?;
         // Chip identity and core-type counts come straight from sysctls;
         // the power collector fills current/average/peak power and the
         // history window on top.
