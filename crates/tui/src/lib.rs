@@ -151,6 +151,18 @@ pub enum MenuKind {
     Affinity,
 }
 
+/// Which pane of the setup screen (F2) is showing: the main options or
+/// one of the editors it opens.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SetupPane {
+    /// The main options list.
+    #[default]
+    Main,
+    /// The meter-layout editor: which meters the header shows, in which
+    /// column, in which order.
+    Meters,
+}
+
 /// Which detail read the overlay shows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DetailKind {
@@ -278,6 +290,9 @@ pub struct Ui {
     pub config: Config,
     /// The setup screen's selected row.
     pub setup_select: usize,
+    /// Which setup pane is open: the main options or the meter-layout
+    /// editor.
+    pub setup_pane: SetupPane,
     /// Where the setup screen (F2) returns to when it closes.
     pub setup_return: Screen,
     /// Pids seen in the previous sample, so a just-arrived process can
@@ -301,6 +316,12 @@ pub struct Ui {
     pub mem_history: Vec<f64>,
     /// Recent swap used-ratios, for the graph meter style.
     pub swap_history: Vec<f64>,
+    /// Recent load (first average over the core count), for the graph
+    /// style of the load meter.
+    pub load_history: Vec<f64>,
+    /// Recent battery charge ratios, for the graph style of the battery
+    /// meter.
+    pub battery_history: Vec<f64>,
     /// Paused: the picture is frozen and no new samples arrive, but the
     /// keys (and actions) keep working.
     pub paused: bool,
@@ -340,10 +361,13 @@ impl Default for Ui {
             cpu_history: Vec::new(),
             mem_history: Vec::new(),
             swap_history: Vec::new(),
+            load_history: Vec::new(),
+            battery_history: Vec::new(),
             notice: None,
             screen: Screen::ProcessTable,
             config: Config::default(),
             setup_select: 0,
+            setup_pane: SetupPane::Main,
             setup_return: Screen::ProcessTable,
             seen: std::collections::BTreeSet::new(),
             paused: false,
@@ -435,10 +459,12 @@ impl Ui {
         }
     }
 
-    /// Open the setup screen (F2), remembering where to return to.
+    /// Open the setup screen (F2), remembering where to return to. The
+    /// main pane shows first; the editors open from it.
     pub fn open_setup(&mut self) {
         self.setup_return = self.screen;
         self.screen = Screen::Setup;
+        self.setup_pane = SetupPane::Main;
     }
 
     /// Leave the setup screen and put the save outcome in the status line,
@@ -451,32 +477,114 @@ impl Ui {
         });
     }
 
-    /// The setup screen's row count, for the wrapping navigation.
-    const SETUP_ROWS: usize = 3;
+    /// The setup main pane's row count.
+    const SETUP_ROWS: usize = 7;
+
+    /// The current pane's row count, for the wrapping navigation.
+    fn setup_rows(&self) -> usize {
+        match self.setup_pane {
+            SetupPane::Main => Self::SETUP_ROWS,
+            SetupPane::Meters => config::METER_KINDS.len(),
+        }
+    }
 
     /// Move the setup selection down, wrapping at the end.
     pub fn setup_next(&mut self) {
-        self.setup_select = (self.setup_select + 1) % Self::SETUP_ROWS;
+        self.setup_select = (self.setup_select + 1) % self.setup_rows();
     }
 
     /// Move the setup selection up, wrapping at the top.
     pub fn setup_prev(&mut self) {
-        self.setup_select = (self.setup_select + Self::SETUP_ROWS - 1) % Self::SETUP_ROWS;
+        self.setup_select = (self.setup_select + self.setup_rows() - 1) % self.setup_rows();
     }
 
-    /// Toggle the selected setup option.
+    /// Toggle the selected setup option; on the Meters pane, Enter
+    /// cycles the cursor's meter's placement (hidden → left → right →
+    /// hidden).
     pub fn setup_toggle(&mut self) {
-        match self.setup_select {
-            0 => {
-                self.config.theme = match self.config.theme {
-                    Theme::Color => Theme::Mono,
-                    Theme::Mono => Theme::Color,
+        match self.setup_pane {
+            SetupPane::Main => match self.setup_select {
+                0 => {
+                    self.config.theme = match self.config.theme {
+                        Theme::Color => Theme::Mono,
+                        Theme::Mono => Theme::Color,
+                    }
+                }
+                1 => self.config.start_in_tree = !self.config.start_in_tree,
+                2 => self.config.meter_style = self.config.meter_style.next(),
+                3 => self.config.show_io = !self.config.show_io,
+                4 => self.config.show_psi = !self.config.show_psi,
+                5 => self.config.show_temps = !self.config.show_temps,
+                6 => {
+                    self.setup_pane = SetupPane::Meters;
+                    self.setup_select = 0;
+                }
+                _ => {}
+            },
+            SetupPane::Meters => {
+                let kind = config::METER_KINDS[self.setup_select];
+                let placed = self
+                    .config
+                    .meters
+                    .iter()
+                    .position(|meter| meter.kind == kind);
+                match placed {
+                    None => self.config.meters.push(config::MeterChoice {
+                        kind,
+                        side: config::MeterSide::Left,
+                    }),
+                    Some(at) => {
+                        if self.config.meters[at].side == config::MeterSide::Left {
+                            self.config.meters[at].side = config::MeterSide::Right;
+                        } else {
+                            self.config.meters.remove(at);
+                            // Keep the cursor on the same catalog row.
+                            self.setup_select = config::METER_KINDS
+                                .iter()
+                                .position(|entry| *entry == kind)
+                                .unwrap_or(0);
+                        }
+                    }
                 }
             }
-            1 => self.config.start_in_tree = !self.config.start_in_tree,
-            2 => self.config.meter_style = self.config.meter_style.next(),
-            _ => {}
         }
+    }
+
+    /// Move the cursor's placed meter one row earlier (earlier = -1) or
+    /// later within its side; a hidden meter does not move.
+    pub fn setup_move(&mut self, direction: i32) {
+        if self.setup_pane != SetupPane::Meters {
+            return;
+        }
+        let kind = config::METER_KINDS[self.setup_select];
+        let Some(at) = self
+            .config
+            .meters
+            .iter()
+            .position(|meter| meter.kind == kind)
+        else {
+            return;
+        };
+        let side = self.config.meters[at].side;
+        // The neighbors on the same side, in list order.
+        let same_side: Vec<usize> = self
+            .config
+            .meters
+            .iter()
+            .enumerate()
+            .filter(|(_, meter)| meter.side == side)
+            .map(|(index, _)| index)
+            .collect();
+        let position = same_side
+            .iter()
+            .position(|index| *index == at)
+            .expect("the meter is on this side");
+        let target = position as i64 + i64::from(direction);
+        if !(0..same_side.len() as i64).contains(&target) {
+            return;
+        }
+        let target = same_side[target as usize];
+        self.config.meters.swap(at, target);
     }
 
     /// Open or close the name-filter prompt. Closing discards the pattern;
@@ -1199,6 +1307,15 @@ impl Ui {
         push(&mut self.mem_history, mem_ratio);
         let (swap_ratio, _) = swap_gauge(&sample.memory);
         push(&mut self.swap_history, swap_ratio);
+        if let Some(battery) = &sample.sensors.battery {
+            if battery.percent.available && battery.percent.value >= 0.0 {
+                push(&mut self.battery_history, battery.percent.value / 100.0);
+            }
+        }
+        if cpu_percent_mean(sample).is_some() {
+            let cores = sample.cpu.busy_percent.len().max(1) as f64;
+            push(&mut self.load_history, sample.load_avg[0] / cores);
+        }
     }
 }
 
@@ -1309,7 +1426,14 @@ fn handle_key(ui: &mut Ui, key: KeyEvent) -> bool {
         // Enter toggle the selected option; everything else
         // — including the table keys — does nothing.
         KeyCode::Esc if ui.screen == Screen::Setup => {
-            ui.finish_setup(ui.config.save());
+            // In an editor pane Esc returns to the main pane; from the
+            // main pane it saves and closes.
+            if ui.setup_pane == SetupPane::Main {
+                ui.finish_setup(ui.config.save());
+            } else {
+                ui.setup_pane = SetupPane::Main;
+                ui.setup_select = 0;
+            }
         }
         KeyCode::F(2) if ui.screen == Screen::Setup => {
             ui.finish_setup(ui.config.save());
@@ -1323,6 +1447,8 @@ fn handle_key(ui: &mut Ui, key: KeyEvent) -> bool {
         KeyCode::Enter | KeyCode::Char(' ') if ui.screen == Screen::Setup => {
             ui.setup_toggle();
         }
+        KeyCode::Char(',') if ui.screen == Screen::Setup => ui.setup_move(-1),
+        KeyCode::Char('.') if ui.screen == Screen::Setup => ui.setup_move(1),
         _ if ui.screen == Screen::Setup => {}
         KeyCode::Tab => ui.cycle_sort(),
         // While the filter prompt is open the keys edit it:
@@ -2224,7 +2350,7 @@ fn help_lines() -> Vec<Line<'static>> {
         ("F1", "this help; any key closes it"),
         ("Z", "pause/resume updates"),
         ("Ctrl-L", "redraw the screen"),
-        ("F2", "setup (theme, tree view; saved)"),
+        ("F2", "setup (theme, tree view, meters; saved)"),
         ("F3", "search (Esc/Enter close, F3 repeats)"),
         ("F4", "filter by name"),
         ("u", "filter by user"),
@@ -2268,11 +2394,13 @@ fn draw_help(frame: &mut Frame, _ui: &Ui, area: ratatui::layout::Rect) {
     frame.render_widget(help, rect);
 }
 
-/// True when the sample carries any sensor reading worth a header row.
-///
-/// Battery is deliberately absent: nothing renders it yet, and a row must
-/// never appear empty.
+/// Whether the sensors row shows: the config wants it, no temperature
+/// meter is placed, and the sample carries something (temps, fans or
+/// power draw).
 fn sensors_present(ui: &Ui) -> bool {
+    if !ui.config.show_temps || meter_placed(ui, config::MeterKind::Temps) {
+        return false;
+    }
     ui.sample.as_ref().is_some_and(|sample| {
         let sensors = &sample.sensors;
         !sensors.temps.is_empty()
@@ -2282,12 +2410,42 @@ fn sensors_present(ui: &Ui) -> bool {
     })
 }
 
-/// The header's row count: title, cpu, memory, info and the status
-/// bar, plus the disk/network I/O line when the sample carries
-/// rates, plus the pressure line when it carries PSI, plus the
-/// sensors line when it carries sensors.
+/// The placed meters, split by column: the left column's kinds then the
+/// right column's, each in the layout's list order.
+fn meter_columns(ui: &Ui) -> (Vec<config::MeterKind>, Vec<config::MeterKind>) {
+    let mut left = Vec::new();
+    let mut right = Vec::new();
+    for meter in &ui.config.meters {
+        match meter.side {
+            config::MeterSide::Left => left.push(meter.kind),
+            config::MeterSide::Right => right.push(meter.kind),
+        }
+    }
+    (left, right)
+}
+
+/// How many meter rows the layout needs below the CPU row: the longer
+/// of the two columns.
+fn meter_rows(ui: &Ui) -> u16 {
+    let (left, right) = meter_columns(ui);
+    left.len().max(right.len()) as u16
+}
+
+/// Is this meter kind placed in the layout? Placing io, pressure or
+/// temps as a meter replaces its automatic line (the same data must not
+/// show twice).
+fn meter_placed(ui: &Ui, kind: config::MeterKind) -> bool {
+    ui.config.meters.iter().any(|meter| meter.kind == kind)
+}
+
+/// The header's row count: title, cpu, one row per layout meter pair,
+/// info and the status bar, plus the disk/network I/O line when the
+/// sample carries rates and the config wants it, plus the pressure line
+/// and the sensors line under the same rule. The default layout's one
+/// meter row is the memory/swap row the header always drew.
 fn header_height(ui: &Ui) -> u16 {
-    5 + u16::from(io_line(ui).is_some())
+    4 + meter_rows(ui)
+        + u16::from(io_line(ui).is_some())
         + u16::from(psi_line(ui).is_some())
         + u16::from(sensors_present(ui))
 }
@@ -2296,11 +2454,15 @@ fn draw_header(frame: &mut Frame, ui: &Ui, area: ratatui::layout::Rect) {
     let with_sensors = sensors_present(ui);
     let io = io_line(ui);
     let psi = psi_line(ui);
+    let (left, right) = meter_columns(ui);
+    let meter_count = left.len().max(right.len());
     let mut constraints = vec![
         Constraint::Length(1), // title
         Constraint::Length(1), // cpu
-        Constraint::Length(1), // memory
     ];
+    for _ in 0..meter_count {
+        constraints.push(Constraint::Length(1)); // one layout row
+    }
     if io.is_some() {
         constraints.push(Constraint::Length(1)); // io rates
     }
@@ -2315,8 +2477,22 @@ fn draw_header(frame: &mut Frame, ui: &Ui, area: ratatui::layout::Rect) {
     let rows = Layout::vertical(constraints).split(area);
     frame.render_widget(Paragraph::new(title_line(ui)), rows[0]);
     draw_cpu_row(frame, ui, rows[1]);
-    draw_memory_row(frame, ui, rows[2]);
-    let mut next = 3;
+    // Each layout row pairs the left column's meter with the right
+    // column's (60%/40%, the split the built-in memory/swap row always
+    // used); a row whose pair is missing on one side renders the meter
+    // it has in its own slot and leaves the other empty.
+    let mut next = 2;
+    for index in 0..meter_count {
+        let halves = Layout::horizontal([Constraint::Percentage(60), Constraint::Percentage(40)])
+            .split(rows[next]);
+        if let Some(kind) = left.get(index) {
+            draw_meter_cell(frame, ui, halves[0], *kind);
+        }
+        if let Some(kind) = right.get(index) {
+            draw_meter_cell(frame, ui, halves[1], *kind);
+        }
+        next += 1;
+    }
     if let Some(io) = io {
         frame.render_widget(Paragraph::new(io), rows[next]);
         next += 1;
@@ -2339,6 +2515,98 @@ fn draw_header(frame: &mut Frame, ui: &Ui, area: ratatui::layout::Rect) {
     frame.render_widget(status, rows[next]);
 }
 
+/// Render one placed meter in its slot. Gauge kinds use the configured
+/// meter style and their own history; the text kinds (io, pressure,
+/// temps) render as plain text — their data has no natural 0–100 scale,
+/// and pretending otherwise would draw a meaningless bar.
+fn draw_meter_cell(
+    frame: &mut Frame,
+    ui: &Ui,
+    area: ratatui::layout::Rect,
+    kind: config::MeterKind,
+) {
+    let Some(sample) = &ui.sample else {
+        return;
+    };
+    match kind {
+        config::MeterKind::Memory => {
+            let (ratio, label) = memory_gauge(&sample.memory, area.width as usize);
+            render_meter(
+                frame,
+                ui,
+                area,
+                ratio,
+                label,
+                Style::new().cyan(),
+                &ui.mem_history,
+            );
+        }
+        config::MeterKind::Swap => {
+            let (ratio, label) = swap_gauge(&sample.memory);
+            render_meter(
+                frame,
+                ui,
+                area,
+                ratio,
+                label,
+                Style::new().yellow(),
+                &ui.swap_history,
+            );
+        }
+        config::MeterKind::Load => {
+            // The bar scales the one-minute average against the core
+            // count: 1.0 is every core busy.
+            let cores = sample.cpu.busy_percent.len().max(1) as f64;
+            let ratio = (sample.load_avg[0] / cores).clamp(0.0, 1.0);
+            let label = format!(
+                "load {:.2} {:.2} {:.2}",
+                sample.load_avg[0], sample.load_avg[1], sample.load_avg[2]
+            );
+            render_meter(
+                frame,
+                ui,
+                area,
+                ratio,
+                label,
+                Style::new().blue(),
+                &ui.load_history,
+            );
+        }
+        config::MeterKind::Battery => match &sample.sensors.battery {
+            Some(battery) if battery.percent.available => {
+                let ratio = (battery.percent.value / 100.0).clamp(0.0, 1.0);
+                let label = format!(
+                    "{} {}",
+                    battery_percent_text(&battery.percent),
+                    battery_state_text(battery.state)
+                );
+                render_meter(
+                    frame,
+                    ui,
+                    area,
+                    ratio,
+                    label,
+                    Style::new().green(),
+                    &ui.battery_history,
+                );
+            }
+            _ => frame.render_widget(Paragraph::new("battery n/a"), area),
+        },
+        config::MeterKind::Io => {
+            let text = io_text(ui).unwrap_or_else(|| "(no io rates yet)".to_string());
+            frame.render_widget(Paragraph::new(text), area);
+        }
+        config::MeterKind::Psi => {
+            let text = psi_text(ui).unwrap_or_else(|| "(no pressure data)".to_string());
+            frame.render_widget(Paragraph::new(text), area);
+        }
+        config::MeterKind::Temps => {
+            let text = sensors_text(ui).unwrap_or_else(|| "(no sensors)".to_string());
+            frame.render_widget(Paragraph::new(text), area);
+        }
+    }
+}
+
 /// Readable per-second rate for the I/O meter line: `1.2 MiB/s`-style,
 /// the same units as the memory labels but per second.
 fn per_second_text(rate: f64) -> String {
@@ -2353,12 +2621,12 @@ fn per_second_text(rate: f64) -> String {
     }
 }
 
-/// The disk and network I/O meter line: rates the live Linux collector
+/// The disk and network I/O meter text: rates the live Linux collector
 /// measured between samples (`r` read, `w` written, `r` received,
 /// `t` transmitted). An entry without a rate — a fixture replay or a
 /// collector's first sample — shows nothing for that device, and the
-/// line is absent entirely while nothing has a rate yet.
-fn io_line(ui: &Ui) -> Option<Line<'static>> {
+/// text is absent entirely while nothing has a rate yet.
+fn io_text(ui: &Ui) -> Option<String> {
     let sample = ui.sample.as_ref()?;
     let mut parts: Vec<String> = Vec::new();
     for disk in &sample.disks {
@@ -2386,16 +2654,26 @@ fn io_line(ui: &Ui) -> Option<Line<'static>> {
     if parts.is_empty() {
         return None;
     }
-    Some(Line::from(format!("io  {}", parts.join("  ·  "))))
+    Some(format!("io  {}", parts.join("  ·  ")))
 }
 
-/// The pressure stall (PSI) meter line, Linux only: the share of wall
+/// The automatic I/O line: only when the config wants it and no io
+/// meter is placed — placing one replaces the line, so the same rates
+/// never show twice.
+fn io_line(ui: &Ui) -> Option<Line<'static>> {
+    if !ui.config.show_io || meter_placed(ui, config::MeterKind::Io) {
+        return None;
+    }
+    io_text(ui).map(Line::from)
+}
+
+/// The pressure stall (PSI) meter text, Linux only: the share of wall
 /// time tasks stalled waiting for cpu, memory and i/o (the 10-second
 /// averages; `s` = some tasks stalled, `f` = all stalled). The kernel
 /// reports no `full` for cpu. Absent when the sample carries no
 /// pressure — macOS collectors, replays of older fixtures, kernels
 /// with PSI disabled.
-fn psi_line(ui: &Ui) -> Option<Line<'static>> {
+fn psi_text(ui: &Ui) -> Option<String> {
     let pressure = ui.sample.as_ref()?.pressure.as_ref()?;
     let kind = |psi: &Psi| {
         let mut text = format!("s {:.1}%", psi.some.ten);
@@ -2404,45 +2682,111 @@ fn psi_line(ui: &Ui) -> Option<Line<'static>> {
         }
         text
     };
-    Some(Line::from(format!(
+    Some(format!(
         "psi  cpu {}  ·  mem {}  ·  io {}",
         kind(&pressure.cpu),
         kind(&pressure.memory),
         kind(&pressure.io)
-    )))
+    ))
+}
+
+/// The automatic pressure line: only when the config wants it and no
+/// pressure meter is placed — placing one replaces the line.
+fn psi_line(ui: &Ui) -> Option<Line<'static>> {
+    if !ui.config.show_psi || meter_placed(ui, config::MeterKind::Psi) {
+        return None;
+    }
+    psi_text(ui).map(Line::from)
 }
 
 /// The setup screen (F2): the saved options, edited in place and saved to
 /// the config file when the screen closes.
 fn draw_setup(frame: &mut Frame, ui: &Ui, area: ratatui::layout::Rect) {
-    let mut lines = vec![
-        Line::from(""),
-        option_row(
-            ui,
-            0,
-            "Theme",
-            match ui.config.theme {
-                Theme::Color => "color",
-                Theme::Mono => "mono",
-            },
-        ),
-        option_row(
-            ui,
-            1,
-            "Start in tree view",
-            if ui.config.start_in_tree { "yes" } else { "no" },
-        ),
-        option_row(ui, 2, "Meter style", ui.config.meter_style.name()),
-        Line::from(""),
-        Line::from("j/k move   Space/Enter toggle   Esc/F2 saves and closes"),
-        Line::from(""),
-    ];
+    let mut lines = vec![Line::from("")];
+    match ui.setup_pane {
+        SetupPane::Main => {
+            lines.push(option_row(
+                ui,
+                0,
+                "Theme",
+                match ui.config.theme {
+                    Theme::Color => "color",
+                    Theme::Mono => "mono",
+                },
+            ));
+            lines.push(option_row(
+                ui,
+                1,
+                "Start in tree view",
+                if ui.config.start_in_tree { "yes" } else { "no" },
+            ));
+            lines.push(option_row(
+                ui,
+                2,
+                "Meter style",
+                ui.config.meter_style.name(),
+            ));
+            lines.push(option_row(
+                ui,
+                3,
+                "Disk and network I/O",
+                if ui.config.show_io { "shown" } else { "hidden" },
+            ));
+            lines.push(option_row(
+                ui,
+                4,
+                "Pressure (PSI)",
+                if ui.config.show_psi {
+                    "shown"
+                } else {
+                    "hidden"
+                },
+            ));
+            lines.push(option_row(
+                ui,
+                5,
+                "Sensors row",
+                if ui.config.show_temps {
+                    "shown"
+                } else {
+                    "hidden"
+                },
+            ));
+            lines.push(option_row(ui, 6, "Meter layout …", ""));
+            lines.push(Line::from(""));
+            lines.push(Line::from(
+                "j/k move   Space/Enter toggle   Esc/F2 saves and closes",
+            ));
+        }
+        SetupPane::Meters => {
+            // The layout editor: one row per meter slot, <left | right>
+            // markers showing where the cursor's placement would land.
+            for (index, kind) in config::METER_KINDS.iter().enumerate() {
+                let placed = ui.config.meters.iter().find(|meter| meter.kind == *kind);
+                let cell = match placed.map(|meter| meter.side) {
+                    Some(config::MeterSide::Left) => "<left  ",
+                    Some(config::MeterSide::Right) => " <right",
+                    None => "   ·   ",
+                };
+                lines.push(option_row(ui, index, kind.name(), cell));
+            }
+            lines.push(Line::from(""));
+            lines.push(Line::from(
+                "j/k move   Enter toggles left/right/off   ,/. moves the row   Esc back",
+            ));
+        }
+    }
+    lines.push(Line::from(""));
     lines.push(match config::config_path() {
         Some(path) => Line::from(format!("Config file: {}", config::display_path(&path))),
         None => Line::from("Config file: none (no home directory)"),
     });
+    let title = match ui.setup_pane {
+        SetupPane::Main => "Setup",
+        SetupPane::Meters => "Setup — meter layout",
+    };
     frame.render_widget(
-        Paragraph::new(lines).block(Block::default().borders(Borders::ALL).title("Setup")),
+        Paragraph::new(lines).block(Block::default().borders(Borders::ALL).title(title)),
         area,
     );
 }
@@ -2786,34 +3130,6 @@ fn core_bar_line(
     Line::from(spans)
 }
 
-fn draw_memory_row(frame: &mut Frame, ui: &Ui, area: ratatui::layout::Rect) {
-    let Some(sample) = &ui.sample else {
-        return;
-    };
-    let halves =
-        Layout::horizontal([Constraint::Percentage(60), Constraint::Percentage(40)]).split(area);
-    let (ratio, label) = memory_gauge(&sample.memory, halves[0].width as usize);
-    render_meter(
-        frame,
-        ui,
-        halves[0],
-        ratio,
-        label,
-        Style::new().cyan(),
-        &ui.mem_history,
-    );
-    let (ratio, label) = swap_gauge(&sample.memory);
-    render_meter(
-        frame,
-        ui,
-        halves[1],
-        ratio,
-        label,
-        Style::new().yellow(),
-        &ui.swap_history,
-    );
-}
-
 /// The memory gauge: the used/total ratio and the label for the gauge's
 /// width. The breakdown joins the label only as far as the width allows
 /// (keeping a few columns for the bar to show itself), so a narrow
@@ -2952,10 +3268,8 @@ fn uptime_text(metric: &Metric) -> String {
 ///
 /// Renders the collector's own labels verbatim; the row only exists when
 /// there is something to show, so an empty list never draws an empty line.
-fn sensors_line(ui: &Ui) -> Line<'static> {
-    let Some(sample) = &ui.sample else {
-        return Line::from("");
-    };
+fn sensors_text(ui: &Ui) -> Option<String> {
+    let sample = ui.sample.as_ref()?;
     let mut parts: Vec<String> = Vec::new();
     for temp in sample.sensors.temps.iter().take(3) {
         if temp.celsius.available {
@@ -2973,7 +3287,15 @@ fn sensors_line(ui: &Ui) -> Line<'static> {
     if sample.sensors.gpu_watts.available {
         parts.push(format!("GPU {:.1}W", sample.sensors.gpu_watts.value));
     }
-    Line::from(parts.join("  "))
+    if parts.is_empty() {
+        None
+    } else {
+        Some(parts.join("  "))
+    }
+}
+
+fn sensors_line(ui: &Ui) -> Line<'static> {
+    Line::from(sensors_text(ui).unwrap_or_default())
 }
 
 /// The status line's items, state first and the function-bar hints last;
@@ -5786,7 +6108,11 @@ mod tests {
         ui.setup_prev();
         assert_eq!(ui.setup_select, 0);
         ui.setup_prev();
-        assert_eq!(ui.setup_select, 2, "moving up from the first row wraps");
+        assert_eq!(
+            ui.setup_select,
+            Ui::SETUP_ROWS - 1,
+            "moving up from the first row wraps"
+        );
     }
 
     /// The setup screen shows the three options with their values, the
@@ -5831,6 +6157,304 @@ mod tests {
         assert!(
             rows.iter()
                 .any(|row| row.contains("Theme") && row.contains("mono"))
+        );
+    }
+
+    /// The meter layout renders the placed meters: the left column's
+    /// meters stack in separate rows, and a right-column meter lands on
+    /// the same row as the left column's meter at that row
+    /// (docs/parity.md, header meters).
+    #[test]
+    fn the_meter_editor_places_meters_in_both_columns() {
+        let mut ui = ui_with(Some(sample()), None);
+        ui.config.meters = vec![
+            config::MeterChoice {
+                kind: config::MeterKind::Memory,
+                side: config::MeterSide::Left,
+            },
+            config::MeterChoice {
+                kind: config::MeterKind::Load,
+                side: config::MeterSide::Left,
+            },
+            config::MeterChoice {
+                kind: config::MeterKind::Swap,
+                side: config::MeterSide::Right,
+            },
+        ];
+        let rows = render(&ui, 100, 24);
+        // The first layout row pairs memory (left) with swap (right).
+        let pair = rows
+            .iter()
+            .find(|row| row.contains("6.0 GiB / 16.0 GiB"))
+            .expect("memory row");
+        assert!(
+            pair.contains("1.0 GiB / 4.0 GiB"),
+            "swap on the same row: {pair:?}"
+        );
+        // The load meter takes the next row, on its own.
+        let load = rows
+            .iter()
+            .find(|row| row.contains("load 0.50 0.40 0.30"))
+            .expect("load row");
+        assert!(!load.contains("6.0 GiB"), "its own row: {load:?}");
+    }
+
+    /// Placing an io meter hides the automatic io line and draws the
+    /// same rates as a header cell in the right column; removing the
+    /// meter brings the line back — the same data never shows twice.
+    #[test]
+    fn a_placed_io_meter_replaces_the_io_line_and_back() {
+        let mut ui = ui_with(Some(sample_with_disks()), None);
+        let before = render(&ui, 120, 24);
+        let line_row = before
+            .iter()
+            .find(|row| row.contains("io  sda"))
+            .expect("automatic io line");
+        assert_eq!(
+            line_row.find("io  sda"),
+            Some(0),
+            "the automatic line sits at column 0"
+        );
+        // Keep the default meters and add the io meter to the right
+        // column.
+        ui.config.meters.push(config::MeterChoice {
+            kind: config::MeterKind::Io,
+            side: config::MeterSide::Right,
+        });
+        let rows = render(&ui, 120, 24);
+        let cell_row = rows
+            .iter()
+            .find(|row| row.contains("io  sda"))
+            .expect("io meter cell");
+        assert_eq!(
+            cell_row.find("io  sda"),
+            Some(72),
+            "the meter cell sits in the right column (60% split)"
+        );
+        assert!(
+            rows.iter().all(|row| !row.starts_with("io ")),
+            "no automatic line remains: {rows:?}"
+        );
+        // Removing the meter brings the line back.
+        ui.config.meters.pop();
+        assert!(
+            render(&ui, 120, 24)
+                .iter()
+                .any(|row| row.starts_with("io  "))
+        );
+    }
+
+    /// The same rule for the pressure line and the sensors row: placing
+    /// the pressure or temperature meter replaces its automatic line,
+    /// and the meter cells carry the same readings.
+    #[test]
+    fn placed_pressure_and_temperature_meters_replace_their_lines() {
+        let mut s = sample_with_sensors();
+        s.pressure = Some(Pressure {
+            cpu: Psi {
+                some: PsiAvg {
+                    ten: 12.3,
+                    sixty: 0.0,
+                    three_hundred: 0.0,
+                },
+                full: None,
+            },
+            memory: Psi {
+                some: PsiAvg::default(),
+                full: Some(PsiAvg::default()),
+            },
+            io: Psi {
+                some: PsiAvg {
+                    ten: 2.3,
+                    sixty: 0.0,
+                    three_hundred: 0.0,
+                },
+                full: Some(PsiAvg::default()),
+            },
+        });
+        let mut ui = ui_with(Some(s), None);
+        let rows = render(&ui, 120, 24);
+        assert!(rows.iter().any(|row| row.contains("psi  cpu s 12.3%")));
+        assert!(rows.iter().any(|row| row.contains("SoC 45.0°C")));
+        ui.config.meters = vec![
+            config::MeterChoice {
+                kind: config::MeterKind::Psi,
+                side: config::MeterSide::Right,
+            },
+            config::MeterChoice {
+                kind: config::MeterKind::Temps,
+                side: config::MeterSide::Right,
+            },
+        ];
+        let rows = render(&ui, 120, 24);
+        assert!(
+            rows.iter().all(|row| !row.starts_with("psi")),
+            "the automatic line is gone: {rows:?}"
+        );
+        assert!(
+            rows.iter().all(|row| !row.starts_with("SoC")),
+            "the sensors row is gone: {rows:?}"
+        );
+        // Both text meters stack in the right column, one row each.
+        let psi_row = rows
+            .iter()
+            .position(|row| row.contains("cpu s 12.3%"))
+            .expect("psi cell");
+        let temps_row = rows
+            .iter()
+            .position(|row| row.contains("SoC 45.0"))
+            .expect("temps cell");
+        assert_ne!(psi_row, temps_row, "one row per right-column meter");
+        assert_eq!(
+            rows[psi_row].find("psi  cpu"),
+            Some(72),
+            "the psi cell sits in the right column"
+        );
+    }
+
+    /// The battery meter shows charge and state where a battery exists,
+    /// and says so where there is none — never an empty meter.
+    #[test]
+    fn the_battery_meter_shows_the_charge_or_n_a() {
+        let mut ui = ui_with(Some(sample_with_sensors()), None);
+        ui.config.meters = vec![config::MeterChoice {
+            kind: config::MeterKind::Battery,
+            side: config::MeterSide::Right,
+        }];
+        let rows = render(&ui, 100, 24);
+        let cell = rows
+            .iter()
+            .find(|row| row.contains("87%"))
+            .expect("battery");
+        assert!(cell.contains("charging"), "{cell:?}");
+        let mut ui = ui_with(Some(sample()), None);
+        ui.config.meters = vec![config::MeterChoice {
+            kind: config::MeterKind::Battery,
+            side: config::MeterSide::Right,
+        }];
+        assert!(
+            render(&ui, 100, 24)
+                .iter()
+                .any(|row| row.contains("battery n/a"))
+        );
+    }
+
+    /// The meter editor: Enter cycles a kind through left, right and
+    /// off; `,` and `.` move a placed row within its column.
+    #[test]
+    fn the_meter_editor_toggles_places_and_moves_rows() {
+        let mut ui = Ui::new();
+        ui.screen = Screen::Setup;
+        ui.setup_pane = SetupPane::Meters;
+        ui.config.meters = Vec::new(); // start from an empty layout
+        // Memory: off -> left -> right -> off.
+        handle_key(&mut ui, KeyEvent::from(KeyCode::Enter));
+        assert_eq!(
+            ui.config.meters,
+            vec![config::MeterChoice {
+                kind: config::MeterKind::Memory,
+                side: config::MeterSide::Left,
+            }]
+        );
+        handle_key(&mut ui, KeyEvent::from(KeyCode::Enter));
+        assert_eq!(ui.config.meters[0].side, config::MeterSide::Right);
+        handle_key(&mut ui, KeyEvent::from(KeyCode::Enter));
+        assert!(ui.config.meters.is_empty());
+        // Place load, place memory after it, then move memory above load.
+        ui.setup_select = 2; // load
+        handle_key(&mut ui, KeyEvent::from(KeyCode::Enter));
+        ui.setup_select = 0; // memory
+        handle_key(&mut ui, KeyEvent::from(KeyCode::Enter));
+        assert_eq!(ui.config.meters[0].kind, config::MeterKind::Load);
+        handle_key(&mut ui, KeyEvent::from(KeyCode::Char(',')));
+        assert_eq!(ui.config.meters[0].kind, config::MeterKind::Memory);
+        handle_key(&mut ui, KeyEvent::from(KeyCode::Char('.')));
+        assert_eq!(ui.config.meters[0].kind, config::MeterKind::Load);
+        // The editor renders the placement marker on the selected row.
+        ui.setup_select = 2; // load
+        let rows = render(&ui, 80, 24);
+        assert!(
+            rows.iter()
+                .any(|row| row.contains("> load") && row.contains("<left")),
+            "{rows:?}"
+        );
+    }
+
+    /// The meter-layout pane opens from the setup main pane and returns
+    /// to it with Esc; the main pane's Esc still saves and closes.
+    #[test]
+    fn the_meter_editor_pane_opens_and_returns() {
+        let mut ui = Ui::new();
+        handle_key(&mut ui, KeyEvent::from(KeyCode::F(2)));
+        assert_eq!(ui.screen, Screen::Setup);
+        assert_eq!(ui.setup_pane, SetupPane::Main);
+        for _ in 0..6 {
+            handle_key(&mut ui, KeyEvent::from(KeyCode::Char('j')));
+        }
+        handle_key(&mut ui, KeyEvent::from(KeyCode::Enter));
+        assert_eq!(ui.setup_pane, SetupPane::Meters);
+        assert_eq!(ui.setup_select, 0);
+        let rows = render(&ui, 80, 24);
+        assert!(
+            rows.iter().any(|row| row.contains("Setup — meter layout")),
+            "{rows:?}"
+        );
+        assert!(rows.iter().any(|row| row.contains("> memory")), "{rows:?}");
+        // j wraps at the editor's own row count.
+        ui.setup_select = config::METER_KINDS.len() - 1;
+        handle_key(&mut ui, KeyEvent::from(KeyCode::Char('j')));
+        assert_eq!(ui.setup_select, 0);
+        // Esc returns to the main pane; the save-and-close path then
+        // reports through the seam the save tests use (a real Esc would
+        // write the user's config file).
+        handle_key(&mut ui, KeyEvent::from(KeyCode::Esc));
+        assert_eq!(ui.setup_pane, SetupPane::Main);
+        ui.finish_setup(Ok(std::path::PathBuf::from("ztop-config.json")));
+        assert_eq!(ui.screen, Screen::ProcessTable);
+        assert!(
+            ui.notice
+                .as_deref()
+                .is_some_and(|notice| notice.starts_with("Setup saved")),
+            "{:?}",
+            ui.notice
+        );
+    }
+
+    /// The three display toggles edit in place: hiding the I/O line
+    /// removes it from the header even when the sample carries rates.
+    #[test]
+    fn the_setup_screen_shows_the_display_toggles() {
+        let mut ui = Ui::new();
+        ui.screen = Screen::Setup;
+        let rows = render(&ui, 80, 24);
+        assert!(
+            rows.iter()
+                .any(|row| row.contains("Disk and network I/O") && row.contains("shown")),
+            "{rows:?}"
+        );
+        assert!(
+            rows.iter()
+                .any(|row| row.contains("Pressure (PSI)") && row.contains("shown")),
+            "{rows:?}"
+        );
+        assert!(
+            rows.iter()
+                .any(|row| row.contains("Sensors row") && row.contains("shown")),
+            "{rows:?}"
+        );
+        assert!(rows.iter().any(|row| row.contains("Meter layout …")));
+        // Move to the I/O row (tree view and meter style come first) and
+        // hide it; then look at the main screen directly (no Esc — that
+        // would save the user's real config file).
+        ui.setup_select = 3;
+        handle_key(&mut ui, KeyEvent::from(KeyCode::Enter));
+        assert!(!ui.config.show_io);
+        ui.screen = Screen::ProcessTable;
+        ui.sample = Some(sample_with_disks());
+        let rows = render(&ui, 120, 24);
+        assert!(
+            rows.iter().all(|row| !row.contains("io  ")),
+            "the hidden io line stays hidden: {rows:?}"
         );
     }
 

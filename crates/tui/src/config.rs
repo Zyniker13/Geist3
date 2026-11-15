@@ -19,11 +19,103 @@ pub enum Theme {
     Mono,
 }
 
+/// A header meter kind the layout editor can place. The per-core CPU
+/// row is not here: it always leads the header at full width, because
+/// per-core bars cannot shrink to a half column and stay readable.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum MeterKind {
+    /// Used and total memory with the platform's breakdown.
+    #[serde(rename = "memory")]
+    Memory,
+    /// Used and total swap.
+    #[serde(rename = "swap")]
+    Swap,
+    /// The three load averages; the bar scales against the core count.
+    #[serde(rename = "load")]
+    Load,
+    /// Battery charge and state; `n/a` on hosts without a battery.
+    #[serde(rename = "battery")]
+    Battery,
+    /// Disk and network rates as text (the rates have no natural
+    /// 0–100 scale, so no gauge bar).
+    #[serde(rename = "io")]
+    Io,
+    /// Pressure-stall averages as text.
+    #[serde(rename = "pressure")]
+    Psi,
+    /// Temperatures as text.
+    #[serde(rename = "temps")]
+    Temps,
+}
+
+/// All meter kinds in the editor's catalog order.
+pub const METER_KINDS: [MeterKind; 7] = [
+    MeterKind::Memory,
+    MeterKind::Swap,
+    MeterKind::Load,
+    MeterKind::Battery,
+    MeterKind::Io,
+    MeterKind::Psi,
+    MeterKind::Temps,
+];
+
+impl MeterKind {
+    /// The name shown in the editor and in tests.
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Memory => "memory",
+            Self::Swap => "swap",
+            Self::Load => "load",
+            Self::Battery => "battery",
+            Self::Io => "io",
+            Self::Psi => "pressure",
+            Self::Temps => "temps",
+        }
+    }
+}
+
+/// Which header column a placed meter sits in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum MeterSide {
+    /// The left column (the wider one: 60%).
+    #[serde(rename = "left")]
+    Left,
+    /// The right column (40%).
+    #[serde(rename = "right")]
+    Right,
+}
+
+/// One placed meter: its kind and column, in the layout's row order.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MeterChoice {
+    pub kind: MeterKind,
+    pub side: MeterSide,
+}
+
+/// The layout the default header renders: memory left of swap, exactly
+/// the row the header drew before the editor existed.
+pub fn default_meters() -> Vec<MeterChoice> {
+    vec![
+        MeterChoice {
+            kind: MeterKind::Memory,
+            side: MeterSide::Left,
+        },
+        MeterChoice {
+            kind: MeterKind::Swap,
+            side: MeterSide::Right,
+        },
+    ]
+}
+
+fn default_true() -> bool {
+    true
+}
+
 /// The saved setup, kept as JSON in the user's config directory.
 ///
 /// Fields default on load, so a config file written by an older version
 /// that lacked one still loads.
-#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Config {
     #[serde(default)]
     pub theme: Theme,
@@ -33,6 +125,38 @@ pub struct Config {
     /// How the header meters draw their fill.
     #[serde(default)]
     pub meter_style: MeterStyle,
+    /// Which meters the header shows, in which column and order; a
+    /// missing field means the default layout.
+    #[serde(default = "default_meters")]
+    pub meters: Vec<MeterChoice>,
+    /// Show the disk and network rates line when the sample carries
+    /// rates (and no io meter is placed — placing one replaces it).
+    #[serde(default = "default_true")]
+    pub show_io: bool,
+    /// Show the pressure-stall line (and no pressure meter placed).
+    #[serde(default = "default_true")]
+    pub show_psi: bool,
+    /// Show the temperature line (and no temperature meter placed).
+    #[serde(default = "default_true")]
+    pub show_temps: bool,
+}
+
+impl Default for Config {
+    /// The defaults: color theme, flat view, bar meters, memory left of
+    /// swap, every optional line shown. The same defaults serde fills
+    /// in for a missing field, so a half-written file and a fresh start
+    /// look identical.
+    fn default() -> Self {
+        Self {
+            theme: Theme::default(),
+            start_in_tree: false,
+            meter_style: MeterStyle::default(),
+            meters: default_meters(),
+            show_io: true,
+            show_psi: true,
+            show_temps: true,
+        }
+    }
 }
 
 /// How the header meters draw their fill.
@@ -172,6 +296,13 @@ mod tests {
             theme: Theme::Mono,
             start_in_tree: true,
             meter_style: MeterStyle::Led,
+            meters: vec![MeterChoice {
+                kind: MeterKind::Load,
+                side: MeterSide::Right,
+            }],
+            show_io: false,
+            show_psi: false,
+            show_temps: false,
         };
         config.save_to(&path).expect("saves");
         assert_eq!(Config::load_from(&path), config);
