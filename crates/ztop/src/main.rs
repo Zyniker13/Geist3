@@ -62,6 +62,9 @@ enum Command {
         /// TCP port to listen on (loopback only).
         #[arg(long, default_value_t = 7100)]
         port: u16,
+        /// Show a pairing code a client can trade for a token.
+        #[arg(long)]
+        pair: bool,
     },
     /// Serve the hub protocol on the loopback interface.
     Hub {
@@ -141,11 +144,11 @@ fn run() -> Result<(), Box<dyn Error>> {
             let count = ztop_core::capture::capture_to(&out)?;
             println!("wrote {count} entries to {}", out.display());
         }
-        Some(Command::Agent { port }) => {
+        Some(Command::Agent { port, pair }) => {
             let runtime = tokio::runtime::Builder::new_multi_thread()
                 .enable_all()
                 .build()?;
-            runtime.block_on(ztop_agent::serve(port))?;
+            runtime.block_on(ztop_agent::serve(port, pair))?;
         }
         Some(Command::Hub { port }) => {
             let runtime = tokio::runtime::Builder::new_multi_thread()
@@ -206,7 +209,18 @@ mod tests {
     #[test]
     fn agent_and_hub_take_a_port() {
         let cli = Cli::try_parse_from(["ztop", "agent", "--port", "8000"]).expect("parses");
-        assert!(matches!(cli.command, Some(Command::Agent { port: 8000 })));
+        assert!(matches!(
+            cli.command,
+            Some(Command::Agent {
+                port: 8000,
+                pair: false
+            })
+        ));
+        let cli = Cli::try_parse_from(["ztop", "agent", "--pair"]).expect("parses");
+        assert!(matches!(
+            cli.command,
+            Some(Command::Agent { pair: true, .. })
+        ));
         let cli = Cli::try_parse_from(["ztop", "hub"]).expect("parses");
         assert!(matches!(cli.command, Some(Command::Hub { port: 7101 })));
     }

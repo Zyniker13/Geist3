@@ -3,13 +3,15 @@
 Updated after every working session.
 
 - **Current milestone:** M4 (Agent, Hub and the Bridge) — M3 complete pending CI on the 7ae commit.
-- **Last done:** M4 batch 8b SHIPPED as 1af76f7 — the agent's `/v1/stream` WebSocket (decision 0036): latest sample first, then one message per tick via a 16-deep broadcast; a lagged client is closed, never slows the sampler; axum gains the `ws` feature. Then batch 8c: `ztop connect` works (decision 0037) — `RemoteCollector` in `ztop_core::client` speaks minimal HTTP/1.1, unwraps the envelope, checks the protocol; connect drives the ordinary TUI and is forced observation-only; the client↔server round trip is tested in-process; live smoke run verified (protocol 1, 1,129 processes, history window). Parity: `connect`, `agent ring history` and `localhost-only` ticked.
-- **Next step:** gate + commit 8c; then 8d — TLS pairing and tokens (rustls, decision 0003).
+- **Last done:** M4 batch 8c SHIPPED as 6d5a152 — `ztop connect` works (decision 0037): `RemoteCollector` in `ztop_core::client` speaks minimal HTTP/1.1, unwraps the envelope, checks the protocol; connect drives the ordinary TUI, forced observation-only; round trip proven over a real socket; live smoke verified; parity ticks for `connect`, `agent ring history`, `localhost-only`. Then batch 8d: pairing and tokens (decision 0038) — `auth::Auth` with single-use 5-minute six-char codes, 256-bit tokens stored as SHA-256 hashes (0600 file via the new shared `state_dir`), `POST /v1/pair`, `GET /v1/tokens`, `DELETE /v1/tokens/{id}`, and an `enforce_auth` middleware proven over the wire (401 unpaired, 200 with the paired token, revoked = 401); `ztop agent --pair` prints the code.
+- **Next step:** gate + commit 8d; then 8e — TLS (self-signed cert, rcgen + rustls), which turns `enforce_auth` on and lets `connect` speak to a remote host.
 - **Blocked on:** nothing (7ac/7ad CI runs stuck in progress on Linux runners — infrastructure, not code; macOS jobs green).
 
 ## Log
 
 Newest first. One or two lines per session: what changed, what is next.
+
+- 2026-11-15: M4 batch 8d — pairing and tokens (decision 0038): `auth::Auth` (single-use 5-minute six-character codes, 256-bit tokens kept only as SHA-256 hashes in a 0600 `tokens.json` via the new `ztop_core::paths::state_dir`), `POST /v1/pair`, token list/revoke routes, and the `enforce_auth` middleware proven over a real socket: 401 unpaired, 200 with the paired token, a revoked token 401s. `ztop agent --pair` prints the code. New deps: sha2, getrandom. Agent 17, core 97, CLI 7 tests.
 
 - 2026-11-15: M4 batch 8c — `ztop connect` works (decision 0037): `RemoteCollector` in a new `ztop_core::client` speaks minimal HTTP/1.1 with envelope and protocol checks, drives the ordinary TUI (observation-only), and is proven against the real agent server in-process; live smoke run verified. Parity ticks: connect, agent ring history, localhost-only. Core 96, TUI 121, agent 10, CLI 7 tests.
 

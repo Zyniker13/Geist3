@@ -5,18 +5,24 @@
 //! each sample into a bounded ring; HTTP handlers under `/v1` read the
 //! ring: `/v1/snapshot` for the latest sample, `/v1/processes` for its
 //! process list and `/v1/history` for recent samples. The live
-//! WebSocket stream, TLS pairing and control actions arrive later in
-//! milestone M4 under the transport decision (0003).
+//! WebSocket stream carries the same samples as they arrive. Pairing
+//! and tokens live in [`auth`]; they are enforced wherever the agent
+//! is not deliberately serving the loopback interface in plain mode.
+//! TLS and control actions arrive later in milestone M4 under the
+//! transport decision (0003).
+
+pub mod auth;
 
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
-use axum::extract::{Query, State};
+use axum::extract::{Query, Request, State};
 use axum::http::StatusCode;
+use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
-use axum::routing::get;
+use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use serde::Serialize;
 use tokio::sync::broadcast::error::RecvError;
@@ -35,11 +41,16 @@ pub const DEFAULT_INTERVAL: Duration = Duration::from_secs(1);
 /// downsampled long tier arrives with the hub's persistence work.
 const FULL_RESOLUTION: usize = 3600;
 
-/// The shared state behind every handler: the sample ring and the
-/// fan-out channel the live stream reads.
+/// The shared state behind every handler: the sample ring, the
+/// fan-out channel the live stream reads, and the auth.
 pub struct AgentState {
     history: Mutex<VecDeque<Sample>>,
     sender: tokio::sync::broadcast::Sender<Sample>,
+    /// Pairing and tokens; `Mutex` because pair and revoke mutate.
+    pub auth: Mutex<auth::Auth>,
+    /// Whether `/v1` routes (except pairing) demand a bearer token.
+    /// Off for plain loopback serving, on wherever TLS is on.
+    pub enforce_auth: bool,
 }
 
 impl Default for AgentState {
@@ -51,6 +62,8 @@ impl Default for AgentState {
         Self {
             history: Mutex::new(VecDeque::with_capacity(FULL_RESOLUTION.min(1024))),
             sender,
+            auth: Mutex::new(auth::Auth::in_memory()),
+            enforce_auth: false,
         }
     }
 }
@@ -103,17 +116,74 @@ struct Envelope<T> {
 pub fn router(state: Arc<AgentState>) -> Router {
     Router::new()
         .route("/healthz", get(health))
+        .route("/v1/pair", post(pair))
+        .route("/v1/tokens", get(tokens_list))
+        .route("/v1/tokens/{id}", delete(tokens_revoke))
         .route("/v1/snapshot", get(snapshot))
         .route("/v1/processes", get(processes))
         .route("/v1/history", get(history))
         .route("/v1/stream", get(stream))
+        .layer(middleware::from_fn_with_state(state.clone(), enforce_auth))
         .with_state(state)
+}
+
+/// The auth gate: when the agent is enforced (`enforce_auth`), every
+/// `/v1` route except `/healthz` and `/v1/pair` needs a bearer token
+/// the auth knows. Plain loopback serving runs unauthenticated.
+async fn enforce_auth(
+    State(state): State<Arc<AgentState>>,
+    request: Request,
+    next: Next,
+) -> Response {
+    if !state.enforce_auth {
+        return next.run(request).await;
+    }
+    let path = request.uri().path();
+    if path == "/healthz" || path == "/v1/pair" {
+        return next.run(request).await;
+    }
+    let bearer = request
+        .headers()
+        .get(axum::http::header::AUTHORIZATION)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.strip_prefix("Bearer "));
+    let accepted = bearer
+        .map(|token| state.auth.lock().expect("auth").check(token))
+        .unwrap_or(false);
+    if accepted {
+        next.run(request).await
+    } else {
+        (
+            StatusCode::UNAUTHORIZED,
+            "pair first: POST /v1/pair with the agent's pairing code",
+        )
+            .into_response()
+    }
 }
 
 /// Serve the agent protocol on `127.0.0.1:port` until the process is
 /// stopped, sampling the host on [`DEFAULT_INTERVAL`] in the background.
-pub async fn serve(port: u16) -> std::io::Result<()> {
-    let state = Arc::new(AgentState::default());
+/// With `pair`, print a pairing code the person can trade for a token.
+pub async fn serve(port: u16, pair: bool) -> std::io::Result<()> {
+    let mut auth = match ztop_core::paths::state_dir() {
+        Some(dir) => auth::Auth::at(dir.join("tokens.json")).unwrap_or_default(),
+        None => auth::Auth::in_memory(),
+    };
+    if pair {
+        match auth.start_pairing("pairing from the command line".into(), auth::now_ms()) {
+            Ok(code) => println!("Pairing code: {code} (valid for 5 minutes)"),
+            Err(error) => eprintln!("ztop-agent: pairing is unavailable: {error}"),
+        }
+    }
+    let (sender, _) = tokio::sync::broadcast::channel(16);
+    let state = Arc::new(AgentState {
+        history: Mutex::new(VecDeque::with_capacity(FULL_RESOLUTION.min(1024))),
+        sender,
+        auth: Mutex::new(auth),
+        // Plain loopback serving runs unauthenticated; TLS flips this
+        // on (decision 0003).
+        enforce_auth: false,
+    });
     spawn_sampler(state.clone(), DEFAULT_INTERVAL);
     let listener = tokio::net::TcpListener::bind(("127.0.0.1", port)).await?;
     serve_on(state, listener).await
@@ -166,6 +236,63 @@ async fn health() -> Json<serde_json::Value> {
         "protocol": PROTOCOL_VERSION,
         "version": env!("CARGO_PKG_VERSION"),
     }))
+}
+
+/// The body of `POST /v1/pair`: the agent's shown code.
+#[derive(Debug, serde::Deserialize)]
+struct PairBody {
+    code: String,
+}
+
+/// `POST /v1/pair`: trade the agent's pairing code for a token. Works
+/// even when auth is not enforced (a loopback client may pair ahead of
+/// a later TLS setup).
+async fn pair(State(state): State<Arc<AgentState>>, Json(body): Json<PairBody>) -> Response {
+    let mut auth = state.auth.lock().expect("auth");
+    match auth.pair(&body.code, auth::now_ms()) {
+        Ok(token) => Json(serde_json::json!({
+            "protocol": PROTOCOL_VERSION,
+            "token": token,
+        }))
+        .into_response(),
+        Err(auth::AuthError::BadCode) => (
+            StatusCode::FORBIDDEN,
+            "the pairing code does not match, is used up or expired",
+        )
+            .into_response(),
+        Err(error) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("pairing failed: {error}"),
+        )
+            .into_response(),
+    }
+}
+
+/// `GET /v1/tokens`: the accepted clients, oldest first.
+async fn tokens_list(State(state): State<Arc<AgentState>>) -> Response {
+    let tokens = state.auth.lock().expect("auth").list();
+    Json(serde_json::json!({
+        "protocol": PROTOCOL_VERSION,
+        "tokens": tokens,
+    }))
+    .into_response()
+}
+
+/// `DELETE /v1/tokens/{id}`: revoke a token.
+async fn tokens_revoke(
+    State(state): State<Arc<AgentState>>,
+    axum::extract::Path(id): axum::extract::Path<String>,
+) -> Response {
+    let revoked = state.auth.lock().expect("auth").revoke(&id);
+    if revoked {
+        Json(serde_json::json!({
+            "protocol": PROTOCOL_VERSION,
+            "revoked": id,
+        }))
+        .into_response()
+    } else {
+        (StatusCode::NOT_FOUND, "no such token").into_response()
+    }
 }
 
 /// One sampler tick: take a sample, file it in the ring and hand it to
@@ -584,6 +711,224 @@ mod tests {
             fetched,
             Err(ztop_core::collector::CollectError::Unavailable { .. })
         ));
+        server.abort();
+    }
+
+    /// A raw HTTP request from a test, for exercising the middleware:
+    /// direct handler calls bypass the router's layers.
+    fn raw_request(
+        address: std::net::SocketAddr,
+        method: &str,
+        path: &str,
+        bearer: Option<&str>,
+        body: Option<&str>,
+    ) -> (u16, String) {
+        use std::io::{Read, Write};
+        let mut stream = std::net::TcpStream::connect(address).expect("connect");
+        let mut request = format!("{method} {path} HTTP/1.1\r\nHost: test\r\n");
+        if let Some(token) = bearer {
+            request.push_str(&format!("Authorization: Bearer {token}\r\n"));
+        }
+        if let Some(body) = body {
+            request.push_str(&format!(
+                "Content-Type: application/json\r\nContent-Length: {}\r\n",
+                body.len()
+            ));
+        }
+        request.push_str("Connection: close\r\n\r\n");
+        if let Some(body) = body {
+            request.push_str(body);
+        }
+        stream.write_all(request.as_bytes()).expect("write");
+        let mut raw = String::new();
+        stream.read_to_string(&mut raw).expect("read");
+        let status: u16 = raw
+            .split(' ')
+            .nth(1)
+            .and_then(|code| code.parse().ok())
+            .expect("status line");
+        let body = raw
+            .split_once("\r\n\r\n")
+            .map(|(_, body)| body.to_string())
+            .unwrap_or_default();
+        (status, body)
+    }
+
+    /// An enforced agent over a real socket: unauthenticated reads are
+    /// refused, pairing and `/healthz` stay reachable.
+    #[tokio::test]
+    async fn an_enforced_agent_refuses_the_unpaired_and_pairs_the_code() {
+        let inner = AgentState {
+            enforce_auth: true,
+            ..AgentState::default()
+        };
+        let code = inner
+            .auth
+            .lock()
+            .expect("auth")
+            .start_pairing("the app".into(), auth::now_ms())
+            .expect("code");
+        let state = Arc::new(inner);
+        state.push(a_sample());
+
+        let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+            .await
+            .expect("bind");
+        let address = listener.local_addr().expect("address");
+        let server = tokio::spawn(async move { super::serve_on(state, listener).await });
+
+        let (health, _) = tokio::task::spawn_blocking(move || {
+            raw_request(address, "GET", "/healthz", None, None)
+        })
+        .await
+        .expect("join");
+        assert_eq!(health, 200, "liveness is never gated");
+
+        let (denied, _) = tokio::task::spawn_blocking(move || {
+            raw_request(address, "GET", "/v1/snapshot", None, None)
+        })
+        .await
+        .expect("join");
+        assert_eq!(denied, 401);
+
+        let address_string = address.to_string();
+        let code_for_pair = code.clone();
+        let (paired, pair_body) = tokio::task::spawn_blocking(move || {
+            raw_request(
+                address_string.parse().expect("addr"),
+                "POST",
+                "/v1/pair",
+                None,
+                Some(&format!("{{\"code\": \"{code_for_pair}\"}}")),
+            )
+        })
+        .await
+        .expect("join");
+        assert_eq!(paired, 200);
+        let token: serde_json::Value = serde_json::from_str(&pair_body).expect("pair body");
+        let token = token["token"].as_str().expect("token").to_string();
+
+        let address_string = address.to_string();
+        let token_for_read = token.clone();
+        let (read, read_body) = tokio::task::spawn_blocking(move || {
+            raw_request(
+                address_string.parse().expect("addr"),
+                "GET",
+                "/v1/snapshot",
+                Some(&token_for_read),
+                None,
+            )
+        })
+        .await
+        .expect("join");
+        assert_eq!(read, 200, "the paired token reads the agent");
+        assert!(serde_json::from_str::<serde_json::Value>(&read_body).is_ok());
+
+        let address_string = address.to_string();
+        let (rejected, _) = tokio::task::spawn_blocking(move || {
+            raw_request(
+                address_string.parse().expect("addr"),
+                "GET",
+                "/v1/snapshot",
+                Some("not-the-token"),
+                None,
+            )
+        })
+        .await
+        .expect("join");
+        assert_eq!(rejected, 401, "a wrong token reads nothing");
+
+        server.abort();
+    }
+
+    /// Tokens can be listed and revoked over the wire, and a revoked
+    /// token stops reading immediately.
+    #[tokio::test]
+    async fn tokens_can_be_listed_and_revoked_over_the_wire() {
+        let inner = AgentState {
+            enforce_auth: true,
+            ..AgentState::default()
+        };
+        let code = inner
+            .auth
+            .lock()
+            .expect("auth")
+            .start_pairing("the app".into(), auth::now_ms())
+            .expect("code");
+        let state = Arc::new(inner);
+        state.push(a_sample());
+
+        let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+            .await
+            .expect("bind");
+        let address = listener.local_addr().expect("address");
+        let server = tokio::spawn(async move { super::serve_on(state, listener).await });
+
+        let address_string = address.to_string();
+        let pair_body_text = format!("{{\"code\": \"{code}\"}}");
+        let (paired, pair_body) = tokio::task::spawn_blocking(move || {
+            raw_request(
+                address_string.parse().expect("addr"),
+                "POST",
+                "/v1/pair",
+                None,
+                Some(&pair_body_text),
+            )
+        })
+        .await
+        .expect("join");
+        assert_eq!(paired, 200);
+        let token: serde_json::Value = serde_json::from_str(&pair_body).expect("pair body");
+        let token = token["token"].as_str().expect("token").to_string();
+
+        let address_string = address.to_string();
+        let token_for_list = token.clone();
+        let (listed, list_body) = tokio::task::spawn_blocking(move || {
+            raw_request(
+                address_string.parse().expect("addr"),
+                "GET",
+                "/v1/tokens",
+                Some(&token_for_list),
+                None,
+            )
+        })
+        .await
+        .expect("join");
+        assert_eq!(listed, 200);
+        let list: serde_json::Value = serde_json::from_str(&list_body).expect("list body");
+        assert_eq!(list["tokens"].as_array().expect("tokens").len(), 1);
+        let id = list["tokens"][0]["id"].as_str().expect("id").to_string();
+
+        let address_string = address.to_string();
+        let token_for_read = token.clone();
+        let (revoked, _) = tokio::task::spawn_blocking(move || {
+            raw_request(
+                address_string.parse().expect("addr"),
+                "DELETE",
+                &format!("/v1/tokens/{id}"),
+                Some(&token_for_read),
+                None,
+            )
+        })
+        .await
+        .expect("join");
+        assert_eq!(revoked, 200);
+
+        let address_string = address.to_string();
+        let token_for_check = token.clone();
+        let (after_revoke, _) = tokio::task::spawn_blocking(move || {
+            raw_request(
+                address_string.parse().expect("addr"),
+                "GET",
+                "/v1/snapshot",
+                Some(&token_for_check),
+                None,
+            )
+        })
+        .await
+        .expect("join");
+        assert_eq!(after_revoke, 401, "a revoked token reads nothing");
+
         server.abort();
     }
 }

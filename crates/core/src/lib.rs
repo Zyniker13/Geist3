@@ -23,6 +23,7 @@ pub mod macos_live;
 #[cfg(target_os = "macos")]
 pub mod macos_power;
 pub mod model;
+pub mod paths;
 pub mod power;
 pub mod trace;
 

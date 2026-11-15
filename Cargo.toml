@@ -23,6 +23,8 @@ libc = "0.2"
 ratatui = "0.30"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net"] }
 axum = { version = "0.8", features = ["ws"] }
+getrandom = "0.3"
+sha2 = "0.10"
 clap = { version = "4", features = ["derive"] }
 
 [profile.release]
