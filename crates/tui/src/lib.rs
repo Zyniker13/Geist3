@@ -32,7 +32,7 @@ use ztop_core::control::{self, Control, Plan};
 use ztop_core::model::{CpuTimes, Memory, Metric, Process, Psi, Sample, Unit};
 
 mod config;
-pub use config::{Config, Theme};
+pub use config::{Config, MeterStyle, Theme};
 
 const KIB: f64 = 1024.0;
 const MIB: f64 = KIB * 1024.0;
@@ -192,6 +192,14 @@ pub struct Ui {
     /// Pids seen in the previous sample, so a just-arrived process can
     /// be highlighted as new.
     pub seen: std::collections::BTreeSet<u32>,
+    /// Recent average CPU busy percentages, for the graph meter style.
+    pub avg_history: Vec<f64>,
+    /// Recent per-core CPU busy percentages, for the graph meter style.
+    pub cpu_history: Vec<Vec<f64>>,
+    /// Recent memory used-ratios, for the graph meter style.
+    pub mem_history: Vec<f64>,
+    /// Recent swap used-ratios, for the graph meter style.
+    pub swap_history: Vec<f64>,
     /// Paused: the picture is frozen and no new samples arrive, but the
     /// keys (and actions) keep working.
     pub paused: bool,
@@ -221,6 +229,10 @@ impl Default for Ui {
             tags: std::collections::BTreeSet::new(),
             menu: None,
             help: false,
+            avg_history: Vec::new(),
+            cpu_history: Vec::new(),
+            mem_history: Vec::new(),
+            swap_history: Vec::new(),
             notice: None,
             screen: Screen::ProcessTable,
             config: Config::default(),
@@ -317,7 +329,7 @@ impl Ui {
     }
 
     /// The setup screen's row count, for the wrapping navigation.
-    const SETUP_ROWS: usize = 2;
+    const SETUP_ROWS: usize = 3;
 
     /// Move the setup selection down, wrapping at the end.
     pub fn setup_next(&mut self) {
@@ -339,6 +351,7 @@ impl Ui {
                 }
             }
             1 => self.config.start_in_tree = !self.config.start_in_tree,
+            2 => self.config.meter_style = self.config.meter_style.next(),
             _ => {}
         }
     }
@@ -856,6 +869,7 @@ impl Ui {
                 // Remember this sample's pids as the previous generation,
                 // so the next sample can tell which processes are new.
                 self.seen = sample.processes.iter().map(|p| p.pid).collect();
+                self.remember_history(&sample);
                 self.sample = Some(sample);
                 self.error = None;
                 // A control notice lives for exactly one refresh.
@@ -864,7 +878,38 @@ impl Ui {
             Err(err) => self.error = Some(err.to_string()),
         }
     }
+
+    /// Push this sample's meter values onto the graph-style histories,
+    /// trimmed to [`HISTORY_LEN`] entries.
+    fn remember_history(&mut self, sample: &Sample) {
+        let push = |history: &mut Vec<f64>, value: f64| {
+            history.push(value.clamp(0.0, 1.0));
+            if history.len() > HISTORY_LEN {
+                history.remove(0);
+            }
+        };
+        if let Some(mean) = cpu_percent_mean(sample) {
+            push(&mut self.avg_history, mean / 100.0);
+        }
+        if self.cpu_history.len() != sample.cpu.busy_percent.len() {
+            self.cpu_history = vec![Vec::new(); sample.cpu.busy_percent.len()];
+        }
+        for (history, percent) in self
+            .cpu_history
+            .iter_mut()
+            .zip(sample.cpu.busy_percent.iter())
+        {
+            push(history, percent / 100.0);
+        }
+        let (mem_ratio, _) = memory_gauge(&sample.memory, 40);
+        push(&mut self.mem_history, mem_ratio);
+        let (swap_ratio, _) = swap_gauge(&sample.memory);
+        push(&mut self.swap_history, swap_ratio);
+    }
 }
+
+/// How many samples the graph meter style keeps.
+const HISTORY_LEN: usize = 120;
 
 /// A stand-in collector for platforms whose live sampler has not landed yet.
 ///
@@ -1781,6 +1826,7 @@ fn draw_setup(frame: &mut Frame, ui: &Ui, area: ratatui::layout::Rect) {
             "Start in tree view",
             if ui.config.start_in_tree { "yes" } else { "no" },
         ),
+        option_row(ui, 2, "Meter style", ui.config.meter_style.name()),
         Line::from(""),
         Line::from("j/k move   Space/Enter toggle   Esc/F2 saves and closes"),
         Line::from(""),
@@ -1934,11 +1980,15 @@ fn draw_cpu_row(frame: &mut Frame, ui: &Ui, area: ratatui::layout::Rect) {
     constraints.extend(vec![Constraint::Fill(1); percents.len()]);
     let split = Layout::horizontal(constraints).split(area);
     let mean = cpu_percent_mean(sample).unwrap_or(0.0);
-    let avg = Gauge::default()
-        .ratio((mean / 100.0).clamp(0.0, 1.0))
-        .label(format!("Avg {:.0}%", mean))
-        .gauge_style(gauge_style(ui, Style::new().green()));
-    frame.render_widget(avg, split[0]);
+    render_meter(
+        frame,
+        ui,
+        split[0],
+        mean / 100.0,
+        format!("Avg {:.0}%", mean),
+        Style::new().green(),
+        &ui.avg_history,
+    );
     for (core, percent) in percents.iter().enumerate() {
         let states = sample
             .cpu
@@ -1950,6 +2000,65 @@ fn draw_cpu_row(frame: &mut Frame, ui: &Ui, area: ratatui::layout::Rect) {
         let line = core_bar_line(ui, &states, *percent, core, width);
         frame.render_widget(Paragraph::new(line), split[core + 1]);
     }
+}
+
+/// Render one header meter in the configured style: the solid bar (the
+/// default and the only style the recorded snapshots capture), plain
+/// text, a history sparkline, or an LED strip. Every non-bar style leads
+/// with the same label the bar carries, and colors only in the color
+/// theme.
+fn render_meter(
+    frame: &mut Frame,
+    ui: &Ui,
+    area: ratatui::layout::Rect,
+    ratio: f64,
+    label: String,
+    accent: Style,
+    history: &[f64],
+) {
+    let line = match ui.config.meter_style {
+        config::MeterStyle::Bar => {
+            let gauge = Gauge::default()
+                .ratio(ratio.clamp(0.0, 1.0))
+                .label(label)
+                .gauge_style(gauge_style(ui, accent));
+            frame.render_widget(gauge, area);
+            return;
+        }
+        config::MeterStyle::Text => Line::from(label),
+        config::MeterStyle::Graph => {
+            let width = area.width as usize;
+            let room = width.saturating_sub(label.chars().count());
+            let mut spans = vec![Span::from(label)];
+            for value in history.iter().rev().take(room) {
+                spans.push(Span::from(spark_char(*value).to_string()));
+            }
+            Line::from(spans)
+        }
+        config::MeterStyle::Led => {
+            let width = area.width as usize;
+            let label_width = label.chars().count();
+            let filled = ((ratio.clamp(0.0, 1.0) * width as f64).round() as usize)
+                .min(width.saturating_sub(label_width));
+            Line::from(vec![
+                Span::from(label),
+                Span::from("|".repeat(filled)),
+                Span::from("·".repeat(width.saturating_sub(label_width + filled))),
+            ])
+        }
+    };
+    let styled = match ui.config.theme {
+        Theme::Color => line.style(accent),
+        Theme::Mono => line,
+    };
+    frame.render_widget(Paragraph::new(styled), area);
+}
+
+/// The eighth-block character for a 0..1 value: the sparkline glyph.
+fn spark_char(value: f64) -> char {
+    const GLYPHS: [char; 8] = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
+    let index = (value.clamp(0.0, 1.0) * 7.0).round() as usize;
+    GLYPHS[index.min(7)]
 }
 
 /// One band of a split core meter: the fill character and its cell count.
@@ -2029,6 +2138,28 @@ fn core_bar_line(
 ) -> Line<'static> {
     let label = format!("{core} {:.0}%", percent);
     let mut spans = vec![Span::raw(label.clone())];
+    // The non-bar styles replace the state bands with their own fill;
+    // the bar keeps the per-state characters exactly as before.
+    match ui.config.meter_style {
+        config::MeterStyle::Text => return Line::from(spans),
+        config::MeterStyle::Graph => {
+            let history = ui.cpu_history.get(core).map(Vec::as_slice).unwrap_or(&[]);
+            let room = width.saturating_sub(label.chars().count());
+            for value in history.iter().rev().take(room) {
+                spans.push(Span::from(spark_char(*value).to_string()));
+            }
+            return Line::from(spans);
+        }
+        config::MeterStyle::Led => {
+            let filled = ((percent / 100.0).clamp(0.0, 1.0) * width as f64).round() as usize;
+            let strip = width.saturating_sub(label.chars().count());
+            let filled = filled.min(strip);
+            spans.push(Span::from("|".repeat(filled)));
+            spans.push(Span::from("·".repeat(strip.saturating_sub(filled))));
+            return Line::from(spans);
+        }
+        config::MeterStyle::Bar => {}
+    }
     let colors = [
         Color::Green,
         Color::Yellow,
@@ -2056,20 +2187,24 @@ fn draw_memory_row(frame: &mut Frame, ui: &Ui, area: ratatui::layout::Rect) {
     let halves =
         Layout::horizontal([Constraint::Percentage(60), Constraint::Percentage(40)]).split(area);
     let (ratio, label) = memory_gauge(&sample.memory, halves[0].width as usize);
-    frame.render_widget(
-        Gauge::default()
-            .ratio(ratio)
-            .label(label)
-            .gauge_style(gauge_style(ui, Style::new().cyan())),
+    render_meter(
+        frame,
+        ui,
         halves[0],
+        ratio,
+        label,
+        Style::new().cyan(),
+        &ui.mem_history,
     );
     let (ratio, label) = swap_gauge(&sample.memory);
-    frame.render_widget(
-        Gauge::default()
-            .ratio(ratio)
-            .label(label)
-            .gauge_style(gauge_style(ui, Style::new().yellow())),
+    render_meter(
+        frame,
+        ui,
         halves[1],
+        ratio,
+        label,
+        Style::new().yellow(),
+        &ui.swap_history,
     );
 }
 
@@ -4658,14 +4793,25 @@ mod tests {
         ui.setup_next();
         ui.setup_toggle();
         assert!(ui.config.start_in_tree);
+        ui.setup_next();
+        ui.setup_toggle();
+        assert_eq!(
+            ui.config.meter_style,
+            MeterStyle::Text,
+            "row 2 cycles styles"
+        );
+        ui.setup_toggle();
+        assert_eq!(ui.config.meter_style, MeterStyle::Graph);
+        ui.setup_prev();
+        assert_eq!(ui.setup_select, 1);
         ui.setup_prev();
         assert_eq!(ui.setup_select, 0);
         ui.setup_prev();
-        assert_eq!(ui.setup_select, 1, "moving up from the first row wraps");
+        assert_eq!(ui.setup_select, 2, "moving up from the first row wraps");
     }
 
-    /// The setup screen shows both options with their values, the help line,
-    /// the config file path, and marks the selected row.
+    /// The setup screen shows the three options with their values, the
+    /// help line, the config file path, and marks the selected row.
     #[test]
     fn the_setup_screen_shows_its_options_and_help() {
         let mut ui = Ui::new();
@@ -4693,12 +4839,60 @@ mod tests {
             rows.iter().any(|row| row.contains("> Start in tree view")),
             "the second row, selected: {rows:?}"
         );
+        ui.setup_next();
+        let rows = render(&ui, 80, 24);
+        assert!(
+            rows.iter()
+                .any(|row| row.contains("> Meter style") && row.contains("bar")),
+            "the third row, selected: {rows:?}"
+        );
         ui.setup_select = 0;
         ui.config.theme = Theme::Mono;
         let rows = render(&ui, 80, 24);
         assert!(
             rows.iter()
                 .any(|row| row.contains("Theme") && row.contains("mono"))
+        );
+    }
+
+    /// The meter styles change the header: text drops the fill, led draws
+    /// a strip of marks, graph draws the history sparkline, and the
+    /// history trims to 120 samples (docs/parity.md, meter styles).
+    #[test]
+    fn meter_styles_change_the_header_rendering() {
+        // Text: the numbers stay, the fill character disappears.
+        let mut ui = ui_with(Some(sample()), None);
+        ui.config.meter_style = MeterStyle::Text;
+        let rows = render(&ui, 100, 24);
+        assert!(rows.iter().any(|row| row.contains("Avg")));
+        assert!(
+            rows.iter().take(3).all(|row| !row.contains('█')),
+            "text style drops the bars: {rows:?}"
+        );
+
+        // Led: the label leads a strip of marks.
+        let mut ui = ui_with(Some(sample()), None);
+        ui.config.meter_style = MeterStyle::Led;
+        let rows = render(&ui, 100, 24);
+        assert!(
+            rows.iter()
+                .any(|row| row.contains("Avg") && row.contains('|')),
+            "led style draws a strip: {rows:?}"
+        );
+
+        // Graph: the sparkline renders from history, trimmed to 120.
+        let mut ui = ui_with(Some(sample()), None);
+        ui.config.meter_style = MeterStyle::Graph;
+        for _ in 0..130 {
+            ui.apply(Ok(sample()));
+        }
+        assert_eq!(ui.avg_history.len(), 120, "the history trims");
+        ui.avg_history = vec![0.5; 30];
+        let rows = render(&ui, 100, 24);
+        assert!(
+            rows.iter()
+                .any(|row| row.contains("Avg") && row.contains('▅')),
+            "graph style draws the sparkline: {rows:?}"
         );
     }
 

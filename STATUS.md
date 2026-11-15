@@ -3,13 +3,15 @@
 Updated after every working session.
 
 - **Current milestone:** M3 (Full TUI Parity).
-- **Last done:** M3 batch 7u — help screen (F1) and man page (decision 0024): F1 opens a centered overlay listing every binding, matched beside Ctrl-C so it opens from anywhere, and every key then only closes it; `docs/ztop.1` mirrors the CLI and keys in plain roff, rendered clean with groff. Tests: 1 TUI. Earlier this session: 7t (CLI options, decision 0023) shipped as `1fdb741`; 7s (read-only, 0022) as `bea75f4`, CI green.
-- **Next step:** the remaining open `docs/parity.md` items — meter styles, screen tabs, I/O priority and affinity, thread visibility, env/open-files/trace, setup screens — then M4+. (7g macOS CPU frequency remains settled: decision 0011 and `docs/m2-power-checks.md`.)
+- **Last done:** M3 batch 7v — meter styles (decision 0025): bar (unchanged default), text, graph (history sparkline, 120-sample ring per meter) and led styles for every header meter, set on the setup screen's third row; "configurable columns of meters" split out as its own open parity item. Snapshots byte-identical. Tests: 2 TUI. Earlier this session: 7u (help/man, 0024) as `9e6f634`; 7t (CLI options, 0023) as `1fdb741`; 7s (read-only, 0022) as `bea75f4` — all CI green.
+- **Next step:** the remaining open `docs/parity.md` items — screen tabs, I/O priority and affinity, thread visibility, env/open-files/trace, setup screens, configurable meter columns — then M4+. (7g macOS CPU frequency remains settled: decision 0011 and `docs/m2-power-checks.md`.)
 - **Blocked on:** nothing.
 
 ## Log
 
 Newest first. One or two lines per session: what changed, what is next.
+
+- 2026-11-15: M3 batch 7v — meter styles (decision 0025): bar (unchanged default), text, graph (history sparkline from 120-sample rings) and led; set on the setup screen's third row; "configurable columns of meters" split into its own open item. Snapshots byte-identical; two new TUI tests. Next: screen tabs, I/O priority/affinity, thread visibility, env/open-files/trace, setup screens, meter columns.
 
 - 2026-11-15: M3 batch 7u — help screen (F1) and man page (decision 0024): F1 opens a centered overlay from anywhere and any key closes it; `docs/ztop.1` mirrors CLI and keys in plain roff (verified with groff). Snapshots unchanged; one new TUI test. Next: meter styles, screen tabs, I/O priority/affinity, thread visibility, env/open-files/trace, setup screens.
 - 2026-11-15: M3 batch 7t — command-line options (decision 0023): `-d`/`-u`/`-s`/`-t` shape the first frame via `RunFlags`; `-s` names parse exactly, `-d` has a 0.1 s floor. CLI verified live (`--help`, bad `-s`, tiny `-d`). Snapshots unchanged; two new TUI tests.

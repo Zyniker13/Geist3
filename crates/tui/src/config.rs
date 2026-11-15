@@ -30,6 +30,49 @@ pub struct Config {
     /// Open the process table in tree view.
     #[serde(default)]
     pub start_in_tree: bool,
+    /// How the header meters draw their fill.
+    #[serde(default)]
+    pub meter_style: MeterStyle,
+}
+
+/// How the header meters draw their fill.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum MeterStyle {
+    /// Solid fill: the current rendering (█ over the background).
+    #[default]
+    #[serde(rename = "bar")]
+    Bar,
+    /// Numbers only, no fill.
+    #[serde(rename = "text")]
+    Text,
+    /// A history sparkline of recent samples, newest on the right.
+    #[serde(rename = "graph")]
+    Graph,
+    /// An LED strip: `|` where the value has reached, `·` behind it.
+    #[serde(rename = "led")]
+    Led,
+}
+
+impl MeterStyle {
+    /// The value shown on the setup screen and in tests.
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Bar => "bar",
+            Self::Text => "text",
+            Self::Graph => "graph",
+            Self::Led => "led",
+        }
+    }
+
+    /// The next style in the setup screen's cycle.
+    pub fn next(self) -> Self {
+        match self {
+            Self::Bar => Self::Text,
+            Self::Text => Self::Graph,
+            Self::Graph => Self::Led,
+            Self::Led => Self::Bar,
+        }
+    }
 }
 
 impl Config {
@@ -128,6 +171,7 @@ mod tests {
         let config = Config {
             theme: Theme::Mono,
             start_in_tree: true,
+            meter_style: MeterStyle::Led,
         };
         config.save_to(&path).expect("saves");
         assert_eq!(Config::load_from(&path), config);

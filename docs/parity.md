@@ -11,7 +11,10 @@ Check an item only when it works and a test or a recorded check shows it. Add th
 - [x] Battery, clock, hostname and system meters — the info line shows the local clock (`HH:MM:SS`, host time zone, `n/a` when the timestamp cannot be converted), the system string (Linux from `/proc/sys/kernel/osrelease`, macOS from `kern.ostype`/`kern.osrelease`) and the battery (percentage and state) when the sample carries one; the hostname is in the title line. Tests: `the_header_info_line_shows_clock_tasks_and_system`, `the_header_info_line_shows_the_battery_when_present`, `renders_the_header_and_table_at_80x24`.
 - [x] Pressure stall (PSI) meters (Linux) — one header line reporting the 10-second averages of each resource's pressure: `psi  cpu s 12.3% · mem s 0.1% f 0.0% · io s 2.3% f 1.1%` (`s` some, `f` full; the kernel writes no `full` for cpu), present only when the sample carries a complete reading and hidden on macOS and PSI-disabled kernels (decision 0019). Capture records the three `/proc/pressure` files when they exist and the fixture reader parses them, so re-captured fixtures replay the line. Tests: `pressure_reads_some_and_full_averages`, `pressure_cpu_has_no_full_line`, `pressure_rejects_truncated_or_unknown_text`, `the_psi_line_reports_pressure_averages`, `the_psi_line_stays_hidden_without_pressure`.
 - [x] Disk I/O and network I/O meters — one header line when any disk or interface has a measured rate: `io  sda r 1.2 MiB/s w 512 KiB/s · eth0 r 5.0 MiB/s t 120 KiB/s` (decision 0018; entries without a rate — replays, first samples — are skipped, and the line disappears entirely so the header keeps its height). The header height, table split and hint-click row all derive from one `header_height`. Tests: `the_io_line_reports_disk_and_net_rates`, `the_io_line_stays_hidden_without_rates`.
-- [ ] Meter styles: bar, text, graph and LED; configurable columns of meters
+- [x] Meter styles: bar, text, graph and LED (decision 0025; test
+  `meter_styles_change_the_header_rendering`; history trims at 120
+  samples). Configurable columns of meters: still open, split out.
+- [ ] Configurable columns of meters (htop's meter-layout editor)
 - [ ] Screen tabs, including a dedicated I/O screen
 
 ## htop: Process Table
