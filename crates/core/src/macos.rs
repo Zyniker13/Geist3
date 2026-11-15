@@ -26,7 +26,8 @@ use std::path::Path;
 use crate::fixture::Fixture;
 use crate::linux::{FixtureSampleError, bad_source, missing_source};
 use crate::model::{
-    AppleSilicon, Cpu, CpuTimes, Memory, Metric, Process, ProcessIo, Sample, Sensors, Unit,
+    AppleSilicon, Cpu, CpuRates, CpuTimes, Memory, Metric, Process, ProcessIo, Sample, Sensors,
+    Unit,
 };
 
 /// BSD scheduler tick rate in hertz, the rate `host_statistics64` CPU
@@ -359,7 +360,10 @@ pub fn sample_from_fixture(dir: &Path) -> Result<Sample, FixtureSampleError> {
         // the header omits it rather than guessing.
         "",
         fixture.manifest().captured_at_unix * 1000,
-        Vec::new(),
+        CpuRates {
+            busy_percent: Vec::new(),
+            state_percent: Vec::new(),
+        },
     )
     .map_err(|_| bad_source("hostinfo"))
 }
@@ -394,10 +398,10 @@ pub(crate) struct SourceError {
 
 /// Assembles a [`Sample`] from parsed macOS sources — the shared tail of
 /// the fixture replay and the live collector (decision 0010), so both
-/// interpret the recorded text identically. `cpu_busy` carries per-core
-/// busy percentages measured between two samples; the fixture replay has
-/// no interval and passes an empty vector, which becomes zeros. Uptime is
-/// the timestamp minus the host's boot time.
+/// interpret the recorded text identically. `rates` carries the per-core
+/// busy percentages and their per-state shares measured between two
+/// samples; the fixture replay has no interval and passes empty vectors,
+/// which become zeros. Uptime is the timestamp minus the host's boot time.
 ///
 /// # Errors
 ///
@@ -409,7 +413,7 @@ pub(crate) fn sample_from_parts(
     hostname: &str,
     system: &str,
     timestamp_ms: u64,
-    cpu_busy: Vec<f64>,
+    rates: CpuRates,
 ) -> Result<Sample, SourceError> {
     if host.cores.is_empty() {
         return Err(SourceError {
@@ -480,10 +484,15 @@ pub(crate) fn sample_from_parts(
         hostname: hostname.to_string(),
         system: system.to_string(),
         cpu: Cpu {
-            busy_percent: if cpu_busy.len() == cores.len() {
-                cpu_busy
+            busy_percent: if rates.busy_percent.len() == cores.len() {
+                rates.busy_percent
             } else {
                 vec![0.0; cores.len()]
+            },
+            state_percent: if rates.state_percent.len() == cores.len() {
+                rates.state_percent
+            } else {
+                vec![CpuTimes::default(); cores.len()]
             },
             cores,
             frequency_mhz: Vec::new(),

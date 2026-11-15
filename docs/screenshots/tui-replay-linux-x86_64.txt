@@ -1,5 +1,5 @@
 zTop 0.1.0  linux-x86_64  up 00:04:07  12 procs f 3.4 GHz  load 0.76 0.31 0.13  
-  Avg 0%         0 0%             1 0%              2 0%             3 0%       
+  Avg 0%  0 0%              1 0%             2 0%              3 0%             
 ████   1.3 GiB / 15.3 GiB · buf 63.3 MiB                    no swap             
 08:46:56  Tasks: 12, 0 running  295 thr  12 kthr  Linux 7.0.0-1016-aws          
 q: quit · tab: sort cpu ↓ · i: reverse · f3: search · f4: filter · u: user · spa

@@ -977,6 +977,7 @@ pub fn sample_from_fixture(dir: &Path) -> Result<Sample, FixtureSampleError> {
         ),
         cpu: Cpu {
             busy_percent: vec![0.0; stat.cores.len()],
+            state_percent: vec![CpuTimes::default(); stat.cores.len()],
             cores: stat.cores,
             frequency_mhz: cpuinfo
                 .map(|text| parse_cpuinfo_frequencies(&text))
@@ -1037,6 +1038,7 @@ mod live {
         system_text,
     };
     use crate::collector::{CollectError, Collector};
+    use crate::model::core_state_percents;
     use crate::model::{
         AppleSilicon, Cpu, Fan, Metric, Process, Sample, Sensors, TempSensor, Unit,
     };
@@ -1087,9 +1089,15 @@ mod live {
                 origin: "/proc/stat",
                 what: "CPU times",
             })?;
-            let per_core_percent = match (self.prev.as_ref(), interval_secs) {
-                (Some(prev), Some(secs)) => core_percents(&stat.cores, &prev.cores, secs),
-                _ => vec![0.0; stat.cores.len()],
+            let (per_core_percent, per_core_states) = match (self.prev.as_ref(), interval_secs) {
+                (Some(prev), Some(secs)) => (
+                    core_percents(&stat.cores, &prev.cores, secs),
+                    core_state_percents(&stat.cores, &prev.cores, secs),
+                ),
+                _ => (
+                    vec![0.0; stat.cores.len()],
+                    vec![CpuTimes::default(); stat.cores.len()],
+                ),
             };
             let meminfo_text = fs::read_to_string("/proc/meminfo")?;
             let meminfo = parse_proc_meminfo(&meminfo_text).ok_or(CollectError::Unavailable {
@@ -1256,6 +1264,7 @@ mod live {
                 ),
                 cpu: Cpu {
                     busy_percent: per_core_percent,
+                    state_percent: per_core_states,
                     cores: stat.cores,
                     frequency_mhz: parse_cpuinfo_frequencies(
                         &fs::read_to_string("/proc/cpuinfo").unwrap_or_default(),

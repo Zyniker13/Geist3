@@ -124,6 +124,63 @@ pub fn core_percents(current: &[CpuTimes], previous: &[CpuTimes], interval_secs:
         .collect()
 }
 
+/// Per-core busy time split by state, in percent of the interval.
+///
+/// Index `i` pairs `current[i]` with `previous[i]`; a core without a
+/// previous reading, a non-positive interval, or a total that did not
+/// advance reports all-zero shares, matching [`core_percents`]. Each
+/// state's share is its delta divided by the core's total delta, so the
+/// shares plus idle sum to about 100. Shared by the Linux and macOS
+/// collectors; a macOS delta only ever fills `user` and `system`.
+pub fn core_state_percents(
+    current: &[CpuTimes],
+    previous: &[CpuTimes],
+    interval_secs: f64,
+) -> Vec<CpuTimes> {
+    if interval_secs <= 0.0 {
+        return vec![CpuTimes::default(); current.len()];
+    }
+    current
+        .iter()
+        .enumerate()
+        .map(|(index, now)| {
+            let Some(old) = previous.get(index) else {
+                return CpuTimes::default();
+            };
+            let total = now.total() - old.total();
+            if total <= 0.0 {
+                return CpuTimes::default();
+            }
+            let share = |now_value: f64, old_value: f64| {
+                ((now_value - old_value) / total * 100.0).clamp(0.0, 100.0)
+            };
+            CpuTimes {
+                user: share(now.user, old.user),
+                system: share(now.system, old.system),
+                nice: share(now.nice, old.nice),
+                idle: share(now.idle, old.idle),
+                io_wait: share(now.io_wait, old.io_wait),
+                irq: share(now.irq, old.irq),
+                soft_irq: share(now.soft_irq, old.soft_irq),
+                steal: share(now.steal, old.steal),
+                guest: share(now.guest, old.guest),
+            }
+        })
+        .collect()
+}
+
+/// Per-core CPU rates measured between two samples: the busy percentage
+/// and the matching per-state shares, one entry per core. The macOS
+/// collector hands this pair to [`sample_from_parts`] as one value so
+/// neither is passed without the other.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct CpuRates {
+    /// Busy percentage per core, 0..=100.
+    pub busy_percent: Vec<f64>,
+    /// Per-state shares per core, in percent of the interval.
+    pub state_percent: Vec<CpuTimes>,
+}
+
 /// One sample of one host: a consistent snapshot at one instant.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Sample {
@@ -273,6 +330,15 @@ pub struct Cpu {
     /// a single capture, reports 0.0 because a lone snapshot has no
     /// interval to average over.
     pub busy_percent: Vec<f64>,
+    /// Per-core busy time split by state, in percent of the interval.
+    ///
+    /// Index matches `cores` and `busy_percent`; each [`CpuTimes`] holds
+    /// percentages of the sample interval rather than seconds (so the
+    /// states plus idle sum to about 100). A collector's first sample and
+    /// every fixture replay of a single capture fill zeros. Captures
+    /// recorded before this field existed deserialize as an empty vector.
+    #[serde(default)]
+    pub state_percent: Vec<CpuTimes>,
     /// Current frequency per core, when the platform reports it.
     pub frequency_mhz: Vec<Metric>,
 }
@@ -422,6 +488,42 @@ mod tests {
     use super::*;
 
     #[test]
+    fn core_state_percents_split_the_interval() {
+        let previous = CpuTimes {
+            user: 1.0,
+            idle: 9.0,
+            ..CpuTimes::default()
+        };
+        let current = CpuTimes {
+            user: 3.0,
+            system: 1.0,
+            nice: 2.0,
+            idle: 12.0,
+            ..CpuTimes::default()
+        };
+        // Deltas: user 2, system 1, nice 2, idle 3 over an 8-second total.
+        let shares = core_state_percents(&[current], &[previous], 1.0);
+        assert!((shares[0].user - 25.0).abs() < 1e-9);
+        assert!((shares[0].system - 12.5).abs() < 1e-9);
+        assert!((shares[0].nice - 25.0).abs() < 1e-9);
+        assert!((shares[0].idle - 37.5).abs() < 1e-9);
+        assert_eq!(shares[0].io_wait, 0.0);
+        // No previous reading, no interval, no advancing total: zeros.
+        assert_eq!(
+            core_state_percents(&[current], &[], 1.0)[0],
+            CpuTimes::default()
+        );
+        assert_eq!(
+            core_state_percents(&[current], &[previous], 0.0)[0],
+            CpuTimes::default()
+        );
+        assert_eq!(
+            core_state_percents(&[current], &[current], 1.0)[0],
+            CpuTimes::default()
+        );
+    }
+
+    #[test]
     fn metric_availability_is_explicit() {
         let have = Metric::available(42.0, Unit::Celsius);
         let missing = Metric::unavailable(Unit::Celsius);
@@ -446,6 +548,7 @@ mod tests {
                 }],
                 frequency_mhz: vec![Metric::unavailable(Unit::Hertz)],
                 busy_percent: vec![0.0],
+                state_percent: vec![CpuTimes::default()],
             },
             memory: Memory {
                 total: Metric::available(16.0 * 1024.0 * 1024.0 * 1024.0, Unit::Bytes),

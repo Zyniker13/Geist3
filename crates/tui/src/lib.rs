@@ -22,13 +22,13 @@ use ratatui::crossterm::terminal::{
     EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
 };
 use ratatui::layout::{Constraint, Layout};
-use ratatui::style::{Style, Stylize};
+use ratatui::style::{Color, Style, Stylize};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Cell, Gauge, Paragraph, Row, Table};
 
 use ztop_core::collector::{CollectError, Collector};
 use ztop_core::control::{self, Control, Plan};
-use ztop_core::model::{Memory, Metric, Process, Sample, Unit};
+use ztop_core::model::{CpuTimes, Memory, Metric, Process, Sample, Unit};
 
 mod config;
 pub use config::{Config, Theme};
@@ -1649,12 +1649,113 @@ fn draw_cpu_row(frame: &mut Frame, ui: &Ui, area: ratatui::layout::Rect) {
         .gauge_style(gauge_style(ui, Style::new().green()));
     frame.render_widget(avg, split[0]);
     for (core, percent) in percents.iter().enumerate() {
-        let gauge = Gauge::default()
-            .ratio((*percent / 100.0).clamp(0.0, 1.0))
-            .label(format!("{core} {:.0}%", percent))
-            .gauge_style(gauge_style(ui, Style::new().green()));
-        frame.render_widget(gauge, split[core + 1]);
+        let states = sample
+            .cpu
+            .state_percent
+            .get(core)
+            .copied()
+            .unwrap_or_default();
+        let width = split[core + 1].width as usize;
+        let line = core_bar_line(ui, &states, *percent, core, width);
+        frame.render_widget(Paragraph::new(line), split[core + 1]);
     }
+}
+
+/// One band of a split core meter: the fill character and its cell count.
+type Band = (char, usize);
+
+/// The band characters and counts for one core's meter: the busy fill
+/// (`percent` of `width` cells) split by state — user `█`, nice `▓`,
+/// system `▒`, io-wait `░`, and the remaining states (irq, soft-irq,
+/// steal, guest) as `·`. Bands are cut from cumulative shares of the
+/// interval, so the total never exceeds the fill and the rare, narrow
+/// bands drop first on small cells. All-zero shares (a capture recorded
+/// before the split existed) fall back to one plain user band.
+fn core_bands(states: &CpuTimes, percent: f64, width: usize) -> Vec<Band> {
+    if width == 0 {
+        return Vec::new();
+    }
+    let filled = (((percent / 100.0) * width as f64).round() as usize).min(width);
+    let all_zero = [
+        states.user,
+        states.nice,
+        states.system,
+        states.io_wait,
+        states.irq,
+        states.soft_irq,
+        states.steal,
+        states.guest,
+    ]
+    .iter()
+    .all(|share| *share <= 0.0);
+    if all_zero {
+        return if filled > 0 {
+            vec![('█', filled)]
+        } else {
+            Vec::new()
+        };
+    }
+    let shares = [
+        (states.user.max(0.0), '█'),
+        (states.nice.max(0.0), '▓'),
+        (states.system.max(0.0), '▒'),
+        (states.io_wait.max(0.0), '░'),
+        (
+            states.irq.max(0.0)
+                + states.soft_irq.max(0.0)
+                + states.steal.max(0.0)
+                + states.guest.max(0.0),
+            '·',
+        ),
+    ];
+    let mut bands = Vec::new();
+    let mut covered = 0.0f64;
+    let mut used = 0usize;
+    for (share, ch) in shares {
+        let end = ((((covered + share) / 100.0) * width as f64).round() as usize)
+            .min(filled)
+            .max(used);
+        if end > used {
+            bands.push((ch, end - used));
+            used = end;
+        }
+        covered += share;
+    }
+    bands
+}
+
+/// The per-core meter line: the label, then the state bands, padded to
+/// the cell with spaces. In the color theme each band carries its own
+/// color (user green, nice yellow, system red, io-wait cyan, the rare
+/// states magenta); mono keeps the characters alone, so the split stays
+/// legible without color too.
+fn core_bar_line(
+    ui: &Ui,
+    states: &CpuTimes,
+    percent: f64,
+    core: usize,
+    width: usize,
+) -> Line<'static> {
+    let label = format!("{core} {:.0}%", percent);
+    let mut spans = vec![Span::raw(label.clone())];
+    let colors = [
+        Color::Green,
+        Color::Yellow,
+        Color::Red,
+        Color::Cyan,
+        Color::Magenta,
+    ];
+    let mut used = label.chars().count();
+    for (index, (ch, cells)) in core_bands(states, percent, width).into_iter().enumerate() {
+        let text = ch.to_string().repeat(cells);
+        spans.push(match ui.config.theme {
+            Theme::Color => Span::styled(text, Style::new().fg(colors[index])),
+            Theme::Mono => Span::raw(text),
+        });
+        used += cells;
+    }
+    spans.push(Span::raw(" ".repeat(width.saturating_sub(used))));
+    Line::from(spans)
 }
 
 fn draw_memory_row(frame: &mut Frame, ui: &Ui, area: ratatui::layout::Rect) {
@@ -2353,6 +2454,7 @@ mod tests {
             cpu: Cpu {
                 cores,
                 busy_percent: vec![10.0, 25.0, 50.0, 100.0],
+                state_percent: vec![CpuTimes::default(); 4],
                 frequency_mhz: Vec::new(),
             },
             memory: Memory {
@@ -3034,6 +3136,46 @@ mod tests {
             "average meter present: {:?}",
             rows[1]
         );
+    }
+
+    /// The per-core meters split the busy fill by state: user `█`, nice
+    /// `▓`, system `▒`, io-wait `░`, rare states `·` — legible in mono
+    /// through the characters and in color through the styles too.
+    #[test]
+    fn the_core_bars_split_the_states() {
+        let mut s = sample();
+        s.cpu.busy_percent = vec![50.0, 0.0, 0.0, 0.0];
+        s.cpu.state_percent = vec![
+            CpuTimes {
+                user: 30.0,
+                nice: 10.0,
+                system: 10.0,
+                ..CpuTimes::default()
+            },
+            CpuTimes::default(),
+            CpuTimes::default(),
+            CpuTimes::default(),
+        ];
+        let rows = render(&ui_with(Some(s), None), 80, 24);
+        let row = &rows[1];
+        assert!(row.contains("0 50%"), "core label: {row:?}");
+        assert!(row.contains('▓'), "nice band: {row:?}");
+        assert!(row.contains('▒'), "system band: {row:?}");
+    }
+
+    /// A meter without recorded state shares (a capture from before the
+    /// split existed) fills plainly with the user character.
+    #[test]
+    fn a_core_bar_without_state_shares_fills_plainly() {
+        let mut s = sample();
+        s.cpu.busy_percent = vec![0.0, 0.0, 0.0, 100.0];
+        // sample() carries all-zero shares already.
+        let rows = render(&ui_with(Some(s), None), 80, 24);
+        let row = &rows[1];
+        assert!(row.contains("3 100%"), "core label: {row:?}");
+        let filled = row.split("3 100%").nth(1).unwrap_or("");
+        let solid = filled.chars().take_while(|c| *c == '█').count();
+        assert!(solid >= 5, "plain fill after the label: {row:?}");
     }
 
     /// The memory gauge label reports compressed memory when the sample

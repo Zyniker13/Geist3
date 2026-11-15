@@ -3,15 +3,15 @@
 Updated after every working session.
 
 - **Current milestone:** M3 (Full TUI Parity).
-- **Last done:** M3 batch 7m — the last two process-table parity items: a PRI column (Linux `stat` priority, macOS recorded task priority) and a dedicated COMMAND column (raw command line, falling back to the short name, no tree/tag decoration), both on 160+-column terminals in the tier ladder (decision 0015); sort cycle now walks 15 keys ending `ppid→pri→name→command`, COMMAND sorts by the command-or-name fallback, and `sort_key_at` handles fixed columns after the flexible NAME so COMMAND clicks land. Tests: `widest_terminals_gain_pri_and_command` (render, PRI/COMMAND clicks, worker-12 leads under the fallback, 140-tier absence), `sort_cycling_and_direction` extended. All three replay snapshots byte-identical (80-column renders unchanged).
-- **Next step:** M3 is now fully covered by the remaining `[ ]` process-table work being done; check `docs/parity.md` for the next milestone step (meters, screens, or the M4+ items) and continue toward M8/0.1.0. (7g macOS CPU frequency remains settled: decision 0011 and `docs/m2-power-checks.md`.)
+- **Last done:** M3 batch 7n — per-core CPU meters split by state (decision 0017): `Cpu.state_percent` (per-state shares of the interval, serde-defaulted for old captures) computed by a shared `core_state_percents` next to `core_percents` in both live collectors, and the per-core meters redrawn as cumulative state bands (`█` user, `▓` nice, `▒` system, `░` io-wait, `·` rare states) that stay legible in mono. Tests: `core_state_percents_split_the_interval`, `the_core_bars_split_the_states`, `a_core_bar_without_state_shares_fills_plainly`. Replay snapshots regenerated (meter labels anchor left now). Also this session: 7m shipped (`19d5271` + snapshot refresh `a90a64d`, CI green) — PRI and COMMAND columns at 160+, a 15-key sort cycle.
+- **Next step:** the next open `docs/parity.md` item — likely the PSI/disk/network meters or the meter styles item — or the next milestone step toward M8/0.1.0. (7g macOS CPU frequency remains settled: decision 0011 and `docs/m2-power-checks.md`.)
 - **Blocked on:** nothing.
 
 ## Log
 
 Newest first. One or two lines per session: what changed, what is next.
 
-- 2026-11-15: M3 batch 7m — PRI and COMMAND columns at 160+ (tier ladder), sort cycle to 15 keys (pri, command), `sort_key_at` extended past the flexible NAME column for COMMAND clicks, COMMAND sorts by command-or-name fallback. New `widest_terminals_gain_pri_and_command`; cycle test extended; snapshots unchanged. Next: the next milestone step per `docs/parity.md`.
+- 2026-11-15: M3 batch 7n — per-core meters split by state (decision 0017): `Cpu.state_percent` + shared `core_state_percents`, both collectors wired, TUI band rendering with mono/color duality. Three new tests; snapshots regenerated. Next: PSI/disk/network meters or the next milestone step.
 
 - 2026-11-15: M3 batch 7k — VIRT/SHR/PPID columns tiering by width (120+/140+), `Columns` plan as the single source for header, cells and click map, SortKey::Virtual/Shared/Parent in the cycle, decision records 0014 (statm 4 KiB page) and 0015 (tier ladder). 80-column snapshots unchanged by construction. Next: 7l — the full command line, then remaining M3 items.
 

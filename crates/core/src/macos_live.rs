@@ -13,7 +13,7 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use crate::collector::{CollectError, Collector};
 use crate::macos::{core_times, parse_hostinfo, parse_processes, sample_from_parts};
 use crate::macos_power::MacOsPower;
-use crate::model::{CpuTimes, Sample};
+use crate::model::{CpuRates, CpuTimes, Sample};
 
 /// Reads the live macOS host through Mach, libproc and sysctl.
 ///
@@ -67,9 +67,15 @@ impl Collector for MacOsCollector {
         let hostname = self.hostname();
         let cores = core_times(&host.cores);
 
-        let cpu_busy = match (self.prev.as_ref(), interval_secs) {
-            (Some(prev), Some(secs)) => crate::model::core_percents(&cores, &prev.cores, secs),
-            _ => vec![0.0; cores.len()],
+        let (cpu_busy, cpu_states) = match (self.prev.as_ref(), interval_secs) {
+            (Some(prev), Some(secs)) => (
+                crate::model::core_percents(&cores, &prev.cores, secs),
+                crate::model::core_state_percents(&cores, &prev.cores, secs),
+            ),
+            _ => (
+                vec![0.0; cores.len()],
+                vec![crate::model::CpuTimes::default(); cores.len()],
+            ),
         };
 
         // Per-process CPU rates: the delta of cumulative nanoseconds over
@@ -111,7 +117,10 @@ impl Collector for MacOsCollector {
             &hostname,
             &system,
             timestamp_ms,
-            cpu_busy,
+            CpuRates {
+                busy_percent: cpu_busy,
+                state_percent: cpu_states,
+            },
         )
         .map_err(|source| CollectError::Unavailable {
             origin: source.origin,
