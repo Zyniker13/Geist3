@@ -545,6 +545,34 @@ fn fixture_samples_report_zero_process_cpu() {
 }
 
 #[test]
+fn command_lines_come_from_the_recorded_cmdline_files() {
+    for name in ARCHES {
+        let dir = fixture_dir(name);
+        let sample = sample_from_fixture(&dir).unwrap();
+        for process in &sample.processes {
+            // The capture scrubs each argv to one fake word (decision
+            // 0007), joined here the same way the collector joins them.
+            let file = dir
+                .join("data")
+                .join(format!("proc-{}-cmdline", process.pid));
+            let expected = if file.exists() {
+                let recorded = data(&dir, &format!("proc-{}-cmdline", process.pid));
+                let argv: Vec<&str> = recorded.split('\0').filter(|arg| !arg.is_empty()).collect();
+                if argv.is_empty() {
+                    None
+                } else {
+                    Some(argv.join(" "))
+                }
+            } else {
+                // Kernel threads record no cmdline file at all.
+                None
+            };
+            assert_eq!(process.command, expected, "{name}: pid {}", process.pid);
+        }
+    }
+}
+
+#[test]
 fn a_missing_required_source_is_an_error() {
     let dir = std::env::temp_dir().join(format!("ztop-fixture-missing-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);

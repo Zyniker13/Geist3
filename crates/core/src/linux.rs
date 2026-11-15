@@ -480,6 +480,17 @@ fn parse_pid_statm(text: &str) -> Option<u64> {
     Some(shared_pages * 4096)
 }
 
+/// The full command line from one process's `cmdline` file: the
+/// NUL-separated argv joined with single spaces. An empty file (kernel
+/// threads have none) means no command line, not an empty one.
+fn parse_pid_cmdline(text: &str) -> Option<String> {
+    let argv: Vec<&str> = text.split('\0').filter(|arg| !arg.is_empty()).collect();
+    if argv.is_empty() {
+        return None;
+    }
+    Some(argv.join(" "))
+}
+
 /// Disk I/O counters from `/proc/<pid>/io` for one process.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct PidIo {
@@ -560,6 +571,7 @@ pub(crate) struct PidData {
     pub(crate) status: Option<PidStatus>,
     pub(crate) stat: Option<PidStat>,
     pub(crate) comm: Option<String>,
+    pub(crate) command: Option<String>,
     pub(crate) io: Option<PidIo>,
     pub(crate) statm: Option<u64>,
 }
@@ -624,6 +636,7 @@ fn process_row(
         }),
         start_time_secs,
         processor: data.stat.as_ref().map(|stat| stat.processor),
+        command: data.command.clone(),
         io: ProcessIo {
             read_bytes: data.io.map(|io| io.read_bytes),
             write_bytes: data.io.map(|io| io.write_bytes),
@@ -910,9 +923,10 @@ pub fn sample_from_fixture(dir: &Path) -> Result<Sample, FixtureSampleError> {
                 "stat" => data.stat = parse_pid_stat(&text),
                 "status" => data.status = Some(parse_pid_status(&text)),
                 "comm" => data.comm = Some(text),
+                "cmdline" => data.command = parse_pid_cmdline(&text),
                 "io" => data.io = parse_pid_io(&text),
                 "statm" => data.statm = parse_pid_statm(&text),
-                _ => {} // cmdline: nothing beyond `comm` is useful here
+                _ => {}
             }
             continue;
         }
@@ -1343,6 +1357,23 @@ mod tests {
     }
 
     #[test]
+    fn cmdline_joins_the_recorded_argv() {
+        // The capture scrubs each argv to one fake word plus the NUL the
+        // kernel keeps after it (decision 0007).
+        assert_eq!(
+            parse_pid_cmdline("proc-a-1\0"),
+            Some("proc-a-1".to_string())
+        );
+        assert_eq!(
+            parse_pid_cmdline("ztop\0--watch\0\0"),
+            Some("ztop --watch".to_string())
+        );
+        // Kernel threads have an empty file: no command line, not an
+        // empty one.
+        assert_eq!(parse_pid_cmdline(""), None);
+    }
+
+    #[test]
     fn pid_io_parses_read_and_write_bytes_and_rejects_partial_files() {
         let text = "rchar: 1000\nwchar: 2000\nread_bytes: 4096\nwrite_bytes: 8192\ncancelled_write_bytes: 0\n";
         let io = parse_pid_io(text).expect("io parses");
@@ -1641,6 +1672,7 @@ mod tests {
             status: Some(status),
             stat: None,
             comm: Some("proc-a-1\n".to_string()),
+            command: None,
             io: None,
             statm: None,
         };
@@ -1661,6 +1693,7 @@ mod tests {
             status: None,
             stat: None,
             comm: Some("worker-a\n".to_string()),
+            command: None,
             io: None,
             statm: None,
         };

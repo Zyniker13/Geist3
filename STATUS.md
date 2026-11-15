@@ -3,13 +3,15 @@
 Updated after every working session.
 
 - **Current milestone:** M3 (Full TUI Parity).
-- **Last done:** M3 batch 7k — VIRT, SHR and PPID columns, and the column layout rebuilt around one `Columns` plan that the header, the row cells and the click map all read (so a click cannot land on a column that is not drawn). Columns tier by terminal width (decision 0015): the 80-column base set is unchanged, 100+ columns add START and the last processor (from 7j), 120+ add VIRT and SHR (SHR blank where unreported, macOS today), 140+ adds PPID. Each new header sorts and clicks (`SortKey::Virtual`/`Shared`/`Parent`, labels `virt`/`shr`/`ppid`), and the sort cycle gained the three keys. Also backfilled decision 0014 (the 4 KiB page assumption in `parse_pid_statm` that its comment cited but no file recorded). One new test (tier renders, VIRT/SHR/PPID header clicks).
-- **Next step:** 7l — the full command line (Linux `/proc/<pid>/cmdline`, macOS `ps` args) so the NAME column can become a real COMMAND column where argv differs from `comm`, or the next open M3 parity item. (The previously listed 7g macOS CPU frequency is settled: decision 0011 and `docs/m2-power-checks.md` record that no unprivileged source exists and MHz conversion is never attempted; the title's `f X.X GHz` shows it where reported, i.e. Linux.)
+- **Last done:** M3 batch 7l — the full command line reaches the table: `Process.command` (Linux: the joined argv from `/proc/<pid>/cmdline`, empty file = no command line; macOS: the executable path from `proc_pidpath`, argv itself needs entitlements — decision 0016), recorded by the macOS capture as a second quoted field and scrubbed to `/fake/path` in fixtures, and shown by the NAME column with fallback to the short `comm` name (tree indent, fold counts and tag stars unchanged). Tests: `cmdline_joins_the_recorded_argv`, `a_quoted_path_tail_becomes_the_command`, `command_lines_come_from_the_recorded_cmdline_files`, `the_name_column_shows_the_command_when_the_capture_has_one`. All three replay snapshots byte-identical (the scrubbed argv equals the scrubbed `comm`).
+- **Next step:** the remaining open M3 parity item(s) — a dedicated COMMAND column with its own sort key, and the priority column — or the next milestone step. (The previously listed 7g macOS CPU frequency is settled: decision 0011 and `docs/m2-power-checks.md` record that no unprivileged source exists and MHz conversion is never attempted; the title's `f X.X GHz` shows it where reported, i.e. Linux.)
 - **Blocked on:** nothing.
 
 ## Log
 
 Newest first. One or two lines per session: what changed, what is next.
+
+- 2026-11-15: M3 batch 7l — `Process.command`: Linux joined `/proc/<pid>/cmdline` argv (empty file = none), macOS `proc_pidpath` executable path recorded as a second quoted field and scrubbed in fixtures (decision 0016); NAME column shows the command with `comm` fallback. Four new tests; snapshots byte-identical. Next: the remaining M3 items (COMMAND column sort key, priority column).
 
 - 2026-11-15: M3 batch 7k — VIRT/SHR/PPID columns tiering by width (120+/140+), `Columns` plan as the single source for header, cells and click map, SortKey::Virtual/Shared/Parent in the cycle, decision records 0014 (statm 4 KiB page) and 0015 (tier ladder). 80-column snapshots unchanged by construction. Next: 7l — the full command line, then remaining M3 items.
 

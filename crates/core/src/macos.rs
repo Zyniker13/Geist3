@@ -100,6 +100,9 @@ pub struct MacProcess {
     /// when available.
     pub start_secs: Option<u64>,
     pub name: String,
+    /// Executable path (libproc `proc_pidpath`), when the capture could
+    /// read it; the closest an unprivileged reader gets to a command line.
+    pub command: Option<String>,
 }
 
 /// Cumulative task usage of one process.
@@ -210,9 +213,10 @@ fn parse_pairs<const N: usize>(
 /// well-formed line, in the recorded order.
 ///
 /// A line is well-formed when the eight leading fields parse and the
-/// name is the trailing quoted string; quoted names may contain spaces.
-/// The four task fields must be all `-` (denied) or all numbers; the
-/// capture never writes a mix.
+/// name is the trailing quoted string (optionally followed by a second
+/// quoted executable path); quoted names may contain spaces. The four
+/// task fields must be all `-` (denied) or all numbers; the capture
+/// never writes a mix.
 pub fn parse_processes(text: &str) -> Vec<MacProcess> {
     text.lines().filter_map(parse_process_line).collect()
 }
@@ -232,11 +236,21 @@ fn status_letter(status: u32) -> &'static str {
 }
 
 /// Parses one `processes` line: `pid ppid status uid utime stime rss
-/// threads "name"` (8 fields) or `pid ppid status uid utime stime rss
-/// threads vsize priority nice start "name"` (12 fields).
+/// threads "name"` (8 fields), the same with `vsize priority nice start`
+/// (12 fields), or either with a trailing `"path"` — the executable path
+/// the capture read with `proc_pidpath`. Names and paths are scrubbed of
+/// quotes and backslashes by the capture, so each quoted tail is one
+/// field.
 fn parse_process_line(line: &str) -> Option<MacProcess> {
     let (prefix, quoted) = line.split_once(" \"")?;
-    let name = quoted.strip_suffix('"')?;
+    let (name, command) = match quoted.rsplit_once("\" \"") {
+        Some((name, path)) => {
+            let path = path.strip_suffix('"')?;
+            let command = if path.is_empty() { None } else { Some(path) };
+            (name, command)
+        }
+        None => (quoted.strip_suffix('"')?, None),
+    };
     let mut fields = prefix.split_whitespace();
     let pid = fields.next()?.parse().ok()?;
     let ppid = fields.next()?.parse().ok()?;
@@ -277,6 +291,7 @@ fn parse_process_line(line: &str) -> Option<MacProcess> {
         nice,
         start_secs,
         name: name.to_string(),
+        command: command.map(str::to_string),
     })
 }
 
@@ -452,6 +467,7 @@ pub(crate) fn sample_from_parts(
                 total_time_ns: mac.task.map(|t| t.utime_ns + t.stime_ns),
                 start_time_secs: mac.start_secs,
                 processor: None,
+                command: mac.command.clone(),
                 io: ProcessIo::default(),
             }
         })
@@ -735,6 +751,29 @@ mod tests {
     fn process_names_may_contain_spaces() {
         let procs = parse_processes("7 1 2 0 - - - - \"Window Server\"\n");
         assert_eq!(procs[0].name, "Window Server");
+        assert_eq!(procs[0].command, None);
+    }
+
+    #[test]
+    fn a_quoted_path_tail_becomes_the_command() {
+        // The capture appends the executable path (`proc_pidpath`) as a
+        // second quoted field; names and paths are scrubbed of quotes and
+        // backslashes, so each quoted tail is one field.
+        let procs = parse_processes(
+            "12 1 2 501 100 200 4096 3 \"Safari\" \"/Applications/Safari.app/Contents/MacOS/Safari\"\n",
+        );
+        assert_eq!(procs[0].name, "Safari");
+        assert_eq!(
+            procs[0].command,
+            Some("/Applications/Safari.app/Contents/MacOS/Safari".to_string())
+        );
+        // Legacy captures without the path leave the command unavailable.
+        let legacy = parse_processes("13 1 2 501 100 200 4096 3 \"no path\"\n");
+        assert_eq!(legacy[0].name, "no path");
+        assert_eq!(legacy[0].command, None);
+        // An empty quoted path means the read failed, not an empty command.
+        let empty = parse_processes("14 1 2 501 100 200 4096 3 \"no path\" \"\"\n");
+        assert_eq!(empty[0].command, None);
     }
 
     #[test]

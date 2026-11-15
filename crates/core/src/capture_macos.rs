@@ -224,15 +224,16 @@ fn boottime() -> Option<(i64, i64)> {
 /// `mach_timebase_info`), `rss` resident bytes and `threads` the thread
 /// count, from `PROC_PIDTASKINFO`; the kernel denies that call for other
 /// users' processes, and then those four fields are `-` (decision 0009:
-/// unavailable, never faked). The committed fixture scrubs `name`
-/// (decision 0007); the live collector reads the real names.
+/// unavailable, never faked). The committed fixture scrubs `name` and the
+/// quoted path (decision 0007); the live collector reads the real values.
 fn process_entry() -> CapturedInput {
     CapturedInput::text("processes", processes_text())
 }
 
 /// The `processes` text the capture records and the live collector parses
 /// (decision 0010). One line per process: pid, ppid, status, uid, user and
-/// system CPU in nanoseconds, RSS in bytes, thread count, quoted name.
+/// system CPU in nanoseconds, RSS in bytes, thread count, quoted name and
+/// — when readable — the quoted executable path.
 pub(crate) fn processes_text() -> String {
     let pids = list_pids();
     let tb = task_timebase();
@@ -257,12 +258,49 @@ pub(crate) fn processes_text() -> String {
                 UNAVAILABLE.to_string(),
             ),
         };
-        text.push_str(&format!(
-            "{} {} {} {} {} {} {} {} \"{}\"\n",
-            pid, bsd.ppid, bsd.status, bsd.uid, utime, stime, rss, threads, name
-        ));
+        // The executable path is the closest an unprivileged reader gets
+        // to a full command line (argv itself needs entitlements). It
+        // joins the line as a second quoted field; when unreadable the
+        // field is left out and the command stays unavailable.
+        match pid_path(pid) {
+            Some(path) => {
+                let path = path.replace(['\\', '"'], " ");
+                text.push_str(&format!(
+                    "{} {} {} {} {} {} {} {} \"{}\" \"{}\"\n",
+                    pid, bsd.ppid, bsd.status, bsd.uid, utime, stime, rss, threads, name, path
+                ));
+            }
+            None => text.push_str(&format!(
+                "{} {} {} {} {} {} {} {} \"{}\"\n",
+                pid, bsd.ppid, bsd.status, bsd.uid, utime, stime, rss, threads, name
+            )),
+        }
     }
     text
+}
+
+/// The executable path for one pid via libproc's `proc_pidpath`; the
+/// closest an unprivileged reader gets to a full command line (argv
+/// itself needs entitlements). `None` when unreadable or empty.
+fn pid_path(pid: u32) -> Option<String> {
+    const PROC_PIDPATHINFO_MAXSIZE: u32 = 4096;
+    let mut buffer = [0u8; PROC_PIDPATHINFO_MAXSIZE as usize];
+    let written = unsafe {
+        proc_pidpath(
+            pid as i32,
+            buffer.as_mut_ptr().cast(),
+            PROC_PIDPATHINFO_MAXSIZE,
+        )
+    };
+    if written <= 0 {
+        return None;
+    }
+    let path = core::str::from_utf8(&buffer[..written as usize]).ok()?;
+    if path.is_empty() {
+        None
+    } else {
+        Some(path.to_string())
+    }
 }
 
 /// Recorded in place of a value the OS would not give us (decision 0009).
@@ -446,6 +484,7 @@ unsafe extern "C" {
         buffer: *mut core::ffi::c_void,
         buffersize: i32,
     ) -> i32;
+    fn proc_pidpath(pid: i32, buffer: *mut libc::c_void, buffersize: u32) -> i32;
     fn mach_timebase_info(info: *mut MachTimebaseInfo) -> i32;
 }
 

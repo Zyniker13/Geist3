@@ -34,7 +34,8 @@ PROC_PID_RE = re.compile(r"^proc-(\d+)-(cmdline|comm|status|stat)$")
 # `-` (decision 0009). Names are identifying and always scrubbed; pids,
 # uids and counters are host-local numbers the Linux fixtures also keep.
 MAC_PROC_RE = re.compile(
-    r'^(?P<pid>\d+) (?P<rest>(?:\d+|-)(?: (?:\d+|-))*) "(?P<name>.*)"$',
+    r'^(?P<pid>\d+) (?P<rest>(?:\d+|-)(?: (?:\d+|-))*) "(?P<name>.*?)"'
+    r'(?: "(?P<path>.*)")?$',
     re.MULTILINE,
 )
 
@@ -68,12 +69,17 @@ def pick_mac_keep(text: str, want: int) -> list[int]:
 
 
 def scrub_process_entry(text: str, fake_by_pid: dict[int, str]) -> str:
-    """Replace the quoted name tail of each `processes` line (macOS)."""
+    """Replace the quoted name tail of each `processes` line (macOS) and
+    the optional second quoted executable-path tail with an obviously
+    fake path, keeping the two-quoted shape so parser tests keep both."""
     out = []
     for line in text.splitlines():
         m = MAC_PROC_RE.match(line)
         if m and int(m["pid"]) in fake_by_pid:
-            out.append(f'{m["pid"]} {m["rest"]} "{fake_by_pid[int(m["pid"])]}"')
+            path = ' "/fake/path"' if m["path"] is not None else ""
+            out.append(
+                f'{m["pid"]} {m["rest"]} "{fake_by_pid[int(m["pid"])]}"{path}'
+            )
     return "\n".join(out) + ("\n" if out else "")
 
 

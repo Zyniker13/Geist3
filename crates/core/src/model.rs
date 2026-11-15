@@ -334,6 +334,11 @@ pub struct Process {
     /// reports it (Linux `stat`).
     #[serde(default)]
     pub processor: Option<u32>,
+    /// Full command line, when the platform reports it (Linux
+    /// `/proc/<pid>/cmdline`, macOS `proc_pidpath`). Empty or unreadable
+    /// means `None` and the name column shows the short name.
+    #[serde(default)]
+    pub command: Option<String>,
     /// Per-process disk I/O, when the platform reports it (Linux).
     pub io: ProcessIo,
 }
@@ -472,6 +477,7 @@ mod tests {
                 total_time_ns: Some(1_000_000_000),
                 start_time_secs: Some(1_700_000_000),
                 processor: Some(0),
+                command: None,
                 io: ProcessIo {
                     read_bytes: Some(1024),
                     write_bytes: Some(2048),

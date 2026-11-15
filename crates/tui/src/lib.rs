@@ -2166,7 +2166,12 @@ fn process_row(
     tagged: bool,
     columns: &Columns,
 ) -> Row<'static> {
-    let name = if tree {
+    let base = row_view
+        .process
+        .command
+        .clone()
+        .unwrap_or_else(|| row_view.process.name.clone());
+    let shown = if tree {
         let indent = "  ".repeat(row_view.depth);
         let branch = if row_view.depth > 0 { "└─ " } else { "" };
         let folded = if row_view.hidden > 0 {
@@ -2174,11 +2179,11 @@ fn process_row(
         } else {
             String::new()
         };
-        format!("{indent}{branch}{}{folded}", row_view.process.name)
+        format!("{indent}{branch}{base}{folded}")
     } else {
-        row_view.process.name.clone()
+        base
     };
-    let name = if tagged { format!("* {name}") } else { name };
+    let name = if tagged { format!("* {shown}") } else { shown };
     let process = row_view.process;
     let cells: Vec<Cell<'static>> = columns
         .names
@@ -2269,6 +2274,7 @@ mod tests {
                 total_time_ns: Some(pid as u64 * 1_000_000_000),
                 start_time_secs: Some(1_700_000_000 + pid as u64),
                 processor: Some((pid - 1) % 4),
+                command: None,
                 io: ProcessIo::default(),
             })
             .collect();
@@ -3923,6 +3929,24 @@ mod tests {
                 .any(|row| row.contains("No temperature or fan data on this host.")),
             "{rows:?}"
         );
+    }
+
+    #[test]
+    fn the_name_column_shows_the_command_when_the_capture_has_one() {
+        // worker-12 carries a recorded command line; the others show
+        // their short names as before.
+        let mut flat_sample = sample();
+        flat_sample.processes[11].command = Some("ztop --watch".to_string());
+        let rows = render(&ui_with(Some(flat_sample), None), 80, 24);
+        assert!(rows.iter().any(|row| row.contains("ztop --watch")));
+        assert!(rows.iter().any(|row| row.contains("worker-04")));
+        // Tree mode indents the command like it indented the name.
+        let mut tree_sample = sample();
+        tree_sample.processes[11].command = Some("ztop --watch".to_string());
+        let mut ui = ui_with(Some(tree_sample), None);
+        ui.toggle_tree();
+        let rows = render(&ui, 80, 24);
+        assert!(rows.iter().any(|row| row.contains("ztop --watch")));
     }
 
     /// Before the first sample the panels wait for data instead of lying.
