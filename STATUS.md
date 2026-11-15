@@ -3,15 +3,16 @@
 Updated after every working session.
 
 - **Current milestone:** M3 (Full TUI Parity).
-- **Last done:** M3 batch 7t — command-line options (decision 0023): `-d` fractional delay with a 0.1 s `MIN_DELAY` floor (error, not silent clamp), `-u` starting user filter, `-s` starting sort key via `SortKey::FromStr` (unknown names error with the valid list), `-t` start in tree; the four travel as `RunFlags` applied before the first frame. Verified live: `--help`, bad `-s`, tiny `-d`. Tests: 2 TUI. Earlier this session: 7s (read-only mode, decision 0022) shipped as `bea75f4`; 7r (pause/redraw, decision 0021) as `a34a2f0`, CI green.
-- **Next step:** the remaining open `docs/parity.md` items — help screen (F1) and man page, meter styles, screen tabs, I/O priority and affinity, thread visibility, env/open-files/trace, setup screens — then M4+. (7g macOS CPU frequency remains settled: decision 0011 and `docs/m2-power-checks.md`.)
+- **Last done:** M3 batch 7u — help screen (F1) and man page (decision 0024): F1 opens a centered overlay listing every binding, matched beside Ctrl-C so it opens from anywhere, and every key then only closes it; `docs/ztop.1` mirrors the CLI and keys in plain roff, rendered clean with groff. Tests: 1 TUI. Earlier this session: 7t (CLI options, decision 0023) shipped as `1fdb741`; 7s (read-only, 0022) as `bea75f4`, CI green.
+- **Next step:** the remaining open `docs/parity.md` items — meter styles, screen tabs, I/O priority and affinity, thread visibility, env/open-files/trace, setup screens — then M4+. (7g macOS CPU frequency remains settled: decision 0011 and `docs/m2-power-checks.md`.)
 - **Blocked on:** nothing.
 
 ## Log
 
 Newest first. One or two lines per session: what changed, what is next.
 
-- 2026-11-15: M3 batch 7t — command-line options (decision 0023): `-d`/`-u`/`-s`/`-t` shape the first frame via `RunFlags`; `-s` names parse exactly, `-d` has a 0.1 s floor. CLI verified live (`--help`, bad `-s`, tiny `-d`). Snapshots unchanged; two new TUI tests. Next: help screen and man page, meter styles, or another open parity item.
+- 2026-11-15: M3 batch 7u — help screen (F1) and man page (decision 0024): F1 opens a centered overlay from anywhere and any key closes it; `docs/ztop.1` mirrors CLI and keys in plain roff (verified with groff). Snapshots unchanged; one new TUI test. Next: meter styles, screen tabs, I/O priority/affinity, thread visibility, env/open-files/trace, setup screens.
+- 2026-11-15: M3 batch 7t — command-line options (decision 0023): `-d`/`-u`/`-s`/`-t` shape the first frame via `RunFlags`; `-s` names parse exactly, `-d` has a 0.1 s floor. CLI verified live (`--help`, bad `-s`, tiny `-d`). Snapshots unchanged; two new TUI tests.
 - 2026-11-15: M3 batch 7s — read-only mode (decision 0022): `--readonly` refuses the signal menu and every plan before execution, with a one-refresh status notice. Snapshots unchanged; one new TUI test.
 - 2026-11-15: M3 batch 7r — pause (Z) and forced redraw (Ctrl-L) (decision 0021); the status line leads with `paused` while frozen. Snapshots unchanged; two new TUI tests. Next: meter styles or another open parity item.
 - 2026-11-15: M3 batch 7q — process highlighting (decision 0020): new (yellow) by pid set, dying (red) by state `Z`, large numbers (CPU%/MEM%/RES) colored in cells; mono stays plain so snapshots are byte-identical; proven by three buffer-based TUI tests. Next: meter styles or another open parity item.

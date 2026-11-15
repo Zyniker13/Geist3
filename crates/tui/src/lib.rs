@@ -175,6 +175,8 @@ pub struct Ui {
     pub tags: std::collections::BTreeSet<u32>,
     /// The open signal menu's selected row index, when the menu is open.
     pub menu: Option<usize>,
+    /// The F1 help overlay is open; every key closes it.
+    pub help: bool,
     /// The last control action's outcome, shown in the status line until
     /// the next sample arrives.
     pub notice: Option<String>,
@@ -218,6 +220,7 @@ impl Default for Ui {
             search: None,
             tags: std::collections::BTreeSet::new(),
             menu: None,
+            help: false,
             notice: None,
             screen: Screen::ProcessTable,
             config: Config::default(),
@@ -957,6 +960,11 @@ fn handle_key(ui: &mut Ui, key: KeyEvent) -> bool {
         KeyCode::Char('l') if key.modifiers.contains(KeyModifiers::CONTROL) => {
             ui.redraw_requested = true;
         }
+        // F1 opens the help overlay from anywhere, prompts included.
+        KeyCode::F(1) => ui.help = !ui.help,
+        // While the help overlay is open every other key just closes it;
+        // nothing underneath (setup, menu, filter) reacts to it.
+        _ if ui.help => ui.help = false,
         // While the setup screen (F2) is open the keys drive
         // it: Esc/F2 close it (saving), j/k move, Space or
         // Enter toggle the selected option; everything else
@@ -1160,10 +1168,19 @@ pub fn draw_lines(ui: &Ui, width: u16, height: u16) -> Vec<String> {
         .collect()
 }
 
-/// Render the whole screen: header meters over the process table.
+/// Render the whole screen, plus the help overlay when it is open.
 ///
 /// Pure with respect to `ui`, so tests can drive it through a `TestBackend`.
 pub fn draw(frame: &mut Frame, ui: &Ui) {
+    draw_screen(frame, ui);
+    if ui.help {
+        draw_help(frame, ui, frame.area());
+    }
+}
+
+/// Render one screen (the process table or an extra screen), with the
+/// signal menu over it when the menu is open.
+fn draw_screen(frame: &mut Frame, ui: &Ui) {
     if ui.screen == Screen::Setup {
         draw_setup(frame, ui, frame.area());
         return;
@@ -1549,6 +1566,55 @@ fn draw_menu(frame: &mut Frame, ui: &Ui, area: ratatui::layout::Rect) {
     }
     let menu = Paragraph::new(lines).block(Block::new().borders(Borders::ALL));
     frame.render_widget(menu, rect);
+}
+
+/// The help overlay's lines: one column of keys, one of what they do.
+/// Mirrors `handle_key`; the test that renders this overlay keeps the
+/// two honest.
+fn help_lines() -> Vec<Line<'static>> {
+    let rows: &[(&str, &str)] = &[
+        ("q, Esc, Ctrl-C", "quit"),
+        ("F1", "this help; any key closes it"),
+        ("Z", "pause/resume updates"),
+        ("Ctrl-L", "redraw the screen"),
+        ("F2", "setup (theme, tree view; saved)"),
+        ("F3", "search (Esc/Enter close, F3 repeats)"),
+        ("F4", "filter by name"),
+        ("u", "filter by user"),
+        ("Tab", "cycle the sort column"),
+        ("i", "flip the sort direction"),
+        ("M, P, T", "sort by memory, cpu, time"),
+        ("f", "follow a process"),
+        ("F5", "tree view; Enter collapses a node"),
+        ("j, k", "move the cursor"),
+        ("Space, c, U", "tag row, tag children, untag all"),
+        ("F9, K", "send a signal to the tagged rows"),
+        ("F7, F8", "renice -1 / +1"),
+        ("a, d, n, t", "silicon, disks, network, thermal"),
+    ];
+    let mut lines = vec![Line::from("Keys (any key closes)").bold()];
+    for (keys, what) in rows {
+        lines.push(Line::from(format!("{keys:<16} {what}")));
+    }
+    lines
+}
+
+/// The F1 help overlay: a centered bordered box over the current screen.
+fn draw_help(frame: &mut Frame, _ui: &Ui, area: ratatui::layout::Rect) {
+    let lines = help_lines();
+    let width = 58.min(area.width);
+    let height = (lines.len() as u16 + 2).min(area.height);
+    let x = area.x + area.width.saturating_sub(width) / 2;
+    let y = area.y + area.height.saturating_sub(height) / 2;
+    let rect = ratatui::layout::Rect {
+        x,
+        y,
+        width,
+        height,
+    };
+    frame.render_widget(ratatui::widgets::Clear, rect);
+    let help = Paragraph::new(lines).block(Block::new().borders(Borders::ALL));
+    frame.render_widget(help, rect);
 }
 
 /// True when the sample carries any sensor reading worth a header row.
@@ -3724,6 +3790,32 @@ mod tests {
         );
         assert!(!ui.readonly);
         assert!(ui.user_filter.is_none());
+    }
+
+    /// F1 opens the help overlay, it renders its keys, and every key
+    /// closes it without the key also acting underneath.
+    #[test]
+    fn f1_opens_help_and_any_key_closes_it() {
+        let mut ui = ui_with(Some(sample()), None);
+        handle_key(&mut ui, KeyEvent::from(KeyCode::F(1)));
+        assert!(ui.help);
+        let rows = render(&ui, 80, 24);
+        assert!(rows.iter().any(|row| row.contains("Keys (any key closes)")));
+        assert!(rows.iter().any(|row| row.contains("renice -1 / +1")));
+        // Any key closes it and does nothing else: not quit, not a tag.
+        assert!(!handle_key(&mut ui, KeyEvent::from(KeyCode::Char('x'))));
+        assert!(!ui.help);
+        // Esc with help open closes it instead of quitting.
+        handle_key(&mut ui, KeyEvent::from(KeyCode::F(1)));
+        assert!(!handle_key(&mut ui, KeyEvent::from(KeyCode::Esc)));
+        assert!(!ui.help);
+        assert!(ui.tags.is_empty(), "Space/U must not act under the overlay");
+        // It opens over the setup screen too, and F1 toggles it closed.
+        ui.screen = Screen::Setup;
+        handle_key(&mut ui, KeyEvent::from(KeyCode::F(1)));
+        assert!(ui.help);
+        handle_key(&mut ui, KeyEvent::from(KeyCode::F(1)));
+        assert!(!ui.help);
     }
 
     /// `--readonly` refuses the signal menu and every plan: the notice

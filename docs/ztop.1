@@ -1,0 +1,133 @@
+.\" SPDX-License-Identifier: MIT OR Apache-2.0
+.TH ZTOP 1 "2026-11-15" "ztop 0.1.0" "User Commands"
+.SH NAME
+ztop \- a system monitor for one host and your fleet, in a terminal
+.SH SYNOPSIS
+.B ztop
+.RI [ OPTIONS ]
+.RI [ COMMAND ]
+.SH DESCRIPTION
+.B ztop
+shows processes with CPU, memory and I/O meters in a terminal, and can
+watch a whole fleet of hosts. On Linux and macOS it samples the local
+host; the
+.BR capture ,
+.BR agent ,
+.B hub
+and
+.B connect
+subcommands record raw inputs, serve them over the loopback interface,
+and drive the TUI from a remote host.
+.SS Options
+.TP
+.BR \-p ", " \-\-pids " " \fIPIDS\fP
+Show only these process ids, comma separated.
+.TP
+.BR \-d ", " \-\-delay " " \fISECONDS\fP
+Seconds between samples; fractional values are allowed, and anything
+below 0.1 is refused so the loop cannot spin.
+.TP
+.BR \-u ", " \-\-user " " \fIUSER\fP
+Show only this user's processes at startup.
+.TP
+.BR \-s ", " \-\-sort " " \fIKEY\fP
+Sort by this key at startup: one of
+.BR pid ", " user ", " cpu ", " mem ", " res ", " virt ", " shr ", "
+.BR pri ", " nice ", " time ", " start ", " core ", " ppid ", " name ", "
+.BR command .
+Unknown keys are refused.
+.TP
+.BR \-t ", " \-\-tree
+Start in tree view.
+.TP
+.B \-\-no\-color
+Render without colors, ignoring the saved theme for this run.
+.TP
+.B \-\-readonly
+Refuse every action that changes the system: signals and renice are
+disabled for this run.
+.TP
+.B \-\-help
+Print help. \fB\-\-version\fP prints the version.
+.SS Keys
+.TP
+.BR q ", " Esc ", " Ctrl\-C
+quit
+.TP
+.B F1
+help; any key closes it
+.TP
+.B Z
+pause/resume updates
+.TP
+.B Ctrl\-L
+redraw the screen
+.TP
+.B F2
+setup (theme, tree view; saved)
+.TP
+.B F3
+search (Esc/Enter close, F3 repeats)
+.TP
+.B F4
+filter by name
+.TP
+.B u
+filter by user
+.TP
+.B Tab
+cycle the sort column
+.TP
+.B i
+flip the sort direction
+.TP
+.BR M ", " P ", " T
+sort by memory, cpu, time
+.TP
+.B f
+follow a process
+.TP
+.B F5
+tree view; Enter collapses a node
+.TP
+.BR j ", " k
+move the cursor
+.TP
+.BR Space ", " c ", " U
+tag row, tag children, untag all
+.TP
+.BR F9 ", " K
+send a signal to the tagged rows
+.TP
+.BR F7 ", " F8
+renice \-1 / +1
+.TP
+.BR a ", " d ", " n ", " t
+silicon, disks, network, thermal
+.PP
+The mouse works too: a click selects a row, a click on a column header
+sorts by it, and a click on the function bar replays that key.
+.SH FILES
+.TP
+.I $HOME/Library/Application Support/ztop/config.json
+(macOS) or
+.I $XDG_CONFIG_HOME/ztop/config.json
+(Linux): the saved setup, theme and tree view.
+.SH EXAMPLES
+.TP
+.B ztop
+Monitor the local host.
+.TP
+.B ztop \-d 0.5 \-s cpu \-u alice
+Refresh twice a second, sorted by CPU, showing one user.
+.TP
+.B ztop \-\-readonly
+Monitor without being able to signal or renice anything.
+.TP
+.B ztop capture \-\-out capture
+Record this host's raw inputs as a fixture for collector tests.
+.SH SEE ALSO
+.BR top (1),
+.BR htop (1),
+.BR kill (1),
+.BR renice (1)

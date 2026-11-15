@@ -81,7 +81,14 @@ Check an item only when it works and a test or a recorded check shows it. Add th
       `--no-color` and `--readonly`;
       docs/decisions/0023-command-line-options.md; tests
       `sort_key_names_parse`, `run_flags_shape_the_first_frame`).
-- [ ] Help screen (F1) and a man page
+- [x] Help screen (F1) and a man page
+      (F1 opens a centered overlay from anywhere and every key then only
+      closes it; the text lives in `help_lines()` beside `handle_key` and
+      is rendered by a test so it cannot drift; man page `docs/ztop.1`,
+      plain roff without preprocessor needs, verified with
+      `groff -man -Tascii`;
+      docs/decisions/0024-help-and-man-page.md; test
+      `f1_opens_help_and_any_key_closes_it`).
 
 ## asitop: Apple Silicon (macOS)
 
