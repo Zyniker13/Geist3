@@ -1,0 +1,49 @@
+ 0|┌Setup─────────────────────────────────────────────────────────────────────────┐
+ 1|│                                                                              │
+ 2|│> Theme              color                                                    │
+ 3|│  Start in tree view no                                                       │
+ 4|│                                                                              │
+ 5|│j/k move   Space/Enter toggle   Esc/F2 saves and closes                       │
+ 6|│                                                                              │
+ 7|│Config file: ~/Library/Application Support/ztop/config.json                   │
+ 8|│                                                                              │
+ 9|│                                                                              │
+10|│                                                                              │
+11|│                                                                              │
+12|│                                                                              │
+13|│                                                                              │
+14|│                                                                              │
+15|│                                                                              │
+16|│                                                                              │
+17|│                                                                              │
+18|│                                                                              │
+19|│                                                                              │
+20|│                                                                              │
+21|│                                                                              │
+22|│                                                                              │
+23|└──────────────────────────────────────────────────────────────────────────────┘
+---- second row selected, mono theme ----
+ 0|┌Setup─────────────────────────────────────────────────────────────────────────┐
+ 1|│                                                                              │
+ 2|│  Theme              mono                                                     │
+ 3|│> Start in tree view no                                                       │
+ 4|│                                                                              │
+ 5|│j/k move   Space/Enter toggle   Esc/F2 saves and closes                       │
+ 6|│                                                                              │
+ 7|│Config file: ~/Library/Application Support/ztop/config.json                   │
+ 8|│                                                                              │
+ 9|│                                                                              │
+10|│                                                                              │
+11|│                                                                              │
+12|│                                                                              │
+13|│                                                                              │
+14|│                                                                              │
+15|│                                                                              │
+16|│                                                                              │
+17|│                                                                              │
+18|│                                                                              │
+19|│                                                                              │
+20|│                                                                              │
+21|│                                                                              │
+22|│                                                                              │
+23|└──────────────────────────────────────────────────────────────────────────────┘

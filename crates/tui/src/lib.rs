@@ -19,13 +19,16 @@ use ratatui::crossterm::terminal::{
     EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
 };
 use ratatui::layout::{Constraint, Layout};
-use ratatui::style::Stylize;
+use ratatui::style::{Style, Stylize};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Cell, Gauge, Paragraph, Row, Table};
 
 use ztop_core::collector::{CollectError, Collector};
 use ztop_core::control::{self, Control, Plan};
 use ztop_core::model::{Memory, Metric, Process, Sample, Unit};
+
+mod config;
+pub use config::{Config, Theme};
 
 /// How often the event loop samples and redraws when no key is pressed.
 const REFRESH: Duration = Duration::from_secs(1);
@@ -67,13 +70,15 @@ fn sort_label(sort: SortKey, descending: bool) -> String {
     format!("{name}{}", if descending { " ↓" } else { " ↑" })
 }
 
-/// Which screen the UI shows. The process table is the default; the
-/// Apple Silicon screen (`a`) shows chip, power and cluster metrics that
-/// only make sense on Apple Silicon Macs.
+/// Which screen the UI shows. The process table is the default; the Apple
+/// Silicon screen (`a`) shows chip, power and cluster metrics that only make
+/// sense on Apple Silicon Macs, and the setup screen (F2) edits the options
+/// that are saved to the config file.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Screen {
     ProcessTable,
     AppleSilicon,
+    Setup,
 }
 
 /// Everything the render needs: the last sample, the last error, the sort,
@@ -117,8 +122,15 @@ pub struct Ui {
     /// The last control action's outcome, shown in the status line until
     /// the next sample arrives.
     pub notice: Option<String>,
-    /// Which screen is showing (process table or Apple Silicon).
+    /// Which screen is showing (process table, Apple Silicon or setup).
     pub screen: Screen,
+    /// The saved setup: theme and display options, edited on the setup
+    /// screen (F2) and saved to the config file when it closes.
+    pub config: Config,
+    /// The setup screen's selected row.
+    pub setup_select: usize,
+    /// Where the setup screen (F2) returns to when it closes.
+    pub setup_return: Screen,
 }
 
 impl Default for Ui {
@@ -140,6 +152,9 @@ impl Default for Ui {
             menu: None,
             notice: None,
             screen: Screen::ProcessTable,
+            config: Config::default(),
+            setup_select: 0,
+            setup_return: Screen::ProcessTable,
         }
     }
 }
@@ -172,7 +187,63 @@ impl Ui {
         self.screen = match self.screen {
             Screen::ProcessTable => Screen::AppleSilicon,
             Screen::AppleSilicon => Screen::ProcessTable,
+            // The setup screen consumes every key, so `a` cannot reach
+            // here; this arm only keeps the match exhaustive.
+            Screen::Setup => Screen::Setup,
         };
+    }
+
+    /// Build the UI with a saved setup loaded from the config file: the
+    /// theme comes from it, and so does the tree view's initial state.
+    pub fn with_config(config: Config) -> Self {
+        Self {
+            config: config.clone(),
+            tree: config.start_in_tree,
+            ..Default::default()
+        }
+    }
+
+    /// Open the setup screen (F2), remembering where to return to.
+    pub fn open_setup(&mut self) {
+        self.setup_return = self.screen;
+        self.screen = Screen::Setup;
+    }
+
+    /// Leave the setup screen and put the save outcome in the status line,
+    /// where it stays until the next sample arrives.
+    fn finish_setup(&mut self, result: io::Result<std::path::PathBuf>) {
+        self.screen = self.setup_return;
+        self.notice = Some(match result {
+            Ok(path) => format!("Setup saved to {}", config::display_path(&path)),
+            Err(err) => format!("Setup save failed: {err}"),
+        });
+    }
+
+    /// The setup screen's row count, for the wrapping navigation.
+    const SETUP_ROWS: usize = 2;
+
+    /// Move the setup selection down, wrapping at the end.
+    pub fn setup_next(&mut self) {
+        self.setup_select = (self.setup_select + 1) % Self::SETUP_ROWS;
+    }
+
+    /// Move the setup selection up, wrapping at the top.
+    pub fn setup_prev(&mut self) {
+        self.setup_select = (self.setup_select + Self::SETUP_ROWS - 1) % Self::SETUP_ROWS;
+    }
+
+    /// Toggle the selected setup option.
+    pub fn setup_toggle(&mut self) {
+        match self.setup_select {
+            0 => {
+                self.config.theme = match self.config.theme {
+                    Theme::Color => Theme::Mono,
+                    Theme::Mono => Theme::Color,
+                }
+            }
+            1 => self.config.start_in_tree = !self.config.start_in_tree,
+            _ => {}
+        }
     }
 
     /// Open or close the name-filter prompt. Closing discards the pattern;
@@ -681,17 +752,17 @@ type Tui = Terminal<CrosstermBackend<Stdout>>;
 ///
 /// Returns when the user presses `q`, `Esc` or `Ctrl-C`; terminal state is
 /// restored even when drawing or sampling fails.
-pub fn run(collector: &mut dyn Collector, pids: &[u32]) -> io::Result<()> {
+pub fn run(collector: &mut dyn Collector, pids: &[u32], config: Config) -> io::Result<()> {
     enable_raw_mode()?;
-    let result = run_inner(collector, pids);
+    let result = run_inner(collector, pids, config);
     restore()?;
     result
 }
 
-fn run_inner(collector: &mut dyn Collector, pids: &[u32]) -> io::Result<()> {
+fn run_inner(collector: &mut dyn Collector, pids: &[u32], config: Config) -> io::Result<()> {
     execute!(io::stdout(), EnterAlternateScreen)?;
     let mut terminal = Terminal::new(CrosstermBackend::new(io::stdout()))?;
-    let result = event_loop(&mut terminal, collector, pids);
+    let result = event_loop(&mut terminal, collector, pids, config);
     execute!(io::stdout(), LeaveAlternateScreen)?;
     result
 }
@@ -702,8 +773,13 @@ fn restore() -> io::Result<()> {
     Ok(())
 }
 
-fn event_loop(terminal: &mut Tui, collector: &mut dyn Collector, pids: &[u32]) -> io::Result<()> {
-    let mut ui = Ui::new();
+fn event_loop(
+    terminal: &mut Tui,
+    collector: &mut dyn Collector,
+    pids: &[u32],
+    config: Config,
+) -> io::Result<()> {
+    let mut ui = Ui::with_config(config);
     ui.pid_filter = pids.iter().copied().collect();
     ui.apply(collector.sample());
     loop {
@@ -716,6 +792,26 @@ fn event_loop(terminal: &mut Tui, collector: &mut dyn Collector, pids: &[u32]) -
                         KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                             return Ok(());
                         }
+                        // While the setup screen (F2) is open the keys drive
+                        // it: Esc/F2 close it (saving), j/k move, Space or
+                        // Enter toggle the selected option; everything else
+                        // — including the table keys — does nothing.
+                        KeyCode::Esc if ui.screen == Screen::Setup => {
+                            ui.finish_setup(ui.config.save());
+                        }
+                        KeyCode::F(2) if ui.screen == Screen::Setup => {
+                            ui.finish_setup(ui.config.save());
+                        }
+                        KeyCode::Char('j') | KeyCode::Down if ui.screen == Screen::Setup => {
+                            ui.setup_next();
+                        }
+                        KeyCode::Char('k') | KeyCode::Up if ui.screen == Screen::Setup => {
+                            ui.setup_prev();
+                        }
+                        KeyCode::Enter | KeyCode::Char(' ') if ui.screen == Screen::Setup => {
+                            ui.setup_toggle();
+                        }
+                        _ if ui.screen == Screen::Setup => {}
                         KeyCode::Tab => ui.cycle_sort(),
                         // While the filter prompt is open the keys edit it:
                         // Esc closes, Backspace erases, everything printable
@@ -747,6 +843,8 @@ fn event_loop(terminal: &mut Tui, collector: &mut dyn Collector, pids: &[u32]) -
                         // Silicon screen; on the silicon screen the table
                         // keys have no meaning, so they do nothing.
                         KeyCode::Char('a') => ui.toggle_screen(),
+                        // F2 opens the setup screen from either table screen.
+                        KeyCode::F(2) if ui.screen != Screen::Setup => ui.open_setup(),
                         _ if ui.screen == Screen::AppleSilicon => {}
                         KeyCode::Char('i') => ui.toggle_direction(),
                         KeyCode::F(3) => ui.toggle_search(),
@@ -831,6 +929,10 @@ pub fn draw_lines(ui: &Ui, width: u16, height: u16) -> Vec<String> {
 ///
 /// Pure with respect to `ui`, so tests can drive it through a `TestBackend`.
 pub fn draw(frame: &mut Frame, ui: &Ui) {
+    if ui.screen == Screen::Setup {
+        draw_setup(frame, ui, frame.area());
+        return;
+    }
     if ui.screen == Screen::AppleSilicon {
         draw_silicon(frame, ui, frame.area());
         if ui.menu.is_some() {
@@ -1055,7 +1157,57 @@ fn draw_header(frame: &mut Frame, ui: &Ui, area: ratatui::layout::Rect) {
     if with_sensors {
         frame.render_widget(Paragraph::new(sensors_line(ui)), rows[3]);
     }
-    frame.render_widget(Paragraph::new(status_line(ui)), rows[4]);
+    let status = Paragraph::new(status_line(ui));
+    let status = match ui.config.theme {
+        Theme::Color => status.style(Style::new().dim()),
+        Theme::Mono => status,
+    };
+    frame.render_widget(status, rows[4]);
+}
+
+/// The setup screen (F2): the saved options, edited in place and saved to
+/// the config file when the screen closes.
+fn draw_setup(frame: &mut Frame, ui: &Ui, area: ratatui::layout::Rect) {
+    let mut lines = vec![
+        Line::from(""),
+        option_row(
+            ui,
+            0,
+            "Theme",
+            match ui.config.theme {
+                Theme::Color => "color",
+                Theme::Mono => "mono",
+            },
+        ),
+        option_row(
+            ui,
+            1,
+            "Start in tree view",
+            if ui.config.start_in_tree { "yes" } else { "no" },
+        ),
+        Line::from(""),
+        Line::from("j/k move   Space/Enter toggle   Esc/F2 saves and closes"),
+        Line::from(""),
+    ];
+    lines.push(match config::config_path() {
+        Some(path) => Line::from(format!("Config file: {}", config::display_path(&path))),
+        None => Line::from("Config file: none (no home directory)"),
+    });
+    frame.render_widget(
+        Paragraph::new(lines).block(Block::default().borders(Borders::ALL).title("Setup")),
+        area,
+    );
+}
+
+/// One row of the setup screen; the selected one is highlighted.
+fn option_row(ui: &Ui, index: usize, label: &str, value: &str) -> Line<'static> {
+    let selected = ui.setup_select == index;
+    let marker = if selected { '>' } else { ' ' };
+    let mut line = Line::from(format!("{marker} {label:<18} {value}"));
+    if selected {
+        line = line.style(Style::new().reversed());
+    }
+    line
 }
 
 fn title_line(ui: &Ui) -> Line<'static> {
@@ -1093,6 +1245,14 @@ fn cpu_percent_mean(sample: &Sample) -> Option<f64> {
     Some(busy.iter().sum::<f64>() / busy.len() as f64)
 }
 
+/// The style bars paint with: the theme's color, or plain in mono.
+fn gauge_style(ui: &Ui, colored: Style) -> Style {
+    match ui.config.theme {
+        Theme::Color => colored,
+        Theme::Mono => Style::new(),
+    }
+}
+
 fn draw_cpu_row(frame: &mut Frame, ui: &Ui, area: ratatui::layout::Rect) {
     let Some(sample) = &ui.sample else {
         return;
@@ -1106,7 +1266,8 @@ fn draw_cpu_row(frame: &mut Frame, ui: &Ui, area: ratatui::layout::Rect) {
     for (core, percent) in percents.iter().enumerate() {
         let gauge = Gauge::default()
             .ratio((*percent / 100.0).clamp(0.0, 1.0))
-            .label(format!("{core} {:.0}%", percent));
+            .label(format!("{core} {:.0}%", percent))
+            .gauge_style(gauge_style(ui, Style::new().green()));
         frame.render_widget(gauge, per_core[core]);
     }
 }
@@ -1118,9 +1279,21 @@ fn draw_memory_row(frame: &mut Frame, ui: &Ui, area: ratatui::layout::Rect) {
     let halves =
         Layout::horizontal([Constraint::Percentage(60), Constraint::Percentage(40)]).split(area);
     let (ratio, label) = memory_gauge(&sample.memory);
-    frame.render_widget(Gauge::default().ratio(ratio).label(label), halves[0]);
+    frame.render_widget(
+        Gauge::default()
+            .ratio(ratio)
+            .label(label)
+            .gauge_style(gauge_style(ui, Style::new().cyan())),
+        halves[0],
+    );
     let (ratio, label) = swap_gauge(&sample.memory);
-    frame.render_widget(Gauge::default().ratio(ratio).label(label), halves[1]);
+    frame.render_widget(
+        Gauge::default()
+            .ratio(ratio)
+            .label(label)
+            .gauge_style(gauge_style(ui, Style::new().yellow())),
+        halves[1],
+    );
 }
 
 fn memory_gauge(memory: &Memory) -> (f64, String) {
@@ -2390,6 +2563,94 @@ mod tests {
         );
     }
 
+    /// `open_setup` remembers the screen it was opened from and closing the
+    /// setup screen returns there with the save outcome in the notice.
+    #[test]
+    fn open_setup_remembers_where_it_returned() {
+        let mut ui = Ui::new();
+        ui.toggle_screen();
+        ui.open_setup();
+        assert_eq!(ui.screen, Screen::Setup);
+        assert_eq!(ui.setup_return, Screen::AppleSilicon);
+        ui.finish_setup(Ok(std::path::PathBuf::from("ztop-config.json")));
+        assert_eq!(ui.screen, Screen::AppleSilicon);
+        assert!(ui.notice.is_some(), "the save outcome is reported");
+        // Opening setup from the table remembers the table instead.
+        ui.toggle_screen();
+        ui.open_setup();
+        assert_eq!(ui.setup_return, Screen::ProcessTable);
+        // The setup screen cannot toggle away; `a` cannot reach it, but the
+        // method still holds the screen.
+        ui.toggle_screen();
+        assert_eq!(ui.screen, Screen::Setup);
+    }
+
+    /// The setup screen's rows wrap and each toggle flips its option.
+    #[test]
+    fn setup_navigation_wraps_and_toggles() {
+        let mut ui = Ui::new();
+        assert_eq!(ui.setup_select, 0);
+        ui.setup_toggle();
+        assert_eq!(ui.config.theme, Theme::Mono);
+        ui.setup_toggle();
+        assert_eq!(ui.config.theme, Theme::Color);
+        ui.setup_next();
+        ui.setup_toggle();
+        assert!(ui.config.start_in_tree);
+        ui.setup_prev();
+        assert_eq!(ui.setup_select, 0);
+        ui.setup_prev();
+        assert_eq!(ui.setup_select, 1, "moving up from the first row wraps");
+    }
+
+    /// The setup screen shows both options with their values, the help line,
+    /// the config file path, and marks the selected row.
+    #[test]
+    fn the_setup_screen_shows_its_options_and_help() {
+        let mut ui = Ui::new();
+        ui.screen = Screen::Setup;
+        let rows = render(&ui, 80, 24);
+        assert!(
+            rows.iter()
+                .any(|row| row.contains("> Theme") && row.contains("color")),
+            "the theme row, selected: {rows:?}"
+        );
+        assert!(
+            rows.iter()
+                .any(|row| row.contains("Start in tree view") && row.contains("no")),
+            "{rows:?}"
+        );
+        assert!(rows.iter().any(|row| row.contains("j/k move")), "{rows:?}");
+        assert!(
+            rows.iter().any(|row| row.contains("Config file:")),
+            "{rows:?}"
+        );
+        // Moving down moves the marker; toggling the theme changes the value.
+        ui.setup_next();
+        let rows = render(&ui, 80, 24);
+        assert!(
+            rows.iter().any(|row| row.contains("> Start in tree view")),
+            "the second row, selected: {rows:?}"
+        );
+        ui.setup_select = 0;
+        ui.config.theme = Theme::Mono;
+        let rows = render(&ui, 80, 24);
+        assert!(
+            rows.iter()
+                .any(|row| row.contains("Theme") && row.contains("mono"))
+        );
+    }
+
+    /// `gauge_style` passes colors through in color mode and drops them in
+    /// mono mode.
+    #[test]
+    fn gauge_style_follows_the_theme() {
+        let mut ui = Ui::new();
+        assert_eq!(gauge_style(&ui, Style::new().green()), Style::new().green());
+        ui.config.theme = Theme::Mono;
+        assert_eq!(gauge_style(&ui, Style::new().green()), Style::new());
+    }
+
     /// Dump the 80x24 frame for a human eye:
     /// `cargo test -p ztop-tui --lib dump_screen_snapshot -- --ignored --nocapture`
     #[test]
@@ -2422,6 +2683,25 @@ mod tests {
             ui.menu_next();
         }
         println!("---- tags on 4+5, signal menu open, KILL selected ----");
+        for (index, row) in render(&ui, 80, 24).iter().enumerate() {
+            println!("{index:2}|{row}");
+        }
+    }
+
+    /// Dump the 80x24 setup frame for a human eye:
+    /// `cargo test -p ztop-tui --lib dump_setup_snapshot -- --ignored --nocapture`
+    #[test]
+    #[ignore = "manual inspection helper"]
+    fn dump_setup_snapshot() {
+        let mut ui = ui_with(Some(sample()), None);
+        ui.screen = Screen::Setup;
+        for (index, row) in render(&ui, 80, 24).iter().enumerate() {
+            println!("{index:2}|{row}");
+        }
+        // A second frame with the second row selected and mono theme.
+        ui.setup_next();
+        ui.config.theme = Theme::Mono;
+        println!("---- second row selected, mono theme ----");
         for (index, row) in render(&ui, 80, 24).iter().enumerate() {
             println!("{index:2}|{row}");
         }

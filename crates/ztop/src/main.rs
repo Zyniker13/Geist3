@@ -19,6 +19,10 @@ struct Cli {
     #[arg(short = 'p', long, value_delimiter = ',')]
     pids: Vec<u32>,
 
+    /// Render without colors, ignoring the saved theme for this run.
+    #[arg(long)]
+    no_color: bool,
+
     #[command(subcommand)]
     command: Option<Command>,
 }
@@ -78,7 +82,13 @@ fn run() -> Result<(), Box<dyn Error>> {
             let mut collector = ztop_core::macos_live::MacOsCollector::default();
             #[cfg(not(any(target_os = "linux", target_os = "macos")))]
             let mut collector = ztop_tui::UnavailableCollector;
-            ztop_tui::run(&mut collector, &cli.pids)?;
+            // Load the saved setup; `--no-color` overrides the theme once,
+            // without saving that override.
+            let mut config = ztop_tui::Config::load();
+            if cli.no_color {
+                config.theme = ztop_tui::Theme::Mono;
+            }
+            ztop_tui::run(&mut collector, &cli.pids, config)?;
         }
         Some(Command::Capture { out }) => {
             let count = ztop_core::capture::capture_to(&out)?;
@@ -154,6 +164,14 @@ mod tests {
             cli.command,
             Some(Command::Replay { dir }) if dir == Path::new("/tmp/fixture")
         ));
+    }
+
+    #[test]
+    fn no_color_flag_parses() {
+        let cli = Cli::try_parse_from(["ztop", "--no-color"]).expect("parses");
+        assert!(cli.no_color);
+        let cli = Cli::try_parse_from(["ztop"]).expect("parses");
+        assert!(!cli.no_color);
     }
 
     #[test]
