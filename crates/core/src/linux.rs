@@ -940,10 +940,10 @@ mod live {
 
     use super::{
         CpuTimes, PidData, PidIo, PidStat, USER_HZ, core_percents, counter_rate, disk_usage,
-        io_rates, memory_from, parse_hwmon, parse_pid_io, parse_pid_stat, parse_pid_status,
-        parse_power_supply, parse_proc_diskstats, parse_proc_loadavg, parse_proc_meminfo,
-        parse_proc_mounts, parse_proc_net_dev, parse_proc_stat, parse_proc_uptime, process_row,
-        system_text,
+        io_rates, memory_from, parse_cpuinfo_frequencies, parse_hwmon, parse_pid_io,
+        parse_pid_stat, parse_pid_status, parse_power_supply, parse_proc_diskstats,
+        parse_proc_loadavg, parse_proc_loadavg_entities, parse_proc_meminfo, parse_proc_mounts,
+        parse_proc_net_dev, parse_proc_stat, parse_proc_uptime, process_row, system_text,
     };
     use crate::collector::{CollectError, Collector};
     use crate::model::{
