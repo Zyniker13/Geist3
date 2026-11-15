@@ -21,8 +21,12 @@ jobs:
       - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
       - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2
         with:
-          tool: cargo-deny
+          tool: cargo-deny,cross
       - run: scripts/check.sh
+      # aarch64 Linux is checked nowhere else: every crate reaches
+      # ring's C code, so the target clippy needs a real cross C
+      # toolchain (decision 0043), which cross ships in its container.
+      - run: cross clippy --workspace --all-targets --target aarch64-unknown-linux-gnu -- -D warnings
   macos:
     name: macOS
     runs-on: macos-latest

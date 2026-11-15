@@ -47,6 +47,5 @@ certificate; a wrong pin must fail the handshake, not fall back.
   that.
 - ztop-core now depends on rustls (ring), and `tui`/`hub` depend on
   core, so every crate reaches ring: all Linux-target clippies ride
-  on CI (decision 0039's note updated), and a follow-up will add a
-  cross C toolchain in CI so the aarch64 Linux target is checked
-  somewhere.
+  on CI (decision 0039's note updated), and the aarch64 Linux target
+  is linted there with `cross` (decision 0043).

@@ -24,9 +24,9 @@ the transport: `ztop agent --tls`.
   ring set as well (its client needs rustls), and `tui`/`hub`
   depend on `core`, so from 8f on **every** crate reaches ring:
   all Linux-target clippies ride on CI, and the local gate is
-  `check.sh` (host) + `cargo deny` only. The aarch64 Linux target
-  is checked nowhere until a cross C toolchain (e.g. cargo-zigbuild
-  in CI) is added; tracked as a follow-up.
+  `check.sh` (host) + `cargo deny` only. The aarch64 Linux target is
+  linted in CI with `cross` from decision 0043 on (before that it was
+  checked nowhere).
 - On the first `--tls` start the agent creates
   `agent-cert.pem`/`agent-key.pem` (key 0600) in `state_dir()` with
   CN `ztop-agent`, SANs `localhost` and `127.0.0.1`, TLS 1.3, and a
