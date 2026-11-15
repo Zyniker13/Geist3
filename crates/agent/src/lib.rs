@@ -12,12 +12,14 @@ use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum::{Json, Router};
 use serde::Serialize;
+use tokio::sync::broadcast::error::RecvError;
 use ztop_core::model::{Process, Sample};
 
 /// The protocol version served under `/v1`. Grows when a change breaks
@@ -32,15 +34,22 @@ pub const DEFAULT_INTERVAL: Duration = Duration::from_secs(1);
 /// downsampled long tier arrives with the hub's persistence work.
 const FULL_RESOLUTION: usize = 3600;
 
-/// The shared state behind every handler: the sample ring.
+/// The shared state behind every handler: the sample ring and the
+/// fan-out channel the live stream reads.
 pub struct AgentState {
     history: Mutex<VecDeque<Sample>>,
+    sender: tokio::sync::broadcast::Sender<Sample>,
 }
 
 impl Default for AgentState {
     fn default() -> Self {
+        // A small queue is enough: a live client consumes each sample
+        // as it arrives, and a client that falls behind is dropped
+        // (decision 0036) rather than buffered unboundedly.
+        let (sender, _) = tokio::sync::broadcast::channel(16);
         Self {
             history: Mutex::new(VecDeque::with_capacity(FULL_RESOLUTION.min(1024))),
+            sender,
         }
     }
 }
@@ -96,6 +105,7 @@ pub fn router(state: Arc<AgentState>) -> Router {
         .route("/v1/snapshot", get(snapshot))
         .route("/v1/processes", get(processes))
         .route("/v1/history", get(history))
+        .route("/v1/stream", get(stream))
         .with_state(state)
 }
 
@@ -118,12 +128,7 @@ fn spawn_sampler(state: Arc<AgentState>, interval: Duration) -> std::thread::Joi
     ) {
         let mut collector = C::default();
         loop {
-            match collector.sample() {
-                Ok(sample) => state.push(sample),
-                // One bad sample is skipped, not fatal: the next tick
-                // retries, and a rate-dependent metric heals itself.
-                Err(_error) => {}
-            }
+            tick(&mut collector, &state);
             std::thread::sleep(interval);
         }
     }
@@ -151,6 +156,19 @@ async fn health() -> Json<serde_json::Value> {
         "protocol": PROTOCOL_VERSION,
         "version": env!("CARGO_PKG_VERSION"),
     }))
+}
+
+/// One sampler tick: take a sample, file it in the ring and hand it to
+/// every live-stream client. A failing sample is skipped, not fatal:
+/// the next tick retries and a rate-dependent metric heals itself.
+fn tick<C: ztop_core::collector::Collector>(collector: &mut C, state: &AgentState) {
+    match collector.sample() {
+        Ok(sample) => {
+            state.push(sample.clone());
+            let _ = state.sender.send(sample);
+        }
+        Err(_error) => {}
+    }
 }
 
 /// `GET /v1/snapshot`: the latest sample.
@@ -217,6 +235,51 @@ fn no_sample_yet() -> Response {
         "no sample yet: the sampler has not produced one",
     )
         .into_response()
+}
+
+/// `GET /v1/stream`: a WebSocket that carries every new sample as one
+/// text message, starting with the latest one.
+async fn stream(State(state): State<Arc<AgentState>>, upgrade: WebSocketUpgrade) -> Response {
+    upgrade.on_upgrade(move |socket| stream_loop(state, socket))
+}
+
+/// The live stream for one client: the latest sample first, then one
+/// message per tick. A client that cannot keep up is closed (the
+/// broadcast queue overflows) rather than slowing the sampler down.
+async fn stream_loop(state: Arc<AgentState>, mut socket: WebSocket) {
+    let mut receiver = state.sender.subscribe();
+    if let Some(sample) = state.latest() {
+        if send_sample(&mut socket, &sample).await.is_err() {
+            return;
+        }
+    }
+    loop {
+        match receiver.recv().await {
+            Ok(sample) => {
+                if send_sample(&mut socket, &sample).await.is_err() {
+                    return;
+                }
+            }
+            // The queue overflowed: this client fell behind and gets
+            // dropped instead of holding the sampler back.
+            Err(RecvError::Lagged(_)) => {
+                let _ = socket.send(Message::Close(None)).await;
+                return;
+            }
+            Err(RecvError::Closed) => return,
+        }
+    }
+}
+
+async fn send_sample(socket: &mut WebSocket, sample: &Sample) -> Result<(), axum::Error> {
+    let text = serde_json::to_string(&Envelope {
+        protocol: PROTOCOL_VERSION,
+        body: SnapshotBody {
+            sample: sample.clone(),
+        },
+    })
+    .expect("a sample serializes");
+    socket.send(Message::Text(text.into())).await
 }
 
 #[cfg(test)]
@@ -404,5 +467,55 @@ mod tests {
             ring.back().map(|s| s.timestamp_ms),
             Some(FULL_RESOLUTION as u64 + 4)
         );
+    }
+
+    /// A collector that hands out pre-built samples one per call, then
+    /// fails forever.
+    struct OneShotCollector {
+        samples: Vec<Option<Sample>>,
+        taken: usize,
+    }
+
+    impl OneShotCollector {
+        fn of(samples: Vec<Sample>) -> Self {
+            Self {
+                samples: samples.into_iter().map(Some).collect(),
+                taken: 0,
+            }
+        }
+    }
+
+    impl ztop_core::collector::Collector for OneShotCollector {
+        fn sample(&mut self) -> Result<Sample, ztop_core::collector::CollectError> {
+            let next = self.samples.get_mut(self.taken).and_then(Option::take);
+            self.taken += 1;
+            next.ok_or(ztop_core::collector::CollectError::Unavailable {
+                origin: "test",
+                what: "anything",
+            })
+        }
+    }
+
+    #[tokio::test]
+    async fn a_tick_files_the_ring_and_reaches_the_stream() {
+        use tokio::sync::broadcast::error::TryRecvError;
+        let state = Arc::new(AgentState::default());
+        let mut receiver = state.sender.subscribe();
+        assert_eq!(receiver.try_recv(), Err(TryRecvError::Empty));
+
+        let mut collector = OneShotCollector::of(vec![{
+            let mut sample = a_sample();
+            sample.timestamp_ms = 42;
+            sample
+        }]);
+        super::tick(&mut collector, &state);
+        assert_eq!(state.latest().map(|s| s.timestamp_ms), Some(42));
+        assert_eq!(receiver.try_recv().map(|s| s.timestamp_ms), Ok(42));
+
+        // The collector is exhausted: the tick skips, and neither the
+        // ring nor the stream grows.
+        super::tick(&mut collector, &state);
+        assert_eq!(state.latest().map(|s| s.timestamp_ms), Some(42));
+        assert_eq!(receiver.try_recv(), Err(TryRecvError::Empty));
     }
 }

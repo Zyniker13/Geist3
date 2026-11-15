@@ -3,13 +3,15 @@
 Updated after every working session.
 
 - **Current milestone:** M4 (Agent, Hub and the Bridge) — M3 complete pending CI on the 7ae commit.
-- **Last done:** M3 batch 7ae SHIPPED as 13b12f5 — Linux GPUs (NVML dlopen'd at runtime + AMD sysfs, decision 0034) and cgroup/container awareness (`CTR` column, `g` Gpus screen); gate green (check=0, x86=0, arm=0, ×3 snapshots byte-identical); pushed. M3's parity items are all checked except `ztop connect` (needs the M4 agent — folded into M4). Then M4 batch 8a started: the agent's HTTP protocol v1 (decision 0035) — `/v1/snapshot`, `/v1/processes`, `/v1/history?seconds=N`, the 3,600-sample ring, the dedicated sampler thread (collector built inside it, IOKit objects stay put); agent tests 7/7.
-- **Next step:** gate + commit 8a once 13b12f5's CI is green; then 8b — the WebSocket live stream.
+- **Last done:** M4 batch 8a SHIPPED as 2b4be22 — the agent's HTTP protocol v1 (decision 0035): `/v1/snapshot`, `/v1/processes`, `/v1/history?seconds=N`, the 3,600-sample ring, the dedicated sampler thread; agent tests 7/7; gate green; pushed after rebasing on two CI-recorded Linux fixture commits. Then batch 8b: `/v1/stream` WebSocket (decision 0036) — latest sample first, then one message per tick via a 16-deep broadcast; a lagged client is closed, never slows the sampler; axum gains the `ws` feature; agent tests 8/8.
+- **Next step:** gate + commit 8b; then 8c — TLS pairing and tokens (rustls, decision 0003), which unblocks `connect`.
 - **Blocked on:** nothing (7ac/7ad CI runs stuck in progress on Linux runners — infrastructure, not code; macOS jobs green).
 
 ## Log
 
 Newest first. One or two lines per session: what changed, what is next.
+
+- 2026-11-15: M4 batch 8b — the agent's live stream (decision 0036): `/v1/stream` WebSocket sends the latest sample, then one message per tick through a 16-deep broadcast channel; a lagged client is closed instead of slowing the sampler; the axum workspace dependency gains its `ws` feature. Agent tests 8/8.
 
 - 2026-11-15: M4 batch 8a — the agent's HTTP protocol v1 (decision 0035): `/v1/snapshot`, `/v1/processes` and `/v1/history?seconds=N` in a `{"protocol": 1, ...}` envelope over the 3,600-sample ring; a dedicated sampler thread owns the collector (built inside the thread — the macOS collector's IOKit objects are not `Send`), 503 "no sample yet" before the first sample. Agent tests 7/7.
 
