@@ -3,13 +3,15 @@
 Updated after every working session.
 
 - **Current milestone:** M3 (Full TUI Parity).
-- **Last done:** M3 batch 7ab — the meter-layout editor and display options (decision 0031): F2's Meters pane toggles and moves memory/swap/load/battery and the I/O, pressure and sensors meters across two columns (60/40); placed I/O/pressure/temps replace their automatic lines; the config saves the layout; the three display toggles gate the automatic lines; the default layout renders byte-identically to the old fixed one. Earlier this session: 7aa (the syscall trace `s`, 0030); 7z (env + open files, 0029) as `a0f7888`.
-- **Next step:** 7ac — configurable table columns (the last piece of parity's setup-screen line) — then M4+. (7g macOS CPU frequency remains settled: decision 0011 and `docs/m2-power-checks.md`.)
+- **Last done:** M3 batch 7ac — configurable table columns (decision 0032): the setup screen's third pane lists the seven optional columns and Enter cycles auto → shown → hidden; `Columns::plan` applies the forced states over the width tiers; the choices save in the config and the default renders byte-identically. Also this batch: the 7ab CI failure's root cause — the ptrace syscall-info record was never read (zero size argument, wrong offsets) — fixed in `trace.rs` (decision 0030, second amendment) and the live test's child now sleeps in short loops.
+- **Next step:** 7ad — the Apple Silicon (asitop) parity batch: E/P-cluster and per-core utilization with the state ladder in place of MHz (0011), GPU utilization probe, power with current/average/peak, averaging window, SoC-screen memory/swap, thermal pressure, interval option; ANE and CPU power stay recorded-unavailable. Then Linux GPUs/cgroups, then M4. (7g macOS CPU frequency remains settled: decision 0011 and `docs/m2-power-checks.md`.)
 - **Blocked on:** nothing.
 
 ## Log
 
 Newest first. One or two lines per session: what changed, what is next.
+
+- 2026-11-15: M3 batch 7ac — configurable table columns (decision 0032): the setup screen's third pane (`Columns`) lists the seven optional columns (START, CPU, VIRT, SHR, PPID, PRI, COMMAND) and Enter cycles auto → shown → hidden; `Columns::plan` applies the forced states over the width tiers (order stays the tier ladder; the I/O rate columns stay data-driven and the mandatory columns are not choices); the choices save in the config and the default renders byte-identically. Also: the 7ab CI failure fixed — the ptrace syscall-info record was never read (zero size argument, wrong offsets; decision 0030 amendment 2) and the live test's child now sleeps in short loops. Snapshots byte-identical; core 86, TUI 116. Next: 7ad — the Apple Silicon (asitop) parity batch.
 
 - 2026-11-15: M3 batch 7ab — the meter-layout editor and display options (decision 0031): F2's Meters pane toggles and moves meters (memory, swap, load, battery, disk/network I/O, CPU pressure, temperatures/sensors) across a 60/40 two-column header; placing I/O, pressure or temps as a meter replaces its automatic line (never shown twice); three display toggles (`show_io`/`show_psi`/`show_temps`) gate the automatic lines; graph meters load/battery use new history rings; the layout saves in the config and the default layout renders byte-identically to the old fixed one. Snapshots byte-identical; core 86, TUI 113. Next: 7ac — table columns.
 

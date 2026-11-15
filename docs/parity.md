@@ -128,10 +128,15 @@ Check an item only when it works and a test or a recorded check shows it. Add th
 
 ## htop: Setup and Options
 
-- [ ] Setup screen (F2) for meters, display options, colors and
+- [x] Setup screen (F2) for meters, display options, colors and
   columns — the meters (the header layout editor), display options (I/O,
-  pressure and sensors lines) and colors (theme) are done above; table
-  columns remain.
+  pressure and sensors lines), colors (theme) and the table columns (a
+  pane where every optional column cycles auto → shown → hidden; a
+  column left alone keeps its width tier) are all editable —
+  docs/decisions/0032-column-visibility.md; tests
+  `the_setup_screen_shows_the_columns_pane`,
+  `the_column_editor_cycles_auto_shown_hidden`,
+  `forced_columns_override_the_width_tiers`.
 - [x] Config file saved and reloaded — F2 saves JSON to the user's config directory (Application Support on macOS, XDG elsewhere) when the setup screen closes; `ztop` loads it at startup and a missing or malformed file means defaults, with unknown fields from a future version tolerated. Tests: `config::tests::config_roundtrips_through_a_file`, `a_missing_config_file_means_defaults`, `a_malformed_config_file_means_defaults`, `unknown_fields_and_missing_fields_are_tolerated`, `tests::open_setup_remembers_where_it_returned`.
 - [x] Color schemes, including monochrome; `--no-color` — `Theme::Color` (default) and `Theme::Mono` picked on the setup screen; the theme colors the CPU/memory/swap gauges and dims the status line, and `--no-color` forces mono for one run without saving the override. Tests: `tests::gauge_style_follows_the_theme`, `tests::the_setup_screen_shows_its_options_and_help`, `ztop: no_color_flag_parses`.
 - [x] Mouse support: click to select, sort and use the function bar — left-click

@@ -85,6 +85,106 @@ pub enum MeterSide {
     Right,
 }
 
+/// A process-table column the setup screen can force shown or hidden.
+/// The mandatory columns (PID, user, state, CPU%, MEM%, threads, RES,
+/// NICE, TIME+, NAME) are not here: they always show. The per-process
+/// I/O rate columns are not here either: they follow the sample data,
+/// not a preference.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ColumnKind {
+    /// The start time.
+    #[serde(rename = "start")]
+    Start,
+    /// The last processor the task ran on.
+    #[serde(rename = "processor")]
+    Processor,
+    /// Virtual size.
+    #[serde(rename = "virtual")]
+    Virtual,
+    /// Shared size.
+    #[serde(rename = "shared")]
+    Shared,
+    /// Parent process id.
+    #[serde(rename = "parent")]
+    Parent,
+    /// Priority.
+    #[serde(rename = "priority")]
+    Priority,
+    /// The command line.
+    #[serde(rename = "command")]
+    Command,
+}
+
+/// All optional column kinds in the tier ladder's draw order (the order
+/// they appear in as the terminal widens).
+pub const COLUMN_KINDS: [ColumnKind; 7] = [
+    ColumnKind::Start,
+    ColumnKind::Processor,
+    ColumnKind::Virtual,
+    ColumnKind::Shared,
+    ColumnKind::Parent,
+    ColumnKind::Priority,
+    ColumnKind::Command,
+];
+
+impl ColumnKind {
+    /// The name shown in the editor and in tests.
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Start => "start",
+            Self::Processor => "processor",
+            Self::Virtual => "virtual",
+            Self::Shared => "shared",
+            Self::Parent => "parent",
+            Self::Priority => "priority",
+            Self::Command => "command",
+        }
+    }
+}
+
+/// Whether an optional column shows: the automatic width tiering, always,
+/// or never.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum ColumnState {
+    /// The column follows its width tier (the default).
+    #[default]
+    #[serde(rename = "auto")]
+    Auto,
+    /// The column shows at any width.
+    #[serde(rename = "shown")]
+    Shown,
+    /// The column never shows.
+    #[serde(rename = "hidden")]
+    Hidden,
+}
+
+impl ColumnState {
+    /// The state shown in the editor and in tests.
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Auto => "auto",
+            Self::Shown => "shown",
+            Self::Hidden => "hidden",
+        }
+    }
+
+    /// The next state in the setup screen's cycle.
+    pub fn next(self) -> Self {
+        match self {
+            Self::Auto => Self::Shown,
+            Self::Shown => Self::Hidden,
+            Self::Hidden => Self::Auto,
+        }
+    }
+}
+
+/// One column's forced state: its kind and whether it shows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ColumnChoice {
+    pub kind: ColumnKind,
+    pub state: ColumnState,
+}
+
 /// One placed meter: its kind and column, in the layout's row order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MeterChoice {
@@ -139,6 +239,11 @@ pub struct Config {
     /// Show the temperature line (and no temperature meter placed).
     #[serde(default = "default_true")]
     pub show_temps: bool,
+    /// Which optional table columns are forced shown or hidden; a kind
+    /// absent here (and an empty list) keeps the automatic width
+    /// tiering.
+    #[serde(default)]
+    pub columns: Vec<ColumnChoice>,
 }
 
 impl Default for Config {
@@ -155,6 +260,7 @@ impl Default for Config {
             show_io: true,
             show_psi: true,
             show_temps: true,
+            columns: Vec::new(),
         }
     }
 }
@@ -303,6 +409,10 @@ mod tests {
             show_io: false,
             show_psi: false,
             show_temps: false,
+            columns: vec![ColumnChoice {
+                kind: ColumnKind::Virtual,
+                state: ColumnState::Shown,
+            }],
         };
         config.save_to(&path).expect("saves");
         assert_eq!(Config::load_from(&path), config);

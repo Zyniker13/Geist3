@@ -161,6 +161,9 @@ pub enum SetupPane {
     /// The meter-layout editor: which meters the header shows, in which
     /// column, in which order.
     Meters,
+    /// The table-column editor: which optional columns are forced shown
+    /// or hidden, and which keep the width tiering.
+    Columns,
 }
 
 /// Which detail read the overlay shows.
@@ -478,13 +481,14 @@ impl Ui {
     }
 
     /// The setup main pane's row count.
-    const SETUP_ROWS: usize = 7;
+    const SETUP_ROWS: usize = 8;
 
     /// The current pane's row count, for the wrapping navigation.
     fn setup_rows(&self) -> usize {
         match self.setup_pane {
             SetupPane::Main => Self::SETUP_ROWS,
             SetupPane::Meters => config::METER_KINDS.len(),
+            SetupPane::Columns => config::COLUMN_KINDS.len(),
         }
     }
 
@@ -519,6 +523,10 @@ impl Ui {
                     self.setup_pane = SetupPane::Meters;
                     self.setup_select = 0;
                 }
+                7 => {
+                    self.setup_pane = SetupPane::Columns;
+                    self.setup_select = 0;
+                }
                 _ => {}
             },
             SetupPane::Meters => {
@@ -543,6 +551,28 @@ impl Ui {
                                 .iter()
                                 .position(|entry| *entry == kind)
                                 .unwrap_or(0);
+                        }
+                    }
+                }
+            }
+            SetupPane::Columns => {
+                let kind = config::COLUMN_KINDS[self.setup_select];
+                let chosen = self
+                    .config
+                    .columns
+                    .iter()
+                    .position(|choice| choice.kind == kind);
+                match chosen {
+                    None => self.config.columns.push(config::ColumnChoice {
+                        kind,
+                        state: config::ColumnState::Shown,
+                    }),
+                    Some(at) => {
+                        if self.config.columns[at].state == config::ColumnState::Shown {
+                            self.config.columns[at].state = config::ColumnState::Hidden;
+                        } else {
+                            // Hidden -> auto: back to the width tiering.
+                            self.config.columns.remove(at);
                         }
                     }
                 }
@@ -2350,7 +2380,7 @@ fn help_lines() -> Vec<Line<'static>> {
         ("F1", "this help; any key closes it"),
         ("Z", "pause/resume updates"),
         ("Ctrl-L", "redraw the screen"),
-        ("F2", "setup (theme, tree view, meters; saved)"),
+        ("F2", "setup (theme, tree view, meters, columns; saved)"),
         ("F3", "search (Esc/Enter close, F3 repeats)"),
         ("F4", "filter by name"),
         ("u", "filter by user"),
@@ -2753,6 +2783,7 @@ fn draw_setup(frame: &mut Frame, ui: &Ui, area: ratatui::layout::Rect) {
                 },
             ));
             lines.push(option_row(ui, 6, "Meter layout …", ""));
+            lines.push(option_row(ui, 7, "Table columns …", ""));
             lines.push(Line::from(""));
             lines.push(Line::from(
                 "j/k move   Space/Enter toggle   Esc/F2 saves and closes",
@@ -2775,6 +2806,24 @@ fn draw_setup(frame: &mut Frame, ui: &Ui, area: ratatui::layout::Rect) {
                 "j/k move   Enter toggles left/right/off   ,/. moves the row   Esc back",
             ));
         }
+        SetupPane::Columns => {
+            // The column editor: one row per optional column, its forced
+            // state (absent from the config means auto).
+            for (index, kind) in config::COLUMN_KINDS.iter().enumerate() {
+                let state = ui
+                    .config
+                    .columns
+                    .iter()
+                    .find(|choice| choice.kind == *kind)
+                    .map(|choice| choice.state)
+                    .unwrap_or(config::ColumnState::Auto);
+                lines.push(option_row(ui, index, kind.name(), state.name()));
+            }
+            lines.push(Line::from(""));
+            lines.push(Line::from(
+                "j/k move   Enter cycles auto/shown/hidden   Esc back",
+            ));
+        }
     }
     lines.push(Line::from(""));
     lines.push(match config::config_path() {
@@ -2784,6 +2833,7 @@ fn draw_setup(frame: &mut Frame, ui: &Ui, area: ratatui::layout::Rect) {
     let title = match ui.setup_pane {
         SetupPane::Main => "Setup",
         SetupPane::Meters => "Setup — meter layout",
+        SetupPane::Columns => "Setup — table columns",
     };
     frame.render_widget(
         Paragraph::new(lines).block(Block::default().borders(Borders::ALL).title(title)),
@@ -3436,7 +3486,7 @@ fn draw_processes(frame: &mut Frame, ui: &Ui, area: ratatui::layout::Rect) {
     // The wide-terminal columns tier by width (see Columns::plan).
     let procs = ui.ordered_rows();
     let show_io = procs_io_visible(&procs);
-    let columns = Columns::plan(area.width, show_io);
+    let columns = Columns::plan(area.width, show_io, &ui.config.columns);
     let header = Row::new(columns.names.clone()).bold();
     let mut rows: Vec<Row<'static>> = Vec::new();
     // Keep the cursor in view: scroll only far enough. The fold is what fits
@@ -3493,7 +3543,9 @@ fn procs_io_visible<'a>(rows: impl IntoIterator<Item = &'a TreeRow<'a>>) -> bool
 /// and the recorded snapshots stay stable: the base columns at any width,
 /// START and the last processor from 100 columns, VIRT and SHR from 120,
 /// PPID from 140. The I/O rate columns join whenever a visible process
-/// moves data, just before NAME.
+/// moves data, just before NAME. The setup screen's column editor can
+/// force any optional column shown or hidden; a column it leaves alone
+/// keeps its tier.
 struct Columns {
     /// Header labels in draw order, NAME last.
     names: Vec<&'static str>,
@@ -3505,7 +3557,21 @@ struct Columns {
 }
 
 impl Columns {
-    fn plan(area_width: u16, show_io: bool) -> Self {
+    fn plan(area_width: u16, show_io: bool, choices: &[config::ColumnChoice]) -> Self {
+        // One optional column's effective visibility: the editor's
+        // forced state where it has one, its width tier otherwise.
+        let shows = |kind: config::ColumnKind, tier: bool| -> bool {
+            match choices
+                .iter()
+                .find(|choice| choice.kind == kind)
+                .map(|choice| choice.state)
+                .unwrap_or(config::ColumnState::Auto)
+            {
+                config::ColumnState::Shown => true,
+                config::ColumnState::Hidden => false,
+                config::ColumnState::Auto => tier,
+            }
+        };
         let mut names: Vec<&'static str> = vec![
             "PID", "USER", "STATE", "CPU%", "MEM%", "THR", "RES", "NICE", "TIME+",
         ];
@@ -3538,22 +3604,22 @@ impl Columns {
                 widths.push(Constraint::Length(*width));
             }
         };
-        if area_width >= 100 {
-            extend(&[
-                ("START", 11, Some(SortKey::Start)),
-                ("CPU", 3, Some(SortKey::Processor)),
-            ]);
+        if shows(config::ColumnKind::Start, area_width >= 100) {
+            extend(&[("START", 11, Some(SortKey::Start))]);
         }
-        if area_width >= 120 {
-            extend(&[
-                ("VIRT", 8, Some(SortKey::Virtual)),
-                ("SHR", 7, Some(SortKey::Shared)),
-            ]);
+        if shows(config::ColumnKind::Processor, area_width >= 100) {
+            extend(&[("CPU", 3, Some(SortKey::Processor))]);
         }
-        if area_width >= 140 {
+        if shows(config::ColumnKind::Virtual, area_width >= 120) {
+            extend(&[("VIRT", 8, Some(SortKey::Virtual))]);
+        }
+        if shows(config::ColumnKind::Shared, area_width >= 120) {
+            extend(&[("SHR", 7, Some(SortKey::Shared))]);
+        }
+        if shows(config::ColumnKind::Parent, area_width >= 140) {
             extend(&[("PPID", 7, Some(SortKey::Parent))]);
         }
-        if area_width >= 160 {
+        if shows(config::ColumnKind::Priority, area_width >= 160) {
             extend(&[("PRI", 4, Some(SortKey::Priority))]);
         }
         if show_io {
@@ -3562,7 +3628,7 @@ impl Columns {
         names.push("NAME");
         keys.push(Some(SortKey::Name));
         widths.push(Constraint::Min(1));
-        if area_width >= 160 {
+        if shows(config::ColumnKind::Command, area_width >= 160) {
             names.push("COMMAND");
             keys.push(Some(SortKey::Command));
             widths.push(Constraint::Length(32));
@@ -3674,7 +3740,7 @@ fn handle_mouse(
             if local == 1 {
                 let procs = ui.ordered_rows();
                 let show_io = procs_io_visible(&procs);
-                let columns = Columns::plan(table.width, show_io);
+                let columns = Columns::plan(table.width, show_io, &ui.config.columns);
                 if let Some(key) = columns.sort_key_at(column.saturating_sub(table.x), table.width)
                 {
                     ui.sort_by(key);
@@ -6417,6 +6483,153 @@ mod tests {
                 .is_some_and(|notice| notice.starts_with("Setup saved")),
             "{:?}",
             ui.notice
+        );
+    }
+
+    /// The columns pane renders one row per optional column with its
+    /// current state (auto for columns absent from the config), and
+    /// opens from the main pane's "Table columns …" row.
+    #[test]
+    fn the_setup_screen_shows_the_columns_pane() {
+        let mut ui = Ui::new();
+        handle_key(&mut ui, KeyEvent::from(KeyCode::F(2)));
+        assert_eq!(ui.setup_pane, SetupPane::Main);
+        ui.setup_select = 7; // Table columns …
+        handle_key(&mut ui, KeyEvent::from(KeyCode::Enter));
+        assert_eq!(ui.setup_pane, SetupPane::Columns);
+        assert_eq!(ui.setup_select, 0);
+        let rows = render(&ui, 80, 24);
+        assert!(
+            rows.iter().any(|row| row.contains("Setup — table columns")),
+            "{rows:?}"
+        );
+        // Every optional column lists with the config's forced state or
+        // auto, in COLUMN_KINDS order; the cursor marks the first.
+        for kind in config::COLUMN_KINDS {
+            assert!(
+                rows.iter()
+                    .any(|row| row.contains(kind.name()) && row.contains("auto")),
+                "{} missing: {rows:?}",
+                kind.name()
+            );
+        }
+        assert!(rows.iter().any(|row| row.contains("> start")), "{rows:?}");
+        // j wraps at the columns pane's own row count.
+        ui.setup_select = config::COLUMN_KINDS.len() - 1;
+        handle_key(&mut ui, KeyEvent::from(KeyCode::Char('j')));
+        assert_eq!(ui.setup_select, 0);
+        // Esc returns to the main pane, which now shows the row too.
+        handle_key(&mut ui, KeyEvent::from(KeyCode::Esc));
+        assert_eq!(ui.setup_pane, SetupPane::Main);
+        let rows = render(&ui, 80, 24);
+        assert!(
+            rows.iter().any(|row| row.contains("Table columns")),
+            "{rows:?}"
+        );
+    }
+
+    /// Enter cycles a column auto -> shown -> hidden -> auto: absent
+    /// from the config, forced Shown, forced Hidden, removed again.
+    #[test]
+    fn the_column_editor_cycles_auto_shown_hidden() {
+        let mut ui = Ui::new();
+        ui.screen = Screen::Setup;
+        ui.setup_pane = SetupPane::Columns;
+        ui.setup_select = 2; // virtual
+        handle_key(&mut ui, KeyEvent::from(KeyCode::Enter));
+        assert_eq!(
+            ui.config.columns,
+            vec![config::ColumnChoice {
+                kind: config::ColumnKind::Virtual,
+                state: config::ColumnState::Shown,
+            }]
+        );
+        // Forced shown beats the 80-column tier: VIRT appears. The table
+        // renders only off the setup screen, so flip the screen for each
+        // render and back before the next key.
+        ui.screen = Screen::ProcessTable;
+        assert!(render(&ui, 80, 24).iter().any(|row| row.contains("VIRT")));
+        ui.screen = Screen::Setup;
+        handle_key(&mut ui, KeyEvent::from(KeyCode::Enter));
+        assert_eq!(ui.config.columns[0].state, config::ColumnState::Hidden);
+        ui.screen = Screen::ProcessTable;
+        assert!(!render(&ui, 80, 24).iter().any(|row| row.contains("VIRT")));
+        // Back to auto: the choice is removed and the 80-column tier
+        // (which hides VIRT) applies again.
+        ui.screen = Screen::Setup;
+        handle_key(&mut ui, KeyEvent::from(KeyCode::Enter));
+        assert!(ui.config.columns.is_empty());
+        ui.screen = Screen::ProcessTable;
+        assert!(!render(&ui, 80, 24).iter().any(|row| row.contains("VIRT")));
+        // A different column starts from its own auto state.
+        ui.screen = Screen::Setup;
+        ui.setup_select = 1; // processor
+        handle_key(&mut ui, KeyEvent::from(KeyCode::Enter));
+        assert_eq!(
+            ui.config.columns,
+            vec![config::ColumnChoice {
+                kind: config::ColumnKind::Processor,
+                state: config::ColumnState::Shown,
+            }]
+        );
+    }
+
+    /// Forced states override the width tiers in both directions while
+    /// untouched columns keep their tiering.
+    #[test]
+    fn forced_columns_override_the_width_tiers() {
+        let mut ui = Ui::new();
+        ui.config.columns = vec![
+            config::ColumnChoice {
+                kind: config::ColumnKind::Virtual,
+                state: config::ColumnState::Shown,
+            },
+            config::ColumnChoice {
+                kind: config::ColumnKind::Shared,
+                state: config::ColumnState::Hidden,
+            },
+            config::ColumnChoice {
+                kind: config::ColumnKind::Command,
+                state: config::ColumnState::Hidden,
+            },
+            config::ColumnChoice {
+                kind: config::ColumnKind::Parent,
+                state: config::ColumnState::Shown,
+            },
+        ];
+        // At 80 columns VIRT and PPID are forced on, SHR stays off its
+        // 120 tier; the auto columns (START, CPU at 100+) stay off.
+        ui.sample = Some(sample());
+        let rows = render(&ui, 80, 24);
+        assert!(rows.iter().any(|row| row.contains("VIRT")), "{rows:?}");
+        assert!(rows.iter().any(|row| row.contains("PPID")));
+        assert!(!rows.iter().any(|row| row.contains("SHR")));
+        assert!(!rows.iter().any(|row| row.contains("START")));
+        assert!(!rows.iter().any(|row| row.contains(" CPU ")));
+        assert!(!rows.iter().any(|row| row.contains("COMMAND")));
+        // At 160 columns the tiers would show everything; the forced
+        // hidden COMMAND and SHR stay off while the rest appear.
+        let rows = render(&ui, 160, 24);
+        assert!(rows.iter().any(|row| row.contains("VIRT")));
+        assert!(rows.iter().any(|row| row.contains("PPID")));
+        assert!(rows.iter().any(|row| row.contains("PRI")));
+        assert!(!rows.iter().any(|row| row.contains("SHR")));
+        assert!(!rows.iter().any(|row| row.contains("COMMAND")));
+        // The setup screen still lists the forced states.
+        ui.screen = Screen::Setup;
+        ui.setup_pane = SetupPane::Columns;
+        let rows = render(&ui, 80, 24);
+        assert!(
+            rows.iter()
+                .any(|row| row.contains("virtual") && row.contains("shown"))
+        );
+        assert!(
+            rows.iter()
+                .any(|row| row.contains("shared") && row.contains("hidden"))
+        );
+        assert!(
+            rows.iter()
+                .any(|row| row.contains("start") && row.contains("auto"))
         );
     }
 
