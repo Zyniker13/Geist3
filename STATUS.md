@@ -3,13 +3,15 @@
 Updated after every working session.
 
 - **Current milestone:** M3 (Full TUI Parity).
-- **Last done:** M3 batch 7d part 1 — mouse support: left-click selects a process row, clicking a column header sorts (again flips direction), the wheel walks the selection, and a click on a function-bar hint replays that key through the same handler as the keyboard; mouse capture is enabled while the TUI runs and the status line was split so the draw path and the click map share one string.
-- **Next step:** M3 batch 7d part 2 — the disk/network/thermal panels, then the final parity sweep and the 0.1.0 tag.
+- **Last done:** M3 batch 7d part 2 — the disk, network and thermal screens (`d`, `n`, `t`: absolute addresses, a second press returns): disks with mount/usage/lifetime counters and live rates, interfaces with totals, rates and packets, and a sensors screen with temperatures, fans, battery and power; `Screen` navigation rewritten as `goto_screen` (the setup screen holds until finished); honest empty states when a host reports none of a panel's data (decision 0009), `-` where a rate is not yet known; the function bar and its click map cover the new keys.
+- **Next step:** the final parity sweep, then the 0.1.0 tag.
 - **Blocked on:** nothing.
 
 ## Log
 
 Newest first. One or two lines per session: what changed, what is next.
+
+- 2026-11-15: M3 batch 7d part 2 — the disk/network/thermal screens: `Disk` grows mount/total/used/usage plus read/write rates, `NetIf` grows rates (both `Option`, unset for a first sample or a fixture); Linux parses `/proc/diskstats` with mounts from `/proc/mounts` and statvfs usage on the live path, and `counter_rate` (saturating, interval-guarded) turns counter deltas into rates for disks and interfaces. The TUI gains three bordered screens addressed absolutely by `d`/`n`/`t` (second press returns; the setup screen holds until finished), honest empty states where a host reports no data (decision 0009) and `-` where a rate is unknown; the status hint, click map and hint replay cover the new keys. Eight new tests (seven TUI panel/navigation, one core rate rule); gate plus both cross-target clippies green. Next: the final parity sweep, then the 0.1.0 tag.
 
 - 2026-11-14: M3 batch 7d part 1 — mouse support: left-click selects a row, a header click sorts (clicking the sorted column flips direction), the wheel walks the selection, and a function-bar click replays the key its label names through the same handler the keyboard uses (`handle_key`), with capture enabled while the TUI runs and nothing acting while a prompt is open. The status line splits into `status_parts` (shared by draw and the click map, so a click lands on what is on screen). Five tests; gate plus both cross-target clippies green.
 

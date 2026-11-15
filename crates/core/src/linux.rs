@@ -181,13 +181,59 @@ fn parse_proc_uptime(text: &str) -> Option<f64> {
     text.split_whitespace().next()?.parse().ok()
 }
 
-/// Parses `/proc/diskstats`.
+/// Parses `/proc/mounts` into a map of device name → mount point.
+///
+/// Lines that do not follow the field layout are skipped.
+fn parse_proc_mounts(text: &str) -> std::collections::HashMap<String, String> {
+    let mut mounts = std::collections::HashMap::new();
+    for line in text.lines() {
+        let fields: Vec<&str> = line.split_whitespace().collect();
+        if fields.len() < 2 {
+            continue;
+        }
+        mounts.insert(fields[0].to_string(), fields[1].to_string());
+    }
+    mounts
+}
+
+/// Capacity of one mounted filesystem via `statvfs`.
+///
+/// Returns `(total, used, usage_pct)`. Used is the capacity not
+/// available to unprivileged users: `f_frsize * (f_blocks - f_bavail)`.
+/// The numeric fields are zero when `statvfs` fails. Field widths
+/// differ between macOS (`u32`) and Linux (`u64`), so every value is
+/// cast to `u64` first.
+#[cfg(target_os = "linux")]
+fn disk_usage(mount: &str) -> (u64, u64, f64) {
+    let mut st = unsafe { std::mem::zeroed::<libc::statvfs>() };
+    let path = std::ffi::CString::new(mount).unwrap_or_default();
+    let rc = unsafe { libc::statvfs(path.as_ptr(), &mut st) };
+    if rc != 0 {
+        return (0, 0, 0.0);
+    }
+    let total = (st.f_frsize as u64) * (st.f_blocks as u64);
+    let avail = (st.f_frsize as u64) * (st.f_bavail as u64);
+    let used = total.saturating_sub(avail);
+    let pct = if total > 0 {
+        used as f64 / total as f64 * 100.0
+    } else {
+        0.0
+    };
+    (total, used, pct)
+}
+
+/// Parses `/proc/diskstats`, with mount points from `mounts`.
 ///
 /// The kernel counts 512-byte sectors regardless of the device's real
-/// sector size, so both byte totals are sector counts times 512.
-/// Lines that do not follow the field layout are skipped: device sets
+/// sector size, so both byte totals are sector counts times 512. Usage
+/// stays zeroed here so fixture replay never touches the host's
+/// filesystems; the live collectors fill it with `disk_usage`. Lines
+/// that do not follow the field layout are skipped: device sets
 /// legitimately differ between hosts.
-fn parse_proc_diskstats(text: &str) -> Vec<Disk> {
+fn parse_proc_diskstats(
+    text: &str,
+    mounts: &std::collections::HashMap<String, String>,
+) -> Vec<Disk> {
     let mut disks = Vec::new();
     for line in text.lines() {
         let mut fields = line.split_whitespace();
@@ -203,10 +249,17 @@ fn parse_proc_diskstats(text: &str) -> Vec<Disk> {
         if counters.len() < 7 {
             continue;
         }
+        let mount = mounts.get(name).cloned().unwrap_or_default();
         disks.push(Disk {
             name: name.to_string(),
             read_bytes: counters[2] * 512,
             write_bytes: counters[6] * 512,
+            mount,
+            total_bytes: 0,
+            used_bytes: 0,
+            usage_pct: 0.0,
+            read_rate: None,
+            write_rate: None,
         });
     }
     disks
@@ -234,6 +287,8 @@ fn parse_proc_net_dev(text: &str) -> Vec<NetIf> {
             rx_packets: counters[1],
             tx_bytes: counters[8],
             tx_packets: counters[9],
+            rx_rate: None,
+            tx_rate: None,
         });
     }
     interfaces
@@ -372,6 +427,24 @@ pub(crate) fn io_rates(
         rate(current.read_bytes, previous.read_bytes),
         rate(current.write_bytes, previous.write_bytes),
     )
+}
+
+/// Rate of one monotonic counter between two samples, in units per
+/// second.
+///
+/// `Some` only when the interval is known and positive and the counter
+/// was seen before; a counter that went backwards, which happens when an
+/// interface is recreated or a cgroup is reset, reports zero rather than
+/// a negative rate. The same rule underlies the per-process and
+/// per-disk rates.
+#[cfg(any(target_os = "linux", test))]
+fn counter_rate(current: u64, previous: Option<u64>, seconds: Option<f64>) -> Option<f64> {
+    let secs = seconds?;
+    if secs <= 0.0 {
+        return None;
+    }
+    let previous = previous?;
+    Some((current.saturating_sub(previous) as f64) / secs)
 }
 
 /// Everything recorded for one process, keyed by pid.
@@ -710,7 +783,13 @@ pub fn sample_from_fixture(dir: &Path) -> Result<Sample, FixtureSampleError> {
             "proc-uptime" => {
                 uptime = Some(parse_proc_uptime(&text).ok_or_else(|| bad_source(name))?);
             }
-            "proc-diskstats" => disks = Some(parse_proc_diskstats(&text)),
+            "proc-diskstats" => {
+                let mounts_text = fixture.entry_text("proc-mounts").unwrap_or_default();
+                disks = Some(parse_proc_diskstats(
+                    &text,
+                    &parse_proc_mounts(&mounts_text),
+                ));
+            }
             "proc-net-dev" => net = Some(parse_proc_net_dev(&text)),
             _ => {}
         }
@@ -765,10 +844,10 @@ mod live {
     use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
     use super::{
-        CpuTimes, PidData, PidIo, PidStat, USER_HZ, core_percents, io_rates, memory_from,
-        parse_hwmon, parse_pid_io, parse_pid_stat, parse_pid_status, parse_power_supply,
-        parse_proc_diskstats, parse_proc_loadavg, parse_proc_meminfo, parse_proc_net_dev,
-        parse_proc_stat, parse_proc_uptime, process_row,
+        CpuTimes, PidData, PidIo, PidStat, USER_HZ, core_percents, counter_rate, disk_usage,
+        io_rates, memory_from, parse_hwmon, parse_pid_io, parse_pid_stat, parse_pid_status,
+        parse_power_supply, parse_proc_diskstats, parse_proc_loadavg, parse_proc_meminfo,
+        parse_proc_mounts, parse_proc_net_dev, parse_proc_stat, parse_proc_uptime, process_row,
     };
     use crate::collector::{CollectError, Collector};
     use crate::model::{
@@ -792,6 +871,10 @@ mod live {
         pids: HashMap<u32, PidStat>,
         ios: HashMap<u32, PidIo>,
         cores: Vec<CpuTimes>,
+        /// Per-device byte counters keyed by device name.
+        disks: HashMap<String, (u64, u64)>,
+        /// Per-interface byte counters keyed by interface name.
+        net: HashMap<String, (u64, u64)>,
     }
 
     impl Collector for LinuxCollector {
@@ -836,12 +919,14 @@ mod live {
                 origin: "/proc/uptime",
                 what: "uptime",
             })?;
-            let disks = fs::read_to_string("/proc/diskstats")
+            let mut disks = fs::read_to_string("/proc/diskstats")
                 .ok()
-                .as_deref()
-                .map(parse_proc_diskstats)
+                .map(|disk_text| {
+                    let mounts_text = fs::read_to_string("/proc/mounts").unwrap_or_default();
+                    parse_proc_diskstats(&disk_text, &parse_proc_mounts(&mounts_text))
+                })
                 .unwrap_or_default();
-            let net = fs::read_to_string("/proc/net/dev")
+            let mut net = fs::read_to_string("/proc/net/dev")
                 .ok()
                 .as_deref()
                 .map(parse_proc_net_dev)
@@ -894,6 +979,38 @@ mod live {
             let prev = self.prev.as_ref();
             let prev_pids = prev.map(|prev| &prev.pids);
             let prev_ios = prev.map(|prev| &prev.ios);
+
+            // Disk usage comes from `statvfs`, only on the live path: the
+            // fixture replay path keeps the parser pure so recorded samples
+            // replay deterministically. Rates reuse the counter-rate rule
+            // applied to the byte counters.
+            for disk in &mut disks {
+                let previous = prev.and_then(|prev| prev.disks.get(&disk.name));
+                disk.read_rate = counter_rate(
+                    disk.read_bytes,
+                    previous.map(|(read, _)| *read),
+                    interval_secs,
+                );
+                disk.write_rate = counter_rate(
+                    disk.write_bytes,
+                    previous.map(|(_, write)| *write),
+                    interval_secs,
+                );
+                if !disk.mount.is_empty() {
+                    let (total, used, pct) = disk_usage(&disk.mount);
+                    disk.total_bytes = total;
+                    disk.used_bytes = used;
+                    disk.usage_pct = pct;
+                }
+            }
+            for iface in &mut net {
+                let previous = prev.and_then(|prev| prev.net.get(&iface.name));
+                iface.rx_rate =
+                    counter_rate(iface.rx_bytes, previous.map(|(rx, _)| *rx), interval_secs);
+                iface.tx_rate =
+                    counter_rate(iface.tx_bytes, previous.map(|(_, tx)| *tx), interval_secs);
+            }
+
             let total_mem_bytes = meminfo.total;
             let mut processes: Vec<Process> = Vec::new();
             for (pid, data) in &pids {
@@ -931,6 +1048,14 @@ mod live {
                     .filter_map(|(pid, data)| data.io.map(|io| (*pid, io)))
                     .collect(),
                 cores: stat.cores.clone(),
+                disks: disks
+                    .iter()
+                    .map(|disk| (disk.name.clone(), (disk.read_bytes, disk.write_bytes)))
+                    .collect(),
+                net: net
+                    .iter()
+                    .map(|iface| (iface.name.clone(), (iface.rx_bytes, iface.tx_bytes)))
+                    .collect(),
             });
 
             Ok(Sample {
@@ -1134,12 +1259,22 @@ mod tests {
                     \n   8       1 sda1 154 13 1332 12 2 0 2 8 0 18 20 \
                     \nnot a diskstats line \
                     \n";
-        let disks = parse_proc_diskstats(text);
+        let disks = parse_proc_diskstats(text, &std::collections::HashMap::new());
         assert_eq!(disks.len(), 2);
         assert_eq!(disks[0].name, "sda");
         assert_eq!(disks[0].read_bytes, 1474182 * 512);
         assert_eq!(disks[0].write_bytes, 7098027 * 512);
         assert_eq!(disks[1].name, "sda1");
+    }
+
+    #[test]
+    fn counter_rate_needs_previous_and_positive_interval() {
+        assert_eq!(counter_rate(10, None, Some(1.0)), None);
+        assert_eq!(counter_rate(10, Some(0), Some(0.0)), None);
+        assert_eq!(counter_rate(10, Some(0), None), None);
+        assert_eq!(counter_rate(10, Some(4), Some(2.0)), Some(3.0));
+        // A counter that went backwards reports zero, not a negative rate.
+        assert_eq!(counter_rate(4, Some(10), Some(2.0)), Some(0.0));
     }
 
     #[test]

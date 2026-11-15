@@ -41,7 +41,15 @@ Check an item only when it works and a test or a recorded check shows it. Add th
 - [ ] Setup screen (F2) for meters, display options, colors and columns
 - [x] Config file saved and reloaded — F2 saves JSON to the user's config directory (Application Support on macOS, XDG elsewhere) when the setup screen closes; `ztop` loads it at startup and a missing or malformed file means defaults, with unknown fields from a future version tolerated. Tests: `config::tests::config_roundtrips_through_a_file`, `a_missing_config_file_means_defaults`, `a_malformed_config_file_means_defaults`, `unknown_fields_and_missing_fields_are_tolerated`, `tests::open_setup_remembers_where_it_returned`.
 - [x] Color schemes, including monochrome; `--no-color` — `Theme::Color` (default) and `Theme::Mono` picked on the setup screen; the theme colors the CPU/memory/swap gauges and dims the status line, and `--no-color` forces mono for one run without saving the override. Tests: `tests::gauge_style_follows_the_theme`, `tests::the_setup_screen_shows_its_options_and_help`, `ztop: no_color_flag_parses`.
-- [ ] Mouse support: click to select, sort and use the function bar
+- [x] Mouse support: click to select, sort and use the function bar — left-click
+      selects a row, a header click sorts (clicking the sorted column again flips
+      direction), the wheel walks the selection, and a function-bar click replays the
+      key its label names through the same `handle_key` the keyboard uses
+      (`status_parts`/`status_hint_at`/`hint_key` share one string between the draw
+      path and the click map; clicks do nothing while a prompt is open). Tests:
+      `clicking_a_row_selects_it`, `clicking_the_header_sorts_then_flips`,
+      `clicking_a_function_bar_hint_replays_the_key`, `clicking_quit_replays_the_quit_key`,
+      `clicking_the_disks_hint_replays_d`, `clicks_are_ignored_while_a_prompt_is_open`.
 - [ ] Command-line options: delay (`-d`), user (`-u`), PIDs (`-p`), sort key (`-s`), tree (`-t`)
 - [ ] Help screen (F1) and a man page
 
@@ -63,8 +71,20 @@ Check an item only when it works and a test or a recorded check shows it. Add th
 
 ## Beyond Both
 
-- [ ] Per-disk usage, and disk I/O panels
-- [ ] Network interfaces with rates and totals
+- [x] Per-disk usage, and disk I/O panels — the `d` screen lists each disk with its
+      mount, used/total bytes and usage percent plus lifetime read/write counters,
+      with read/write rates where a live collector measured a delta (a first sample or
+      a fixture shows `-`); Linux parses `/proc/diskstats` with mount points from
+      `/proc/mounts` and usage from statvfs; macOS reports no disks today and shows
+      the honest empty state (decision 0009). Tests:
+      `the_disk_panel_shows_usage_counters_and_rates`,
+      `panels_without_data_say_so_instead_of_fake_zeros`,
+      `panels_without_a_sample_wait_for_data`, `counter_rate_needs_previous_and_positive_interval`.
+- [x] Network interfaces with rates and totals — the `n` screen lists each interface
+      with rx/tx byte totals and rates plus packet counters; rates come from
+      `counter_rate` deltas between live samples (`/proc/net/dev` on Linux; macOS
+      reports no interfaces today). Tests:
+      `the_network_panel_shows_interfaces_and_rates`.
 - [x] Temperatures and fans — TUI header row: temps (up to 3), fans (up to 1), system/GPU watts. Snapshot test at 80x24 (5-row header), plus fixture replay at 80x24 (4-row header when no sensors).
 - [ ] Linux GPUs: NVIDIA through NVML, AMD through sysfs
 - [ ] cgroup and container awareness (Linux)

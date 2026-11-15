@@ -81,6 +81,9 @@ fn sort_label(sort: SortKey, descending: bool) -> String {
 pub enum Screen {
     ProcessTable,
     AppleSilicon,
+    Disk,
+    Network,
+    Thermal,
     Setup,
 }
 
@@ -184,15 +187,28 @@ impl Ui {
         self.descending = !self.descending;
     }
 
-    /// Switch between the process table and the Apple Silicon screen.
+    /// Switch to the Apple Silicon screen, or back to the process table
+    /// when already on it.
+    ///
     /// The screen state is per-view, so each keeps its own settings.
     pub fn toggle_screen(&mut self) {
-        self.screen = match self.screen {
-            Screen::ProcessTable => Screen::AppleSilicon,
-            Screen::AppleSilicon => Screen::ProcessTable,
-            // The setup screen consumes every key, so `a` cannot reach
-            // here; this arm only keeps the match exhaustive.
-            Screen::Setup => Screen::Setup,
+        self.goto_screen(Screen::AppleSilicon);
+    }
+
+    /// Switch to one of the extra screens, or back to the process table
+    /// when the screen is already showing: every screen key (`a`, `d`,
+    /// `n`, `t`) is an absolute address and a second press returns.
+    ///
+    /// The setup screen consumes every key and holds until it is finished,
+    /// so it cannot be toggled away.
+    pub fn goto_screen(&mut self, screen: Screen) {
+        if self.screen == Screen::Setup {
+            return;
+        }
+        self.screen = if self.screen == screen {
+            Screen::ProcessTable
+        } else {
+            screen
         };
     }
 
@@ -856,10 +872,17 @@ fn handle_key(ui: &mut Ui, key: KeyEvent) -> bool {
         // `a` flips between the process table and the Apple
         // Silicon screen; on the silicon screen the table
         // keys have no meaning, so they do nothing.
-        KeyCode::Char('a') => ui.toggle_screen(),
-        // F2 opens the setup screen from either table screen.
+        // `a`, `d`, `n` and `t` each address one extra screen; a second
+        // press returns to the process table.
+        KeyCode::Char('a') => ui.goto_screen(Screen::AppleSilicon),
+        KeyCode::Char('d') => ui.goto_screen(Screen::Disk),
+        KeyCode::Char('n') => ui.goto_screen(Screen::Network),
+        KeyCode::Char('t') => ui.goto_screen(Screen::Thermal),
+        // F2 opens the setup screen from any sample screen.
         KeyCode::F(2) if ui.screen != Screen::Setup => ui.open_setup(),
-        _ if ui.screen == Screen::AppleSilicon => {}
+        // On the extra screens the table keys have no meaning, so they
+        // do nothing.
+        _ if ui.screen != Screen::ProcessTable => {}
         KeyCode::Char('i') => ui.toggle_direction(),
         KeyCode::F(3) => ui.toggle_search(),
         KeyCode::F(4) => ui.toggle_filter(),
@@ -978,6 +1001,18 @@ pub fn draw(frame: &mut Frame, ui: &Ui) {
         if ui.menu.is_some() {
             draw_menu(frame, ui, frame.area());
         }
+        return;
+    }
+    if ui.screen == Screen::Disk {
+        draw_disks(frame, ui, frame.area());
+        return;
+    }
+    if ui.screen == Screen::Network {
+        draw_network(frame, ui, frame.area());
+        return;
+    }
+    if ui.screen == Screen::Thermal {
+        draw_thermal(frame, ui, frame.area());
         return;
     }
     let (header_area, table_area) = split_table_area(ui, frame.area());
@@ -1135,6 +1170,199 @@ fn draw_silicon(frame: &mut Frame, ui: &Ui, area: ratatui::layout::Rect) {
     .x_axis(Axis::default().bounds([0.0, (points.len() - 1) as f64]))
     .y_axis(Axis::default().bounds([0.0, (peak * 1.2).max(1.0)]));
     frame.render_widget(chart, rows[1]);
+}
+
+/// The empty state for the data panels: an honest "nothing here" note for
+/// platforms that do not report the data, plus the key back to the table.
+fn panel_empty(title: &'static str, what: &str, key: char) -> Paragraph<'static> {
+    Paragraph::new(vec![
+        Line::from(format!("No {what} data on this host.")),
+        Line::from(""),
+        Line::from(format!("{key} process table · q quit")),
+    ])
+    .block(Block::default().borders(Borders::ALL).title(title))
+}
+
+/// The disk panel: per-disk usage and lifetime I/O counters, with rates
+/// where a live collector measured them (a first sample or a fixture has
+/// none, shown as `-`). macOS reports no disks today and shows the empty
+/// state rather than fake zeros (decision 0009).
+fn draw_disks(frame: &mut Frame, ui: &Ui, area: ratatui::layout::Rect) {
+    let titled = |title: &'static str| Block::default().borders(Borders::ALL).title(title);
+    let Some(sample) = ui.sample.as_ref() else {
+        frame.render_widget(
+            Paragraph::new(vec![Line::from("no sample yet")]).block(titled("Disks")),
+            area,
+        );
+        return;
+    };
+    if sample.disks.is_empty() {
+        frame.render_widget(panel_empty("Disks", "disk", 'd'), area);
+        return;
+    }
+    let size = |bytes: u64| {
+        if bytes > 0 {
+            bytes_text(bytes as f64)
+        } else {
+            "-".to_string()
+        }
+    };
+    let rate = |rate: Option<f64>| rate.map_or_else(|| "-".to_string(), |r| rate_text(Some(r)));
+    let mut lines = vec![Line::from(
+        format!(
+            "{:<9} {:<11} {:>9} {:>6} {:>9} {:>6} {:>7} {:>7} {:>5}",
+            "device", "mount", "read", "read/s", "write", "write/s", "size", "used", "used%"
+        )
+        .bold(),
+    )];
+    for disk in &sample.disks {
+        let pct = if disk.total_bytes > 0 {
+            format!("{:.1}%", disk.usage_pct)
+        } else {
+            "-".to_string()
+        };
+        lines.push(Line::from(format!(
+            "{:<9} {:<11.11} {:>9} {:>6} {:>9} {:>6} {:>7} {:>7} {:>5}",
+            disk.name,
+            disk.mount,
+            bytes_text(disk.read_bytes as f64),
+            rate(disk.read_rate),
+            bytes_text(disk.write_bytes as f64),
+            rate(disk.write_rate),
+            size(disk.total_bytes),
+            size(disk.used_bytes),
+            pct,
+        )));
+    }
+    lines.push(Line::from(""));
+    lines.push(Line::from("d process table · q quit"));
+    frame.render_widget(Paragraph::new(lines).block(titled("Disks")), area);
+}
+
+/// The network panel: per-interface lifetime counters with rates where a
+/// live collector measured them. Same empty-state rule as the disk panel.
+fn draw_network(frame: &mut Frame, ui: &Ui, area: ratatui::layout::Rect) {
+    let titled = |title: &'static str| Block::default().borders(Borders::ALL).title(title);
+    let Some(sample) = ui.sample.as_ref() else {
+        frame.render_widget(
+            Paragraph::new(vec![Line::from("no sample yet")]).block(titled("Network")),
+            area,
+        );
+        return;
+    };
+    if sample.net.is_empty() {
+        frame.render_widget(panel_empty("Network", "network", 'n'), area);
+        return;
+    }
+    let rate = |rate: Option<f64>| rate.map_or_else(|| "-".to_string(), |r| rate_text(Some(r)));
+    let mut lines = vec![Line::from(
+        format!(
+            "{:<10} {:>9} {:>6} {:>9} {:>6} {:>9} {:>9}",
+            "iface", "rx", "rx/s", "tx", "tx/s", "rx pkts", "tx pkts"
+        )
+        .bold(),
+    )];
+    for iface in &sample.net {
+        lines.push(Line::from(format!(
+            "{:<10} {:>9} {:>6} {:>9} {:>6} {:>9} {:>9}",
+            iface.name,
+            bytes_text(iface.rx_bytes as f64),
+            rate(iface.rx_rate),
+            bytes_text(iface.tx_bytes as f64),
+            rate(iface.tx_rate),
+            iface.rx_packets,
+            iface.tx_packets,
+        )));
+    }
+    lines.push(Line::from(""));
+    lines.push(Line::from("n process table · q quit"));
+    frame.render_widget(Paragraph::new(lines).block(titled("Network")), area);
+}
+
+/// The sensors panel: temperatures, fans, battery and power draw, one
+/// `label value` row each. An absent reading renders as a dash, never a
+/// fake zero (decision 0009).
+fn draw_thermal(frame: &mut Frame, ui: &Ui, area: ratatui::layout::Rect) {
+    let titled = |title: &'static str| Block::default().borders(Borders::ALL).title(title);
+    let Some(sample) = ui.sample.as_ref() else {
+        frame.render_widget(
+            Paragraph::new(vec![Line::from("no sample yet")]).block(titled("Sensors")),
+            area,
+        );
+        return;
+    };
+    let sensors = &sample.sensors;
+    if sensors.temps.is_empty() && sensors.fans.is_empty() && sensors.battery.is_none() {
+        frame.render_widget(panel_empty("Sensors", "temperature or fan", 't'), area);
+        return;
+    }
+    let celsius = |metric: &Metric| {
+        if metric.available {
+            format!("{:.1} °C", metric.value)
+        } else {
+            "-".to_string()
+        }
+    };
+    let rpm = |metric: &Metric| {
+        if metric.available {
+            format!("{:.0} rpm", metric.value)
+        } else {
+            "-".to_string()
+        }
+    };
+    let watt = |metric: &Metric| {
+        if metric.available {
+            format!("{:.1} W", metric.value)
+        } else {
+            "-".to_string()
+        }
+    };
+    let mut lines = vec![Line::from("Temperatures".bold())];
+    if sensors.temps.is_empty() {
+        lines.push(Line::from("  none reported"));
+    }
+    for sensor in &sensors.temps {
+        lines.push(Line::from(format!(
+            "  {:<12} {}",
+            sensor.label,
+            celsius(&sensor.celsius)
+        )));
+    }
+    lines.push(Line::from("Fans".bold()));
+    if sensors.fans.is_empty() {
+        lines.push(Line::from("  none reported"));
+    }
+    for fan in &sensors.fans {
+        lines.push(Line::from(format!("  {:<12} {}", fan.label, rpm(&fan.rpm))));
+    }
+    if let Some(battery) = &sensors.battery {
+        let state = match battery.state {
+            ztop_core::model::BatteryState::Charging => "charging",
+            ztop_core::model::BatteryState::Discharging => "discharging",
+            ztop_core::model::BatteryState::Full => "full",
+            ztop_core::model::BatteryState::Unknown => "unknown",
+        };
+        let percent = if battery.percent.available {
+            format!("{:.0}%", battery.percent.value)
+        } else {
+            "-".to_string()
+        };
+        lines.push(Line::from("Battery".bold()));
+        lines.push(Line::from(format!(
+            "  {} {} · {}",
+            percent,
+            state,
+            watt(&battery.power_watts)
+        )));
+    }
+    lines.push(Line::from(""));
+    lines.push(Line::from(format!(
+        "GPU power {} · system power {}",
+        watt(&sensors.gpu_watts),
+        watt(&sensors.system_watts)
+    )));
+    lines.push(Line::from("t process table · q quit"));
+    frame.render_widget(Paragraph::new(lines).block(titled("Sensors")), area);
 }
 
 /// The signal menu: a bordered popup centered over the screen, one row per
@@ -1492,7 +1720,7 @@ fn status_parts(ui: &Ui) -> Vec<String> {
         parts.push(notice.clone());
     }
     parts.push(format!(
-        "q: quit · tab: sort {} · i: reverse · f3: search · f4: filter · u: user · space: tag · j/k: select · f: follow · f5: tree · enter: fold · f9: signal · f7/f8: renice",
+        "q: quit · tab: sort {} · i: reverse · f3: search · f4: filter · u: user · space: tag · j/k: select · f: follow · f5: tree · enter: fold · f9: signal · f7/f8: renice · a: silicon · d: disks · n: net · t: temps",
         sort_label(ui.sort, ui.descending)
     ));
     parts
@@ -1550,6 +1778,10 @@ fn hint_key(label: &str) -> Option<KeyEvent> {
         "enter" => KeyCode::Enter,
         "f9" => KeyCode::F(9),
         "f7/f8" => KeyCode::F(7),
+        "a" => KeyCode::Char('a'),
+        "d" => KeyCode::Char('d'),
+        "n" => KeyCode::Char('n'),
+        "t" => KeyCode::Char('t'),
         _ => return None,
     };
     Some(KeyEvent::from(code))
@@ -1771,7 +2003,10 @@ fn process_row(row_view: &TreeRow<'_>, tree: bool, tagged: bool, show_io: bool) 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ztop_core::model::{Cpu, CpuTimes, Fan, Metric, ProcessIo, Sensors, TempSensor, Unit};
+    use ztop_core::model::{
+        Battery, BatteryState, Cpu, CpuTimes, Disk, Fan, Metric, NetIf, ProcessIo, Sensors,
+        TempSensor, Unit,
+    };
 
     /// A 4-core, 12-process sample with spread-out values.
     fn sample() -> Sample {
@@ -1861,6 +2096,52 @@ mod tests {
             read_rate: Some(0.0),
             write_rate: Some(0.0),
         };
+        s
+    }
+
+    /// A sample with one disk (usage plus rates) and one interface with
+    /// rates, matching the core test fixture values.
+    fn sample_with_disks() -> Sample {
+        let mut s = sample();
+        s.disks = vec![Disk {
+            name: "sda".to_string(),
+            read_bytes: 1_474_182 * 512,
+            write_bytes: 7_098_027 * 512,
+            mount: "/".to_string(),
+            total_bytes: 500_000_000_000,
+            used_bytes: 150_000_000_000,
+            usage_pct: 30.0,
+            read_rate: Some(120_000.0),
+            write_rate: Some(45_000.0),
+        }];
+        s.net = vec![NetIf {
+            name: "eth0".to_string(),
+            rx_bytes: 265_744_198,
+            rx_packets: 29_836,
+            tx_bytes: 1_193_601,
+            tx_packets: 10_693,
+            rx_rate: Some(240_000.0),
+            tx_rate: Some(60_000.0),
+        }];
+        s
+    }
+
+    /// A sample with a temperature, a fan and a charging battery.
+    fn sample_with_sensors() -> Sample {
+        let mut s = sample();
+        s.sensors.temps = vec![TempSensor {
+            label: "SoC".to_string(),
+            celsius: Metric::available(45.0, Unit::Celsius),
+        }];
+        s.sensors.fans = vec![Fan {
+            label: "Fan 1".to_string(),
+            rpm: Metric::available(1200.0, Unit::RevolutionsPerMinute),
+        }];
+        s.sensors.battery = Some(Battery {
+            percent: Metric::available(87.0, Unit::Percent),
+            power_watts: Metric::available(4.25, Unit::Watts),
+            state: BatteryState::Charging,
+        });
         s
     }
 
@@ -2929,6 +3210,145 @@ mod tests {
         .expect("the i hint replays i");
         handle_key(&mut ui, key);
         assert_eq!(ui.ordered_rows()[0].process.pid, last);
+    }
+
+    /// The data screens: `d`, `n` and `t` address their panel, a second
+    /// press returns to the table, and `a` stays an absolute address from
+    /// anywhere. On a panel the table keys do nothing; F2 still opens setup.
+    #[test]
+    fn screen_keys_address_panels_and_return() {
+        let mut ui = ui_with(Some(sample()), None);
+        for (code, screen) in [
+            (KeyCode::Char('d'), Screen::Disk),
+            (KeyCode::Char('n'), Screen::Network),
+            (KeyCode::Char('t'), Screen::Thermal),
+        ] {
+            handle_key(&mut ui, KeyEvent::from(code));
+            assert_eq!(ui.screen, screen, "{code:?} addresses its screen");
+            handle_key(&mut ui, KeyEvent::from(code));
+            assert_eq!(ui.screen, Screen::ProcessTable, "a second press returns");
+        }
+        handle_key(&mut ui, KeyEvent::from(KeyCode::Char('d')));
+        handle_key(&mut ui, KeyEvent::from(KeyCode::Char('a')));
+        assert_eq!(ui.screen, Screen::AppleSilicon, "a is an absolute address");
+        // The table keys have no meaning on a panel and do nothing.
+        handle_key(&mut ui, KeyEvent::from(KeyCode::Char('j')));
+        assert_eq!(ui.screen, Screen::AppleSilicon);
+        handle_key(&mut ui, KeyEvent::from(KeyCode::F(2)));
+        assert_eq!(ui.screen, Screen::Setup);
+    }
+
+    /// The disk panel: usage, lifetime counters and rates, all on one row.
+    #[test]
+    fn the_disk_panel_shows_usage_counters_and_rates() {
+        let mut ui = ui_with(Some(sample_with_disks()), None);
+        ui.screen = Screen::Disk;
+        let rows = render(&ui, 100, 24);
+        let disk_row = rows
+            .iter()
+            .find(|row| row.contains("sda"))
+            .expect("disk row");
+        assert!(disk_row.contains('/'), "{disk_row}");
+        assert!(disk_row.contains("30.0%"), "{disk_row}");
+        assert!(disk_row.contains(&rate_text(Some(120_000.0))), "{disk_row}");
+        assert!(disk_row.contains(&rate_text(Some(45_000.0))), "{disk_row}");
+        assert!(
+            disk_row.contains(&bytes_text(150_000_000_000.0)),
+            "{disk_row}"
+        );
+    }
+
+    /// The network panel: counters, rates and packet totals per interface.
+    #[test]
+    fn the_network_panel_shows_interfaces_and_rates() {
+        let mut ui = ui_with(Some(sample_with_disks()), None);
+        ui.screen = Screen::Network;
+        let rows = render(&ui, 100, 24);
+        let net_row = rows
+            .iter()
+            .find(|row| row.contains("eth0"))
+            .expect("iface row");
+        assert!(net_row.contains(&bytes_text(265_744_198.0)), "{net_row}");
+        assert!(net_row.contains(&rate_text(Some(240_000.0))), "{net_row}");
+        assert!(net_row.contains(&rate_text(Some(60_000.0))), "{net_row}");
+        assert!(net_row.contains("29836"), "{net_row}");
+        assert!(net_row.contains("10693"), "{net_row}");
+    }
+
+    /// The sensors panel: temperatures, fans, battery and power draw.
+    #[test]
+    fn the_thermal_panel_shows_temps_fans_battery_and_power() {
+        let mut ui = ui_with(Some(sample_with_sensors()), None);
+        ui.screen = Screen::Thermal;
+        let rows = render(&ui, 100, 24);
+        let flat = rows.join("\n");
+        assert!(flat.contains("SoC"), "{flat}");
+        assert!(flat.contains("45.0 °C"), "{flat}");
+        assert!(flat.contains("Fan 1"), "{flat}");
+        assert!(flat.contains("1200 rpm"), "{flat}");
+        assert!(flat.contains("87%"), "{flat}");
+        assert!(flat.contains("charging"), "{flat}");
+        assert!(flat.contains("4.2 W"), "{flat}");
+    }
+
+    /// Hosts that report none of a panel's data get an honest empty state,
+    /// never fake zeros (decision 0009).
+    #[test]
+    fn panels_without_data_say_so_instead_of_fake_zeros() {
+        let mut ui = ui_with(Some(sample()), None);
+        ui.screen = Screen::Disk;
+        let rows = render(&ui, 80, 24);
+        assert!(
+            rows.iter()
+                .any(|row| row.contains("No disk data on this host.")),
+            "{rows:?}"
+        );
+        ui.screen = Screen::Network;
+        let rows = render(&ui, 80, 24);
+        assert!(
+            rows.iter()
+                .any(|row| row.contains("No network data on this host.")),
+            "{rows:?}"
+        );
+        ui.screen = Screen::Thermal;
+        let rows = render(&ui, 80, 24);
+        assert!(
+            rows.iter()
+                .any(|row| row.contains("No temperature or fan data on this host.")),
+            "{rows:?}"
+        );
+    }
+
+    /// Before the first sample the panels wait for data instead of lying.
+    #[test]
+    fn panels_without_a_sample_wait_for_data() {
+        let mut ui = ui_with(None, None);
+        ui.screen = Screen::Disk;
+        assert!(
+            render(&ui, 80, 24)
+                .iter()
+                .any(|row| row.contains("no sample yet"))
+        );
+    }
+
+    /// Clicking the `d: disks` hint replays d: the hint bar reaches the
+    /// panels too (at a width wide enough to show the label).
+    #[test]
+    fn clicking_the_disks_hint_replays_d() {
+        let mut ui = ui_with(Some(sample()), None);
+        let screen = ratatui::layout::Rect::new(0, 0, 200, 24);
+        let line = status_parts(&ui).join(" · ");
+        let x = line.split("d: disks").next().unwrap().chars().count() as u16;
+        let key = handle_mouse(
+            &mut ui,
+            MouseEventKind::Down(MouseButton::Left),
+            x,
+            3,
+            screen,
+        )
+        .expect("the d hint replays d");
+        handle_key(&mut ui, key);
+        assert_eq!(ui.screen, Screen::Disk);
     }
 
     /// The `q: quit` hint replays q, which quits — the full click path

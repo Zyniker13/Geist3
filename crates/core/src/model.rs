@@ -156,16 +156,30 @@ pub struct Sample {
 /// `/proc/diskstats` counts sectors; collectors convert with the
 /// traditional 512-byte sector the kernel counts in, regardless of the
 /// device's real sector size.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Disk {
     /// Kernel device name, e.g. `sda` or `nvme0n1`.
     pub name: String,
     pub read_bytes: u64,
     pub write_bytes: u64,
+    /// Mount point (e.g. `/`, `/home`). Empty when unavailable.
+    pub mount: String,
+    /// Total capacity in bytes (from `statvfs`; 0 when unavailable).
+    pub total_bytes: u64,
+    /// Used capacity in bytes.
+    pub used_bytes: u64,
+    /// Usage percentage (0–100).
+    pub usage_pct: f64,
+    /// Disk read rate in bytes per second between two live samples;
+    /// `None` for fixtures and a collector's first sample, like the
+    /// per-process rates.
+    pub read_rate: Option<f64>,
+    /// Disk write rate in bytes per second between two live samples.
+    pub write_rate: Option<f64>,
 }
 
 /// Lifetime counters of one network interface.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct NetIf {
     /// Interface name as the kernel reports it, e.g. `eth0`.
     pub name: String,
@@ -173,6 +187,11 @@ pub struct NetIf {
     pub rx_packets: u64,
     pub tx_bytes: u64,
     pub tx_packets: u64,
+    /// Receive rate in bytes per second between two live samples;
+    /// `None` for fixtures and a collector's first sample.
+    pub rx_rate: Option<f64>,
+    /// Transmit rate in bytes per second between two live samples.
+    pub tx_rate: Option<f64>,
 }
 
 /// One temperature reading.
@@ -408,6 +427,12 @@ mod tests {
                 name: "sda".into(),
                 read_bytes: 1_474_182 * 512,
                 write_bytes: 7_098_027 * 512,
+                mount: "/".into(),
+                total_bytes: 500_000_000_000,
+                used_bytes: 150_000_000_000,
+                usage_pct: 30.0,
+                read_rate: Some(120_000.0),
+                write_rate: Some(45_000.0),
             }],
             net: vec![NetIf {
                 name: "eth0".into(),
@@ -415,6 +440,8 @@ mod tests {
                 rx_packets: 29_836,
                 tx_bytes: 1_193_601,
                 tx_packets: 10_693,
+                rx_rate: Some(240_000.0),
+                tx_rate: Some(60_000.0),
             }],
             sensors: Sensors {
                 temps: vec![TempSensor {
