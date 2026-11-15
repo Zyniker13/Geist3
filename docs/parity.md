@@ -254,7 +254,17 @@ Check an item only when it works and a test or a recorded check shows it. Add th
     sample; a dedicated sampler thread owns the collector.
     Tests: agent crate (10), including history window, ring drop and
     stream tick.
-- [ ] TLS, pairing code and QR, pinned certificates, tokens with list and revoke
+- [x] TLS, pairing code and pinned certificates, tokens with list and revoke
+  - `ztop agent --tls`: self-signed certificate created on first
+    start (key 0600, ten-year validity), fingerprint printed as the
+    SHA-256 of the leaf DER; TLS turns token enforcement on. A client
+    whose only trust is the pin completes the handshake with the
+    right pin and dies on a one-byte-mismatched pin (decision 0039).
+    Pairing codes and token list/revoke: decision 0038, tests
+    `an_enforced_agent_refuses_the_unpaired_and_pairs_the_code`,
+    `tokens_can_be_listed_and_revoked_over_the_wire`,
+    `tls_serves_and_a_pinned_client_reads`. A QR code on the pairing
+    screen is app-side and tracked with the App milestones.
 - [x] Localhost-only until configured
   - `serve` binds `("127.0.0.1", port)` — loopback only, by
     construction; TLS and a configurable bind address arrive with

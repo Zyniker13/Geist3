@@ -65,6 +65,9 @@ enum Command {
         /// Show a pairing code a client can trade for a token.
         #[arg(long)]
         pair: bool,
+        /// Serve HTTPS with a self-signed certificate and require tokens.
+        #[arg(long)]
+        tls: bool,
     },
     /// Serve the hub protocol on the loopback interface.
     Hub {
@@ -144,11 +147,11 @@ fn run() -> Result<(), Box<dyn Error>> {
             let count = ztop_core::capture::capture_to(&out)?;
             println!("wrote {count} entries to {}", out.display());
         }
-        Some(Command::Agent { port, pair }) => {
+        Some(Command::Agent { port, pair, tls }) => {
             let runtime = tokio::runtime::Builder::new_multi_thread()
                 .enable_all()
                 .build()?;
-            runtime.block_on(ztop_agent::serve(port, pair))?;
+            runtime.block_on(ztop_agent::serve(port, pair, tls))?;
         }
         Some(Command::Hub { port }) => {
             let runtime = tokio::runtime::Builder::new_multi_thread()
@@ -213,13 +216,19 @@ mod tests {
             cli.command,
             Some(Command::Agent {
                 port: 8000,
-                pair: false
+                pair: false,
+                tls: false
             })
         ));
         let cli = Cli::try_parse_from(["ztop", "agent", "--pair"]).expect("parses");
         assert!(matches!(
             cli.command,
             Some(Command::Agent { pair: true, .. })
+        ));
+        let cli = Cli::try_parse_from(["ztop", "agent", "--tls"]).expect("parses");
+        assert!(matches!(
+            cli.command,
+            Some(Command::Agent { tls: true, .. })
         ));
         let cli = Cli::try_parse_from(["ztop", "hub"]).expect("parses");
         assert!(matches!(cli.command, Some(Command::Hub { port: 7101 })));

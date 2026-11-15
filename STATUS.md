@@ -3,13 +3,15 @@
 Updated after every working session.
 
 - **Current milestone:** M4 (Agent, Hub and the Bridge) — M3 complete pending CI on the 7ae commit.
-- **Last done:** M4 batch 8c SHIPPED as 6d5a152 — `ztop connect` works (decision 0037): `RemoteCollector` in `ztop_core::client` speaks minimal HTTP/1.1, unwraps the envelope, checks the protocol; connect drives the ordinary TUI, forced observation-only; round trip proven over a real socket; live smoke verified; parity ticks for `connect`, `agent ring history`, `localhost-only`. Then batch 8d: pairing and tokens (decision 0038) — `auth::Auth` with single-use 5-minute six-char codes, 256-bit tokens stored as SHA-256 hashes (0600 file via the new shared `state_dir`), `POST /v1/pair`, `GET /v1/tokens`, `DELETE /v1/tokens/{id}`, and an `enforce_auth` middleware proven over the wire (401 unpaired, 200 with the paired token, revoked = 401); `ztop agent --pair` prints the code.
-- **Next step:** gate + commit 8d; then 8e — TLS (self-signed cert, rcgen + rustls), which turns `enforce_auth` on and lets `connect` speak to a remote host.
+- **Last done:** M4 batch 8e coded — TLS on the agent (decision 0039): `ztop agent --tls` serves HTTPS with a self-signed certificate (rcgen, ring backend; key 0600 in `state_dir`, ten-year validity, CN `ztop-agent`, SANs localhost/127.0.0.1), prints the `SHA256:` fingerprint of the leaf DER, and flips token enforcement on; a test client whose only trust is the pin reads `/healthz` 200 and `/v1/snapshot` 401, and a one-byte wrong pin kills the handshake. New deps: rustls, tokio-rustls, rustls-pemfile, rcgen, time, hyper-util (all ring-based, no aws-lc-rs). Agent 18 tests.
+- **Next step:** gate + commit 8e; then 8f — `ztop connect --tls --pin ... --code ...`: client-side pin verification, pairing from the client, and a per-host token file, so a remote host can be watched over TLS end to end.
 - **Blocked on:** nothing (7ac/7ad CI runs stuck in progress on Linux runners — infrastructure, not code; macOS jobs green).
 
 ## Log
 
 Newest first. One or two lines per session: what changed, what is next.
+
+- 2026-11-15: M4 batch 8e — TLS on the agent (decision 0039): `ztop agent --tls` serves HTTPS with a self-signed certificate (rcgen/ring; key 0600 in `state_dir`, ten years, CN `ztop-agent`) and prints the `SHA256:` fingerprint of the leaf DER; TLS turns token enforcement on. A test client whose only trust is the pin reads `/healthz` 200 and `/v1/snapshot` 401; a one-byte wrong pin kills the handshake. New deps: rustls, tokio-rustls, rustls-pemfile, rcgen, time, hyper-util. Agent 18 tests.
 
 - 2026-11-15: M4 batch 8d — pairing and tokens (decision 0038): `auth::Auth` (single-use 5-minute six-character codes, 256-bit tokens kept only as SHA-256 hashes in a 0600 `tokens.json` via the new `ztop_core::paths::state_dir`), `POST /v1/pair`, token list/revoke routes, and the `enforce_auth` middleware proven over a real socket: 401 unpaired, 200 with the paired token, a revoked token 401s. `ztop agent --pair` prints the code. New deps: sha2, getrandom. Agent 17, core 97, CLI 7 tests.
 

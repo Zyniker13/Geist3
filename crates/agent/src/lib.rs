@@ -12,6 +12,7 @@
 //! transport decision (0003).
 
 pub mod auth;
+pub mod tls;
 
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
@@ -164,7 +165,9 @@ async fn enforce_auth(
 /// Serve the agent protocol on `127.0.0.1:port` until the process is
 /// stopped, sampling the host on [`DEFAULT_INTERVAL`] in the background.
 /// With `pair`, print a pairing code the person can trade for a token.
-pub async fn serve(port: u16, pair: bool) -> std::io::Result<()> {
+/// With `tls`, serve HTTPS with the agent's self-signed certificate and
+/// enforce tokens (decision 0003: TLS is the trust boundary).
+pub async fn serve(port: u16, pair: bool, tls: bool) -> std::io::Result<()> {
     let mut auth = match ztop_core::paths::state_dir() {
         Some(dir) => auth::Auth::at(dir.join("tokens.json")).unwrap_or_default(),
         None => auth::Auth::in_memory(),
@@ -182,10 +185,18 @@ pub async fn serve(port: u16, pair: bool) -> std::io::Result<()> {
         auth: Mutex::new(auth),
         // Plain loopback serving runs unauthenticated; TLS flips this
         // on (decision 0003).
-        enforce_auth: false,
+        enforce_auth: tls,
     });
     spawn_sampler(state.clone(), DEFAULT_INTERVAL);
     let listener = tokio::net::TcpListener::bind(("127.0.0.1", port)).await?;
+    if tls {
+        let dir = ztop_core::paths::state_dir().ok_or_else(|| {
+            std::io::Error::other("no home directory: TLS material cannot persist")
+        })?;
+        let material = tls::load_or_create(&dir)?;
+        println!("TLS fingerprint: {}", material.fingerprint);
+        return tls::serve_on_tls(state, listener, material.config).await;
+    }
     serve_on(state, listener).await
 }
 
@@ -930,5 +941,204 @@ mod tests {
         assert_eq!(after_revoke, 401, "a revoked token reads nothing");
 
         server.abort();
+    }
+
+    /// A test client that trusts exactly one certificate: the pin. This
+    /// is the same check `ztop connect --tls` will make (decision 0039).
+    struct Pinning {
+        fingerprint: Vec<u8>,
+        provider: Arc<rustls::crypto::CryptoProvider>,
+    }
+
+    impl std::fmt::Debug for Pinning {
+        fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            formatter.write_str("Pinning")
+        }
+    }
+
+    impl rustls::client::danger::ServerCertVerifier for Pinning {
+        fn verify_server_cert(
+            &self,
+            end_entity: &rustls::pki_types::CertificateDer<'_>,
+            _intermediates: &[rustls::pki_types::CertificateDer<'_>],
+            _server_name: &rustls::pki_types::ServerName<'_>,
+            _ocsp_response: &[u8],
+            _now: rustls::pki_types::UnixTime,
+        ) -> Result<rustls::client::danger::ServerCertVerified, rustls::Error> {
+            use sha2::Digest;
+            let hash = sha2::Sha256::digest(end_entity.as_ref());
+            if hash.as_slice() == self.fingerprint.as_slice() {
+                Ok(rustls::client::danger::ServerCertVerified::assertion())
+            } else {
+                Err(rustls::Error::General(
+                    "the agent's certificate does not match the pin".into(),
+                ))
+            }
+        }
+
+        fn verify_tls12_signature(
+            &self,
+            message: &[u8],
+            cert: &rustls::pki_types::CertificateDer<'_>,
+            dss: &rustls::DigitallySignedStruct,
+        ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
+            rustls::crypto::verify_tls12_signature(
+                message,
+                cert,
+                dss,
+                &self.provider.signature_verification_algorithms,
+            )
+        }
+
+        fn verify_tls13_signature(
+            &self,
+            message: &[u8],
+            cert: &rustls::pki_types::CertificateDer<'_>,
+            dss: &rustls::DigitallySignedStruct,
+        ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
+            rustls::crypto::verify_tls13_signature(
+                message,
+                cert,
+                dss,
+                &self.provider.signature_verification_algorithms,
+            )
+        }
+
+        fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
+            self.provider
+                .signature_verification_algorithms
+                .supported_schemes()
+        }
+    }
+
+    /// A raw HTTPS request from a test, over a pinned TLS connection.
+    async fn tls_request(
+        address: std::net::SocketAddr,
+        fingerprint_hex: &str,
+        path: &str,
+    ) -> (u16, String) {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        let fingerprint: Vec<u8> = (0..fingerprint_hex.len() / 2)
+            .map(|index| {
+                u8::from_str_radix(&fingerprint_hex[index * 2..index * 2 + 2], 16)
+                    .expect("hex digit")
+            })
+            .collect();
+        let provider = Arc::new(rustls::crypto::ring::default_provider());
+        let verifier = Pinning {
+            fingerprint,
+            provider: provider.clone(),
+        };
+        let config = rustls::ClientConfig::builder_with_provider(provider)
+            .with_protocol_versions(&[&rustls::version::TLS13])
+            .expect("versions")
+            .dangerous()
+            .with_custom_certificate_verifier(Arc::new(verifier))
+            .with_no_client_auth();
+        let server_name =
+            rustls::pki_types::ServerName::try_from("localhost".to_string()).expect("server name");
+        let connector = tokio_rustls::TlsConnector::from(Arc::new(config));
+        let tcp = tokio::net::TcpStream::connect(address).await.expect("tcp");
+        // A rejected pin (or any failed handshake) reads as (0, ""): the
+        // caller asserts on the status.
+        let mut stream = match connector.connect(server_name, tcp).await {
+            Ok(stream) => stream,
+            Err(_) => return (0, String::new()),
+        };
+
+        let request = format!("GET {path} HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n");
+        stream.write_all(request.as_bytes()).await.expect("write");
+        stream.flush().await.expect("flush");
+        let mut raw = String::new();
+        stream.read_to_string(&mut raw).await.expect("read");
+        let status: u16 = raw
+            .split(' ')
+            .nth(1)
+            .and_then(|code| code.parse().ok())
+            .expect("status line");
+        let body = raw
+            .split_once("\r\n\r\n")
+            .map(|(_, body)| body.to_string())
+            .unwrap_or_default();
+        (status, body)
+    }
+
+    /// An isolated material directory.
+    fn a_material_dir(tag: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "ztop-agent-tls-{}-{}-{tag}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("clock")
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).expect("mkdir");
+        dir
+    }
+
+    /// TLS serving: a fresh self-signed certificate, the printed pin,
+    /// and a client that trusts exactly that pin can read the agent.
+    #[tokio::test]
+    async fn tls_serves_and_a_pinned_client_reads() {
+        let dir = a_material_dir("serves");
+        let material = tls::load_or_create(&dir).expect("material");
+        assert!(material.fingerprint.starts_with("SHA256:"));
+        let fingerprint_hex = material
+            .fingerprint
+            .strip_prefix("SHA256:")
+            .expect("prefix")
+            .to_string();
+        assert_eq!(fingerprint_hex.len(), 64, "a SHA-256 pin is 64 hex chars");
+
+        // The material is stable: a second load pins the same bytes.
+        let again = tls::load_or_create(&dir).expect("material again");
+        assert_eq!(again.fingerprint, material.fingerprint);
+
+        // Enforced with no tokens at all: reads are refused.
+        let inner = AgentState {
+            enforce_auth: true,
+            ..AgentState::default()
+        };
+        let state = Arc::new(inner);
+        state.push(a_sample());
+
+        let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+            .await
+            .expect("bind");
+        let address = listener.local_addr().expect("address");
+        let server =
+            tokio::spawn(async move { tls::serve_on_tls(state, listener, material.config).await });
+
+        // Unauthenticated over TLS: /healthz answers, /v1/snapshot 401s.
+        let address_string = address.to_string();
+        let (status, _) = tls_request(
+            address_string.parse().expect("addr"),
+            &fingerprint_hex,
+            "/healthz",
+        )
+        .await;
+        assert_eq!(status, 200);
+        let (status, _) = tls_request(
+            address_string.parse().expect("addr"),
+            &fingerprint_hex,
+            "/v1/snapshot",
+        )
+        .await;
+        assert_eq!(status, 401, "TLS means tokens are enforced");
+
+        // A wrong pin cannot even complete the handshake.
+        let wrong_pin = format!("{}00", &fingerprint_hex[..62]);
+        let result = tls_request(
+            address_string.parse().expect("addr"),
+            &wrong_pin,
+            "/healthz",
+        )
+        .await;
+        assert_eq!(result.0, 0, "a mismatched pin kills the handshake");
+
+        server.abort();
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
