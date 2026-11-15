@@ -49,6 +49,7 @@ pub enum SortKey {
     Mem,
     Resident,
     Nice,
+    TotalTime,
     Name,
 }
 
@@ -70,6 +71,7 @@ fn sort_label(sort: SortKey, descending: bool) -> String {
         SortKey::Mem => "mem",
         SortKey::Resident => "res",
         SortKey::Nice => "nice",
+        SortKey::TotalTime => "time",
         SortKey::Name => "name",
     };
     format!("{name}{}", if descending { " ↓" } else { " ↑" })
@@ -180,7 +182,8 @@ impl Ui {
             SortKey::Cpu => SortKey::Mem,
             SortKey::Mem => SortKey::Resident,
             SortKey::Resident => SortKey::Nice,
-            SortKey::Nice => SortKey::Name,
+            SortKey::Nice => SortKey::TotalTime,
+            SortKey::TotalTime => SortKey::Name,
             SortKey::Name => SortKey::Pid,
         };
     }
@@ -549,6 +552,7 @@ impl Ui {
             SortKey::Mem => a.mem_percent.total_cmp(&b.mem_percent),
             SortKey::Resident => a.resident_bytes.cmp(&b.resident_bytes),
             SortKey::Nice => a.nice.cmp(&b.nice),
+            SortKey::TotalTime => a.total_time_ns.cmp(&b.total_time_ns),
             SortKey::Name => a.name.cmp(&b.name),
         };
         if self.descending { ord.reverse() } else { ord }
@@ -888,6 +892,11 @@ fn handle_key(ui: &mut Ui, key: KeyEvent) -> bool {
         // do nothing.
         _ if ui.screen != Screen::ProcessTable => {}
         KeyCode::Char('i') => ui.toggle_direction(),
+        // htop's M/P/T sort shortcuts; uppercase like `K` (decision 0012),
+        // since lowercase `t` opens the thermal screen.
+        KeyCode::Char('M') => ui.sort_by(SortKey::Mem),
+        KeyCode::Char('P') => ui.sort_by(SortKey::Cpu),
+        KeyCode::Char('T') => ui.sort_by(SortKey::TotalTime),
         KeyCode::F(3) => ui.toggle_search(),
         KeyCode::F(4) => ui.toggle_filter(),
         KeyCode::Char('u') => ui.cycle_user_filter(),
@@ -1736,6 +1745,26 @@ fn rate_text(rate: Option<f64>) -> String {
     }
 }
 
+/// Total CPU time for the TIME+ column, htop-style: `M:SS.s` under an
+/// hour, `H:MM:SS` above. Unavailable renders blank (column width 7).
+fn time_text(total_time_ns: Option<u64>) -> String {
+    let Some(ns) = total_time_ns else {
+        return String::new();
+    };
+    let total_secs = ns / 1_000_000_000;
+    let tenths = (ns / 100_000_000) % 10;
+    if total_secs < 3600 {
+        format!("{}:{:02}.{}", total_secs / 60, total_secs % 60, tenths)
+    } else {
+        format!(
+            "{}:{:02}:{:02}",
+            total_secs / 3_600,
+            (total_secs % 3_600) / 60,
+            total_secs % 60
+        )
+    }
+}
+
 /// Uptime as `3d 04:05:06` or `04:05:06`.
 fn uptime_text(metric: &Metric) -> String {
     if !metric.available || metric.unit != Unit::Seconds {
@@ -1907,11 +1936,11 @@ fn draw_processes(frame: &mut Frame, ui: &Ui, area: ratatui::layout::Rect) {
     let procs = ui.ordered_rows();
     let show_io = procs_io_visible(&procs);
     let mut header_names = vec![
-        "PID", "USER", "STATE", "CPU%", "MEM%", "THR", "RES", "NICE", "NAME",
+        "PID", "USER", "STATE", "CPU%", "MEM%", "THR", "RES", "NICE", "TIME+", "NAME",
     ];
     if show_io {
         // Inserted before NAME, which stays the flexible last column.
-        header_names.splice(7..7, ["RD/s", "WR/s"]);
+        header_names.splice(9..9, ["RD/s", "WR/s"]);
     }
     let header = Row::new(header_names).bold();
     let mut rows: Vec<Row<'static>> = Vec::new();
@@ -1962,14 +1991,15 @@ fn procs_io_visible<'a>(rows: impl IntoIterator<Item = &'a TreeRow<'a>>) -> bool
 /// share this, so a click lands on the column it points at.
 fn table_widths(show_io: bool) -> Vec<Constraint> {
     let mut widths = vec![
-        Constraint::Length(8),
-        Constraint::Length(10),
+        Constraint::Length(7),
+        Constraint::Length(7),
         Constraint::Length(5),
-        Constraint::Length(6),
-        Constraint::Length(6),
+        Constraint::Length(5),
+        Constraint::Length(5),
+        Constraint::Length(3),
+        Constraint::Length(8),
         Constraint::Length(4),
-        Constraint::Length(8),
-        Constraint::Length(5),
+        Constraint::Length(7),
     ];
     if show_io {
         widths.extend([Constraint::Length(5), Constraint::Length(5)]);
@@ -1993,6 +2023,7 @@ fn sort_column_at(x: u16, show_io: bool) -> Option<SortKey> {
         None,
         Some(SortKey::Resident),
         Some(SortKey::Nice),
+        Some(SortKey::TotalTime),
         None,
         None,
         Some(SortKey::Name),
@@ -2082,21 +2113,25 @@ fn process_row(row_view: &TreeRow<'_>, tree: bool, tagged: bool, show_io: bool) 
     let name = if tagged { format!("* {name}") } else { name };
     let mut cells = vec![
         Cell::from(format!("{:>7}", row_view.process.pid)),
-        Cell::from(format!("{:>9}", row_view.process.user)),
+        Cell::from(format!("{:>7}", row_view.process.user)),
         Cell::from(row_view.process.state.clone()),
-        Cell::from(format!("{:>6.1}", row_view.process.cpu_percent)),
-        Cell::from(format!("{:>6.1}", row_view.process.mem_percent)),
-        Cell::from(format!("{:>4}", row_view.process.threads)),
+        Cell::from(format!("{:>5.1}", row_view.process.cpu_percent)),
+        Cell::from(format!("{:>5.1}", row_view.process.mem_percent)),
+        Cell::from(format!("{:>3}", row_view.process.threads)),
         Cell::from(format!(
             "{:>8}",
             bytes_text(row_view.process.resident_bytes as f64)
         )),
     ];
     if let Some(nice) = row_view.process.nice {
-        cells.push(Cell::from(format!("{:>5}", nice)));
+        cells.push(Cell::from(format!("{:>4}", nice)));
     } else {
         cells.push(Cell::from(""));
     }
+    cells.push(Cell::from(format!(
+        "{:>7}",
+        time_text(row_view.process.total_time_ns)
+    )));
     if show_io {
         cells.push(Cell::from(format!(
             "{:>5}",
@@ -2393,6 +2428,62 @@ mod tests {
             .position(|row| row.contains("MEM%"))
             .expect("table header");
         assert!(rows[header_row + 1].contains("worker-12"));
+    }
+
+    #[test]
+    fn mp_t_shortcuts_sort_by_mem_cpu_and_time() {
+        let mut ui = ui_with(Some(sample()), None);
+        for (code, key) in [
+            (KeyCode::Char('M'), SortKey::Mem),
+            (KeyCode::Char('P'), SortKey::Cpu),
+            (KeyCode::Char('T'), SortKey::TotalTime),
+        ] {
+            handle_key(&mut ui, KeyEvent::from(code));
+            assert_eq!(ui.sort, key, "{code:?} sorts by {key:?}");
+        }
+        // Off the table the shortcuts do nothing: lowercase `t` opens the
+        // thermal screen and uppercase `T` must not sort there.
+        handle_key(&mut ui, KeyEvent::from(KeyCode::Char('t')));
+        handle_key(&mut ui, KeyEvent::from(KeyCode::Char('T')));
+        assert_eq!(ui.screen, Screen::Thermal);
+        assert_eq!(ui.sort, SortKey::TotalTime);
+    }
+
+    #[test]
+    fn time_text_formats_minutes_hours_and_blank() {
+        assert_eq!(time_text(None), "");
+        assert_eq!(time_text(Some(0)), "0:00.0");
+        assert_eq!(time_text(Some(1_000_000_000)), "0:01.0");
+        assert_eq!(time_text(Some(3_599_900_000_000)), "59:59.9");
+        assert_eq!(time_text(Some(3_600_000_000_000)), "1:00:00");
+        assert_eq!(time_text(Some(36_610_000_000_000)), "10:10:10");
+    }
+
+    #[test]
+    fn the_time_column_shows_total_cpu_time_and_sorts_by_it() {
+        let mut ui = ui_with(Some(sample()), None);
+        // worker-12 holds 12 s of total CPU time; sorted descending by `T`
+        // it must lead the table and read `0:12.0` in the TIME+ column.
+        handle_key(&mut ui, KeyEvent::from(KeyCode::Char('T')));
+        let rows = render(&ui, 80, 24);
+        let header_row = rows
+            .iter()
+            .position(|row| row.contains("TIME+"))
+            .expect("TIME+ header");
+        let first = &rows[header_row + 1];
+        assert!(first.contains("worker-12"), "{first:?}");
+        assert!(first.contains("0:12.0"), "{first:?}");
+        // Clicking the TIME+ header (x 52) sorts the same column.
+        let mut ui = ui_with(Some(sample()), None);
+        let screen = ratatui::layout::Rect::new(0, 0, 80, 24);
+        handle_mouse(
+            &mut ui,
+            MouseEventKind::Down(MouseButton::Left),
+            52,
+            6,
+            screen,
+        );
+        assert_eq!(ui.sort, SortKey::TotalTime);
     }
 
     #[test]
@@ -3208,6 +3299,8 @@ mod tests {
         assert_eq!(ui.sort, SortKey::Resident);
         ui.cycle_sort();
         assert_eq!(ui.sort, SortKey::Nice);
+        ui.cycle_sort();
+        assert_eq!(ui.sort, SortKey::TotalTime);
         ui.cycle_sort();
         assert_eq!(ui.sort, SortKey::Name);
         ui.cycle_sort();

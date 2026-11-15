@@ -3,13 +3,15 @@
 Updated after every working session.
 
 - **Current milestone:** M3 (Full TUI Parity).
-- **Last done:** M3 batch 7h — the process table gained a NICE column (Linux from `stat` field 16, macOS from the extended 12-field `ps` capture shape, blank when unavailable), nice joined the sort cycle and header clicks, and the model now collects priority, shared bytes (Linux `statm`), total CPU time, start time and the last processor (Linux `stat`) for later columns. Column widths were rebalanced (STATE 5, CPU%/MEM% 6, THR 4, RES 8, NICE 5) so names and fold counts stay legible at 80 columns with and without the I/O columns. Fixture `stat` lines extended to the full 39-field kernel shape; the macOS 12-field parse shape now has test coverage; the three replay snapshots regenerated. Gate plus both cross-target clippies green.
-- **Next step:** 7i — sort shortcuts M/P/T plus a TIME+ column (the total CPU time 7h started collecting), advancing parity's "sort by any column" and "every common column" items. (The previously listed 7g macOS CPU frequency is settled: decision 0011 and `docs/m2-power-checks.md` record that no unprivileged source exists and MHz conversion is never attempted; the title's `f X.X GHz` shows it where reported, i.e. Linux.)
+- **Last done:** M3 batch 7i — the sort shortcuts htop users expect: `M` sorts by memory, `P` by CPU and `T` by total CPU time (uppercase, since lowercase `t` opens the thermal screen), `SortKey::TotalTime` joined the sort cycle between nice and name, and the table gained a `TIME+` column showing total CPU time (`M:SS.s` under an hour, `H:MM:SS` above, blank when unavailable), clickable in the header like the other sort columns. Column widths trimmed (USER 7, CPU%/MEM% 5, THR 3, NICE 4, TIME+ 7) so names, fold counts and tagged tree rows stay legible at 80 columns with and without the I/O columns; also fixed a header misalignment where the I/O column labels sat before NICE while their cells rendered after it. Three new tests (shortcuts, TIME+ render+sort+click, time_text formats); replay snapshots regenerated.
+- **Next step:** 7j — more table columns from what 7h already collects (start time and the last processor are the natural next pair; VIRT/SHR/PPID/command follow), then the remaining M3 parity items. (The previously listed 7g macOS CPU frequency is settled: decision 0011 and `docs/m2-power-checks.md` record that no unprivileged source exists and MHz conversion is never attempted; the title's `f X.X GHz` shows it where reported, i.e. Linux.)
 - **Blocked on:** nothing.
 
 ## Log
 
 Newest first. One or two lines per session: what changed, what is next.
+
+- 2026-11-15: M3 batch 7i — M/P/T sort shortcuts (mem/cpu/total-time, uppercase since `t` opens thermal), SortKey::TotalTime in the cycle, TIME+ column (htop-style format, blank when unavailable, clickable header), trimmed column widths, fixed I/O header splice misalignment from 7h. Three new tests; snapshots regenerated. Gate plus both cross-target clippies green. Next: 7j — start time and processor columns, then the remaining M3 items.
 
 - 2026-11-15: M3 batch 7h — NICE column (Linux `stat` / macOS extended capture), nice sort key, model fields for priority/shared/total-time/start/processor, rebalanced column widths, extended `stat` fixtures to 39 fields, macOS 12-field shape test, regenerated replay snapshots. Gate plus both cross-target clippies green. Parity's column item updated (still open: PPID, VIRT, SHR, TIME+, command, start time, processor columns). Next: 7g — macOS CPU frequency, model fields, collector wiring.
 
