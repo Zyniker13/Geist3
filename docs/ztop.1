@@ -168,6 +168,19 @@ snapshot, the process list, a ring\-buffer history (an hour at the
 one\-second default) and a live WebSocket stream. Loopback only until
 TLS and pairing arrive.
 .TP
+.B ztop agent \-\-bind 0.0.0.0 \-\-tls
+Bind any address instead of loopback; a bind wider than loopback is
+refused without
+.B \-\-tls
+so no unauthenticated metrics ever leave the machine. With TLS on the
+agent also advertises itself over Bonjour as
+.I _ztop._tcp
+under the name
+.IR "ztop on <hostname>" ,
+which is how the app finds fleet members; pass
+.B \-\-no\-advertise
+to stay silent.
+.TP
 .B ztop agent \-\-tls \-\-pair \-\-allow\-control
 Serve the same protocol over TLS, print a pairing code, and let
 tokens paired from this agent send signals and renice here. Without

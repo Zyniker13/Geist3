@@ -168,12 +168,85 @@ async fn enforce_auth(
     }
 }
 
-/// Serve the agent protocol on `127.0.0.1:port` until the process is
+/// The bind rules: loopback needs no TLS, anything wider does. A
+/// non-loopback bind without TLS would publish unauthenticated
+/// metrics to the network, and read-only-by-default beats convenient.
+pub fn bind_rules(bind: std::net::IpAddr, tls: bool) -> Result<(), String> {
+    let loopback = match bind {
+        std::net::IpAddr::V4(v4) => v4.is_loopback(),
+        std::net::IpAddr::V6(v6) => v6.is_loopback(),
+    };
+    if loopback || tls {
+        Ok(())
+    } else {
+        Err(format!(
+            "binding {bind} exposes the agent beyond this machine: pass --tls"
+        ))
+    }
+}
+
+/// Advertise `_ztop._tcp` for this agent. The record carries the
+/// protocol version, so a browser can skip incompatible services;
+/// registration failures downgrade to a note, never to a crash — a
+/// machine without multicast routes still serves its agents.
+fn advertise(bind: std::net::IpAddr, port: u16) -> mdns_sd::ServiceDaemon {
+    let name = ztop_core::host::hostname();
+    let instance = format!("ztop on {name}");
+    let mdns_name = if name.contains('.') {
+        name
+    } else {
+        format!("{name}.local.")
+    };
+    let properties = std::collections::HashMap::from([(
+        "protocol".to_string(),
+        ztop_core::client::PROTOCOL_VERSION.to_string(),
+    )]);
+    let info = mdns_sd::ServiceInfo::new(
+        "_ztop._tcp.local.",
+        &instance,
+        &mdns_name,
+        bind,
+        port,
+        properties,
+    )
+    .map(|info| info.enable_addr_auto());
+    match info {
+        Ok(info) => match mdns_sd::ServiceDaemon::new() {
+            Ok(daemon) => {
+                if let Err(error) = daemon.register(info) {
+                    eprintln!("ztop-agent: not advertising: {error}");
+                }
+                daemon
+            }
+            Err(error) => {
+                eprintln!("ztop-agent: not advertising: {error}");
+                // A daemon that never registers is dropped harmlessly.
+                mdns_sd::ServiceDaemon::new().expect("fresh daemon")
+            }
+        },
+        Err(error) => {
+            eprintln!("ztop-agent: not advertising: {error}");
+            mdns_sd::ServiceDaemon::new().expect("fresh daemon")
+        }
+    }
+}
+
+/// Serve the agent protocol on `bind:port` until the process is
 /// stopped, sampling the host on [`DEFAULT_INTERVAL`] in the background.
 /// With `pair`, print a pairing code the person can trade for a token.
 /// With `tls`, serve HTTPS with the agent's self-signed certificate and
-/// enforce tokens (decision 0003: TLS is the trust boundary).
-pub async fn serve(port: u16, pair: bool, tls: bool, allow_control: bool) -> std::io::Result<()> {
+/// enforce tokens (decision 0003: TLS is the trust boundary); a bind
+/// wider than loopback requires it (decision 0044). With `advertise`
+/// and TLS, the agent is discoverable over Bonjour as `_ztop._tcp`.
+pub async fn serve(
+    bind: std::net::IpAddr,
+    port: u16,
+    pair: bool,
+    tls: bool,
+    allow_control: bool,
+    should_advertise: bool,
+) -> std::io::Result<()> {
+    bind_rules(bind, tls).map_err(std::io::Error::other)?;
     let mut auth = match ztop_core::paths::state_dir() {
         Some(dir) => auth::Auth::at(dir.join("tokens.json")).unwrap_or_default(),
         None => auth::Auth::in_memory(),
@@ -204,7 +277,14 @@ pub async fn serve(port: u16, pair: bool, tls: bool, allow_control: bool) -> std
         allow_control,
     });
     spawn_sampler(state.clone(), DEFAULT_INTERVAL);
-    let listener = tokio::net::TcpListener::bind(("127.0.0.1", port)).await?;
+    let listener = tokio::net::TcpListener::bind((bind, port)).await?;
+    // The advertisement lasts as long as the daemon handle: dropping it
+    // unregisters, so keep it in scope for the whole serve.
+    let _mdns = if tls && should_advertise {
+        Some(advertise(bind, port))
+    } else {
+        None
+    };
     if tls {
         let dir = ztop_core::paths::state_dir().ok_or_else(|| {
             std::io::Error::other("no home directory: TLS material cannot persist")
@@ -597,6 +677,43 @@ mod tests {
         let mut sample = a_sample();
         sample.processes = (0..count).map(|i| a_process(100 + i as u32)).collect();
         sample
+    }
+
+    #[test]
+    fn loopback_binds_without_tls_and_wider_needs_it() {
+        assert!(super::bind_rules("127.0.0.1".parse().unwrap(), false).is_ok());
+        assert!(super::bind_rules("::1".parse().unwrap(), false).is_ok());
+        // TEST-NET-1: never a real machine, and not loopback.
+        assert!(super::bind_rules("192.0.2.10".parse().unwrap(), false).is_err());
+        assert!(super::bind_rules("192.0.2.10".parse().unwrap(), true).is_ok());
+        let message = super::bind_rules("192.0.2.10".parse().unwrap(), false).expect_err("refused");
+        assert!(message.contains("--tls"), "{message}");
+    }
+
+    /// A live register-and-browse round trip; ignored because it needs
+    /// working multicast, which CI containers do not promise. Run it
+    /// where Bonjour works: `cargo test -p ztop-agent -- --ignored`.
+    #[tokio::test]
+    #[ignore = "needs working multicast: run on a real desktop host"]
+    async fn the_agent_is_discoverable_over_bonjour() {
+        let bind: std::net::IpAddr = "127.0.0.1".parse().unwrap();
+        let daemon = super::advertise(bind, 0);
+        let browser = daemon.browse("_ztop._tcp.local.").expect("browser");
+        let found = tokio::time::timeout(std::time::Duration::from_secs(10), async {
+            while let Ok(event) = browser.recv_async().await {
+                if let mdns_sd::ServiceEvent::ServiceResolved(info) = event {
+                    if info.get_fullname().starts_with("ztop on ") {
+                        return true;
+                    }
+                }
+            }
+            false
+        })
+        .await
+        .unwrap_or(false);
+        let _ = daemon.stop_browse("_ztop._tcp.local.");
+        let _ = daemon.shutdown();
+        assert!(found, "the advertised ztop service was not browsed back");
     }
 
     #[tokio::test]

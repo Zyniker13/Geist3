@@ -6097,7 +6097,7 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn s_traces_a_child_and_esc_stops() {
-        let mut child = std::process::Command::new("/bin/sleep")
+        let child = std::process::Command::new("/bin/sleep")
             .arg("30")
             .spawn()
             .expect("spawn the traced child");

@@ -11,6 +11,7 @@ rust-version.workspace = true
 axum = { workspace = true }
 getrandom = { workspace = true }
 hyper-util = { workspace = true }
+mdns-sd = "0.21.7"
 rcgen = { workspace = true }
 rustls = { workspace = true }
 rustls-pki-types = { workspace = true }

@@ -59,15 +59,22 @@ enum Command {
     },
     /// Serve the agent protocol on the loopback interface.
     Agent {
-        /// TCP port to listen on (loopback only).
+        /// TCP port to listen on.
         #[arg(long, default_value_t = 7100)]
         port: u16,
+        /// Address to bind. Loopback by default; anything wider needs
+        /// --tls, so no unauthenticated metrics ever leave the machine.
+        #[arg(long, default_value = "127.0.0.1")]
+        bind: String,
         /// Show a pairing code a client can trade for a token.
         #[arg(long)]
         pair: bool,
         /// Let paired tokens send signals and renice here.
         #[arg(long)]
         allow_control: bool,
+        /// Skip the Bonjour advertisement that --tls turns on.
+        #[arg(long)]
+        no_advertise: bool,
         /// Serve HTTPS with a self-signed certificate and require tokens.
         #[arg(long)]
         tls: bool,
@@ -164,14 +171,30 @@ fn run() -> Result<(), Box<dyn Error>> {
         }
         Some(Command::Agent {
             port,
+            bind,
             pair,
             allow_control,
+            no_advertise,
             tls,
         }) => {
+            let bind: std::net::IpAddr = match bind.parse() {
+                Ok(addr) => addr,
+                Err(_) => {
+                    eprintln!("ztop-agent: --bind must be an IP address");
+                    std::process::exit(2);
+                }
+            };
             let runtime = tokio::runtime::Builder::new_multi_thread()
                 .enable_all()
                 .build()?;
-            runtime.block_on(ztop_agent::serve(port, pair, tls, allow_control))?;
+            runtime.block_on(ztop_agent::serve(
+                bind,
+                port,
+                pair,
+                tls,
+                allow_control,
+                !no_advertise,
+            ))?;
         }
         Some(Command::Hub { port }) => {
             let runtime = tokio::runtime::Builder::new_multi_thread()
@@ -272,8 +295,10 @@ mod tests {
             cli.command,
             Some(Command::Agent {
                 port: 8000,
+                bind: _,
                 pair: false,
                 allow_control: false,
+                no_advertise: false,
                 tls: false
             })
         ));

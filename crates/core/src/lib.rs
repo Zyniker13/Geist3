@@ -15,6 +15,7 @@ pub mod collector;
 pub mod control;
 pub mod detail;
 pub mod fixture;
+pub mod host;
 pub mod linux;
 pub mod linux_gpu;
 pub mod macos;

@@ -288,11 +288,19 @@ Check an item only when it works and a test or a recorded check shows it. Add th
     `tls_serves_and_a_pinned_client_reads`. A QR code on the pairing
     screen is app-side and tracked with the App milestones.
 - [x] Localhost-only until configured
-  - `serve` binds `("127.0.0.1", port)` — loopback only, by
-    construction; TLS and a configurable bind address arrive with
-    pairing (decision 0003). Test:
+  - `serve` binds `127.0.0.1` by default and `--bind <IP>` widens it;
+    a non-loopback bind is refused without `--tls`
+    (`bind_rules`, tested; decision 0044). Test:
     `the_remote_collector_reads_a_live_agent` connects over 127.0.0.1.
-- [ ] Bonjour discovery
+- [x] Bonjour discovery
+  - With TLS on, the agent advertises `_ztop._tcp` (`ztop on
+    <hostname>`, TXT `protocol=<PROTOCOL_VERSION>`); `--no-advertise`
+    opts out; failures degrade to a note (decision 0044). Recorded
+    check on the development Mac: `ztop agent --tls --port 7156`,
+    then `dns-sd -B _ztop._tcp local.` listed the instance
+    `ztop on <hostname>`; the ignored test
+    `the_agent_is_discoverable_over_bonjour` repeats the round trip
+    where multicast works.
 - [x] Signals and renice only when the config and the token allow
   - `POST /v1/control` carries a plan (`pids` + action, the same
     `Control`/`Plan` the TUI builds) and answers per-pid results. Three

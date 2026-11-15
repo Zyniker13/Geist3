@@ -30,6 +30,7 @@ pub struct TlsMaterial {
 /// Load the agent's certificate and key from `dir`, creating a fresh
 /// self-signed pair when they are missing. The key is written 0600.
 pub fn load_or_create(dir: &Path) -> io::Result<TlsMaterial> {
+    fs::create_dir_all(dir)?;
     let cert_path = dir.join("agent-cert.pem");
     let key_path = dir.join("agent-key.pem");
     if !cert_path.exists() || !key_path.exists() {
