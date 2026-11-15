@@ -102,6 +102,15 @@ send a signal to the tagged rows
 .BR F7 ", " F8
 renice \-1 / +1
 .TP
+.BR H
+cycle thread visibility: show userland threads, then hide kernel
+threads, then back (Linux reports thread rows; kernel threads are shown
+and userland threads hidden by default)
+.TP
+.BR p
+toggle the program path in the name column (the path shows whenever the
+system reports one)
+.TP
 .BR a ", " d ", " n ", " o ", " t
 silicon, disks, network, io, thermal
 .PP

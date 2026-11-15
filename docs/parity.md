@@ -40,7 +40,14 @@ Check an item only when it works and a test or a recorded check shows it. Add th
 - [ ] I/O priority (i, Linux) and CPU affinity (a, Linux)
 - [x] PID filter (`-p`) — `ztop -p 7,42` (comma separated, repeatable) starts with `Ui::pid_filter` set; the table hides other pids in flat and tree view (an orphaned child becomes a root) and the status line shows `pids:N`. Tests: `the_pid_filter_lists_only_the_requested_pids`, `the_pid_filter_applies_in_tree_mode`, `pids_parse_comma_separated`
 - [x] User filter (u) — `u` cycles all users, then each user present in the sample in sorted order, then back to all; the status line shows the active user. Tests: `the_user_filter_cycles_through_the_sample_users`.
-- [ ] Show or hide userland and kernel threads (H, K), and program path (p)
+- [x] Show or hide userland and kernel threads (H, K), and program path
+  (p) (decision 0027: the Linux collector reads `/proc/<pid>/task` and
+  emits one row per task with the group as its parent; `H` cycles
+  kernel-shown/userland-hidden → both → kernel-hidden — `K` stays with
+  the signal menu here; `p` toggles the program path that ztop shows by
+  default. Tests `process_row_marks_thread_entries`,
+  `the_threads_cycle_shows_and_hides_rows`, `p_toggles_the_program_path`;
+  snapshots byte-identical)
 - [ ] Process environment (e), open files (l) and syscall trace (s) where the OS allows
 - [x] Highlight new and dying processes, and large numbers
       (new: yellow row, pid not in the previous sample's set; dying:

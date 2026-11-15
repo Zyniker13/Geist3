@@ -604,6 +604,13 @@ pub(crate) struct PidData {
     pub(crate) command: Option<String>,
     pub(crate) io: Option<PidIo>,
     pub(crate) statm: Option<u64>,
+    /// This entry is a task (thread) of the process `tgid`, not a
+    /// process of its own; only the task walk sets it.
+    pub(crate) is_thread: bool,
+    /// For a task entry, the thread group's pid. Linux reports a task's
+    /// `PPid` as the process's own parent, so the group has to travel
+    /// with the entry.
+    pub(crate) tgid: Option<u32>,
 }
 
 /// Builds one [`Process`] row.
@@ -647,9 +654,19 @@ fn process_row(
         (Some(boot), Some(stat)) => Some(boot + stat.start_jiffies / (USER_HZ as u64)),
         _ => None,
     };
+    let parent = status.and_then(|status| status.parent);
+    // Kernel threads are the set the `kernel_threads` metric counts:
+    // processes whose parent is 0 (orphaned, including pid 1) or 2
+    // (kthreadd's children). Thread rows are filtered by the threads
+    // toggle, not by this flag.
+    let kernel_thread = !data.is_thread && matches!(parent, Some(0) | Some(2));
     Process {
         pid,
-        parent: status.and_then(|status| status.parent),
+        parent: if data.is_thread {
+            data.tgid.or(parent)
+        } else {
+            parent
+        },
         user,
         state,
         name,
@@ -667,6 +684,8 @@ fn process_row(
         start_time_secs,
         processor: data.stat.as_ref().map(|stat| stat.processor),
         command: data.command.clone(),
+        is_thread: data.is_thread,
+        kernel_thread,
         io: ProcessIo {
             read_bytes: data.io.map(|io| io.read_bytes),
             write_bytes: data.io.map(|io| io.write_bytes),
@@ -868,18 +887,41 @@ fn battery_state(text: &str) -> BatteryState {
     }
 }
 
-/// Splits a per-pid entry name like `proc-42-status` into pid and kind.
-fn split_pid_entry(name: &str) -> Option<(u32, &str)> {
+/// Splits a per-pid entry name like `proc-42-status` into id and kind.
+///
+/// Task entries name the thread group too: `proc-300-task-301-stat` is
+/// task 301 of process 300, recorded as a thread row. The result is the
+/// id to key the row by (the tid for a task entry), the kind, and, for
+/// a task entry, the thread group's pid.
+fn split_pid_entry(name: &str) -> Option<(u32, &'static str, Option<u32>)> {
     let rest = name.strip_prefix("proc-")?;
     let (pid, kind) = rest.split_once('-')?;
     if pid.is_empty() || !pid.bytes().all(|b| b.is_ascii_digit()) {
         return None;
     }
     let pid: u32 = pid.parse().ok()?;
-    if !matches!(kind, "stat" | "status" | "comm" | "cmdline" | "io") {
-        return None;
+    if let Some((tid, kind)) = kind
+        .strip_prefix("task-")
+        .and_then(|rest| rest.split_once('-'))
+    {
+        let tid: u32 = tid.parse().ok()?;
+        let kind: &'static str = match kind {
+            "stat" => "stat",
+            "status" => "status",
+            "comm" => "comm",
+            _ => return None,
+        };
+        return Some((tid, kind, Some(pid)));
     }
-    Some((pid, kind))
+    let kind: &'static str = match kind {
+        "stat" => "stat",
+        "status" => "status",
+        "comm" => "comm",
+        "cmdline" => "cmdline",
+        "io" => "io",
+        _ => return None,
+    };
+    Some((pid, kind, None))
 }
 
 /// Building a [`Sample`] from a fixture directory failed.
@@ -949,9 +991,13 @@ pub fn sample_from_fixture(dir: &Path) -> Result<Sample, FixtureSampleError> {
     let mut pids: BTreeMap<u32, PidData> = BTreeMap::new();
 
     for name in fixture.entry_names() {
-        if let Some((pid, kind)) = split_pid_entry(name) {
+        if let Some((id, kind, group)) = split_pid_entry(name) {
             let text = fixture.entry_text(name)?;
-            let data = pids.entry(pid).or_default();
+            let data = pids.entry(id).or_default();
+            if let Some(group) = group {
+                data.is_thread = true;
+                data.tgid = Some(group);
+            }
             match kind {
                 "stat" => data.stat = parse_pid_stat(&text),
                 "status" => data.status = Some(parse_pid_status(&text)),
@@ -1036,10 +1082,14 @@ pub fn sample_from_fixture(dir: &Path) -> Result<Sample, FixtureSampleError> {
         kernel_threads: Metric::available(
             pids.values()
                 .filter(|data| {
-                    data.status
-                        .as_ref()
-                        .and_then(|status| status.parent)
-                        .is_some_and(|parent| parent == 0 || parent == 2)
+                    // Thread entries are not kernel threads: their
+                    // parent is the thread group's own parent.
+                    !data.is_thread
+                        && data
+                            .status
+                            .as_ref()
+                            .and_then(|status| status.parent)
+                            .is_some_and(|parent| parent == 0 || parent == 2)
                 })
                 .count() as f64,
             Unit::Count,
@@ -1203,6 +1253,30 @@ mod live {
                 data.statm = fs::read_to_string(base.join("statm"))
                     .ok()
                     .and_then(|text| parse_pid_statm(&text));
+                // Thread rows: every numeric task below the process
+                // except the leader (the process's own row) becomes a
+                // row of its own, keyed by tid; the group travels in
+                // `tgid` because a task's `PPid` is the process's
+                // parent, not the group.
+                for task in read_dir_names(&base.join("task")) {
+                    let Ok(tid) = task.parse::<u32>() else {
+                        continue;
+                    };
+                    if tid == pid {
+                        continue;
+                    }
+                    let task_base = base.join("task").join(&task);
+                    let thread = pids.entry(tid).or_default();
+                    thread.is_thread = true;
+                    thread.tgid = Some(pid);
+                    thread.stat = fs::read_to_string(task_base.join("stat"))
+                        .ok()
+                        .and_then(|text| parse_pid_stat(&text));
+                    thread.status = fs::read_to_string(task_base.join("status"))
+                        .ok()
+                        .map(|text| parse_pid_status(&text));
+                    thread.comm = fs::read_to_string(task_base.join("comm")).ok();
+                }
             }
 
             let mut temps: Vec<TempSensor> = Vec::new();
@@ -1328,10 +1402,14 @@ mod live {
                 kernel_threads: Metric::available(
                     pids.values()
                         .filter(|data| {
-                            data.status
-                                .as_ref()
-                                .and_then(|status| status.parent)
-                                .is_some_and(|parent| parent == 0 || parent == 2)
+                            // Thread entries are not kernel threads:
+                            // their parent is the group's own parent.
+                            !data.is_thread
+                                && data
+                                    .status
+                                    .as_ref()
+                                    .and_then(|status| status.parent)
+                                    .is_some_and(|parent| parent == 0 || parent == 2)
                         })
                         .count() as f64,
                     Unit::Count,
@@ -1750,13 +1828,27 @@ mod tests {
 
     #[test]
     fn pid_entry_names_split_into_pid_and_kind() {
-        assert_eq!(split_pid_entry("proc-1-stat"), Some((1, "stat")));
-        assert_eq!(split_pid_entry("proc-42-cmdline"), Some((42, "cmdline")));
-        assert_eq!(split_pid_entry("proc-7-io"), Some((7, "io")));
+        assert_eq!(split_pid_entry("proc-1-stat"), Some((1, "stat", None)));
+        assert_eq!(
+            split_pid_entry("proc-42-cmdline"),
+            Some((42, "cmdline", None))
+        );
+        assert_eq!(split_pid_entry("proc-7-io"), Some((7, "io", None)));
         assert_eq!(split_pid_entry("proc-stat"), None);
         assert_eq!(split_pid_entry("proc-sys-kernel-osrelease"), None);
         assert_eq!(split_pid_entry("proc-1-mounts"), None);
         assert_eq!(split_pid_entry("proc--stat"), None);
+        // Task entries carry the thread group and key by tid.
+        assert_eq!(
+            split_pid_entry("proc-300-task-301-stat"),
+            Some((301, "stat", Some(300)))
+        );
+        assert_eq!(
+            split_pid_entry("proc-300-task-301-comm"),
+            Some((301, "comm", Some(300)))
+        );
+        assert_eq!(split_pid_entry("proc-300-task-301-io"), None);
+        assert_eq!(split_pid_entry("proc-300-task-x-stat"), None);
     }
 
     #[test]
@@ -1777,6 +1869,7 @@ mod tests {
             command: None,
             io: None,
             statm: None,
+            ..Default::default()
         };
         let row = process_row(1, &data, 16366640 * 1024, 0.0, None);
         assert_eq!(row.pid, 1);
@@ -1787,6 +1880,37 @@ mod tests {
         assert_eq!(row.virtual_bytes, 25700 * 1024);
         assert_eq!(row.resident_bytes, 17044 * 1024);
         assert_eq!(row.threads, 1);
+        // A parent of 0 is the kernel-thread set the `kthr` metric counts.
+        assert!(row.kernel_thread);
+        assert!(!row.is_thread);
+    }
+
+    /// A task entry is a thread row: it flags `is_thread`, points its
+    /// parent at the thread group (a task's own `PPid` is the group's
+    /// parent, so the group travels with the entry), and never flags
+    /// `kernel_thread` — threads are filtered by the threads toggle.
+    #[test]
+    fn process_row_marks_thread_entries() {
+        let status = PidStatus {
+            name: "worker-a".to_string(),
+            state: Some("R".to_string()),
+            parent: Some(2), // the group's own parent, not the group
+            uid: Some(1000),
+            vm_size: 0,
+            vm_rss: 4096,
+            threads: 1,
+        };
+        let data = PidData {
+            status: Some(status),
+            comm: Some("worker-a\n".to_string()),
+            is_thread: true,
+            tgid: Some(300),
+            ..Default::default()
+        };
+        let row = process_row(301, &data, 1000 * 1024, 0.0, None);
+        assert!(row.is_thread);
+        assert!(!row.kernel_thread);
+        assert_eq!(row.parent, Some(300));
     }
 
     #[test]
@@ -1798,6 +1922,7 @@ mod tests {
             command: None,
             io: None,
             statm: None,
+            ..Default::default()
         };
         let row = process_row(9, &data, 1000 * 1024, 0.0, None);
         assert_eq!(row.name, "worker-a");

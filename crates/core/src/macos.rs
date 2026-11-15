@@ -472,6 +472,8 @@ pub(crate) fn sample_from_parts(
                 start_time_secs: mac.start_secs,
                 processor: None,
                 command: mac.command.clone(),
+                is_thread: false,
+                kernel_thread: false,
                 io: ProcessIo::default(),
             }
         })

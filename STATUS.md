@@ -3,13 +3,15 @@
 Updated after every working session.
 
 - **Current milestone:** M3 (Full TUI Parity).
-- **Last done:** M3 batch 7w — screen tabs and the per-process I/O screen (decision 0026): a tab strip above every sub-screen marks the active screen and its labels are clickable; key `o` opens an I/O screen listing per-process read/write rates and totals busiest first (empty state where the OS reports none); `o: io` joins the hints, the F1 help and the man page. Snapshots byte-identical. Tests: 2 TUI. Earlier this session: 7v (meter styles, 0025) as `098a350`; 7u/7t/7s all CI green.
-- **Next step:** the remaining open `docs/parity.md` items — I/O priority and affinity, thread visibility, env/open-files/trace, setup screens, configurable meter columns — then M4+. (7g macOS CPU frequency remains settled: decision 0011 and `docs/m2-power-checks.md`.)
+- **Last done:** M3 batch 7x — thread visibility and the program-path toggle (decision 0027): the Linux collector reads `/proc/<pid>/task` and emits one row per task (group as parent); `H` cycles kernel-shown/userland-hidden → both → kernel-hidden (`K` stays with the signal menu); `p` toggles the program path ztop shows by default. Snapshots byte-identical. Tests: 3 (1 core, 2 TUI). Earlier this session: 7w (screen tabs + I/O screen, 0026) as `0c438bc`; 7v (meter styles, 0025) as `098a350`.
+- **Next step:** the remaining open `docs/parity.md` items — I/O priority and affinity, env/open-files/trace, setup screens, configurable meter columns — then M4+. (7g macOS CPU frequency remains settled: decision 0011 and `docs/m2-power-checks.md`.)
 - **Blocked on:** nothing.
 
 ## Log
 
 Newest first. One or two lines per session: what changed, what is next.
+
+- 2026-11-15: M3 batch 7x — thread visibility and the program-path toggle (decision 0027): the Linux collector reads `/proc/<pid>/task` and emits one row per task with the group as its parent; `H` cycles thread visibility (`K` stays with the signal menu); `p` toggles the program path ztop shows by default. Snapshots byte-identical; one core test, two TUI tests. Next: I/O priority/affinity, env/open-files/trace, setup screens, meter columns.
 
 - 2026-11-15: M3 batch 7w — screen tabs and the per-process I/O screen (decision 0026): a tab strip above every sub-screen marks the active screen and its labels are clickable; key `o` opens an I/O screen listing per-process read/write rates and totals busiest first (empty state where the OS reports none). Snapshots byte-identical; two new TUI tests. Next: I/O priority/affinity, thread visibility, env/open-files/trace, setup screens, meter columns.
 

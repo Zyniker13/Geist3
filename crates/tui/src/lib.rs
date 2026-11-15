@@ -194,6 +194,16 @@ pub struct Ui {
     /// Pids seen in the previous sample, so a just-arrived process can
     /// be highlighted as new.
     pub seen: std::collections::BTreeSet<u32>,
+    /// Show the processes' userland threads as their own rows (Linux
+    /// task entries), htop's H. Off by default: one row per process.
+    pub show_user_threads: bool,
+    /// Show the kernel threads' rows, htop's hide-kernel-threads. On by
+    /// default, matching the `kthr` count in the header.
+    pub show_kernel_threads: bool,
+    /// Show the program path in the name column when the OS reports
+    /// one, htop's p. On by default: the path is the more informative
+    /// name when it exists.
+    pub show_path: bool,
     /// Recent average CPU busy percentages, for the graph meter style.
     pub avg_history: Vec<f64>,
     /// Recent per-core CPU busy percentages, for the graph meter style.
@@ -231,6 +241,9 @@ impl Default for Ui {
             tags: std::collections::BTreeSet::new(),
             menu: None,
             help: false,
+            show_user_threads: false,
+            show_kernel_threads: true,
+            show_path: true,
             avg_history: Vec::new(),
             cpu_history: Vec::new(),
             mem_history: Vec::new(),
@@ -302,6 +315,22 @@ impl Ui {
         } else {
             screen
         };
+    }
+
+    /// Cycle thread visibility, htop's H (show userland threads) and K
+    /// (hide kernel threads) on one key: kernel threads shown and
+    /// userland threads hidden by default, then userland threads shown
+    /// too, then kernel threads hidden as well, then back to the start.
+    pub fn cycle_threads(&mut self) {
+        let (user, kernel) = if !self.show_user_threads && self.show_kernel_threads {
+            (true, true)
+        } else if self.show_user_threads && self.show_kernel_threads {
+            (true, false)
+        } else {
+            (false, true)
+        };
+        self.show_user_threads = user;
+        self.show_kernel_threads = kernel;
     }
 
     /// Build the UI with a saved setup loaded from the config file: the
@@ -605,6 +634,12 @@ impl Ui {
     /// The name match is a case-insensitive substring; an empty prompt
     /// matches everything.
     pub fn visible(&self, process: &Process) -> bool {
+        if process.is_thread && !self.show_user_threads {
+            return false;
+        }
+        if process.kernel_thread && !self.show_kernel_threads {
+            return false;
+        }
         if !self.pid_filter.is_empty() && !self.pid_filter.contains(&process.pid) {
             return false;
         }
@@ -1072,6 +1107,15 @@ fn handle_key(ui: &mut Ui, key: KeyEvent) -> bool {
         // `Z` pauses sampling: the picture freezes but the keys keep
         // working; a second press resumes. Global, like the screens.
         KeyCode::Char('Z') => ui.paused = !ui.paused,
+        // `H` cycles thread visibility, htop's H and K on one key: from
+        // the default (kernel threads shown, userland threads hidden)
+        // through showing the userland threads too, to hiding the
+        // kernel threads as well, and back. `K` stays with the signal
+        // menu here (decision 0027).
+        KeyCode::Char('H') => ui.cycle_threads(),
+        // `p` toggles the program path in the name column; ztop shows
+        // the path whenever the OS reports one, so this turns it off.
+        KeyCode::Char('p') => ui.show_path = !ui.show_path,
         // F2 opens the setup screen from any sample screen.
         KeyCode::F(2) if ui.screen != Screen::Setup => ui.open_setup(),
         // On the extra screens the table keys have no meaning, so they
@@ -1756,6 +1800,7 @@ fn help_lines() -> Vec<Line<'static>> {
         ("Space, c, U", "tag row, tag children, untag all"),
         ("F9, K", "send a signal to the tagged rows"),
         ("F7, F8", "renice -1 / +1"),
+        ("H, p", "threads cycle, program path"),
         ("a, d, n, o, t", "silicon, disks, network, io, thermal"),
     ];
     let mut lines = vec![Line::from("Keys (any key closes)").bold()];
@@ -2536,7 +2581,7 @@ fn status_parts(ui: &Ui) -> Vec<String> {
         parts.push(notice.clone());
     }
     parts.push(format!(
-        "q: quit · tab: sort {} · i: reverse · f3: search · f4: filter · u: user · space: tag · j/k: select · f: follow · f5: tree · enter: fold · f9: signal · f7/f8: renice · a: silicon · d: disks · n: net · o: io · t: temps",
+        "q: quit · tab: sort {} · i: reverse · f3: search · f4: filter · u: user · space: tag · j/k: select · f: follow · f5: tree · enter: fold · f9: signal · f7/f8: renice · H: threads · p: path · a: silicon · d: disks · n: net · o: io · t: temps",
         sort_label(ui.sort, ui.descending)
     ));
     parts
@@ -2599,6 +2644,8 @@ fn hint_key(label: &str) -> Option<KeyEvent> {
         "n" => KeyCode::Char('n'),
         "o" => KeyCode::Char('o'),
         "t" => KeyCode::Char('t'),
+        "H" => KeyCode::Char('H'),
+        "p" => KeyCode::Char('p'),
         _ => return None,
     };
     Some(KeyEvent::from(code))
@@ -2638,6 +2685,7 @@ fn draw_processes(frame: &mut Frame, ui: &Ui, area: ratatui::layout::Rect) {
             &columns,
             row_highlight(ui, row_view.process),
             ui.config.theme,
+            ui.show_path,
         );
         if Some(row_view.process.pid) == ui.cursor {
             row = row.style(ratatui::style::Style::default().reversed());
@@ -2911,12 +2959,17 @@ fn process_row(
     columns: &Columns,
     highlight: RowHighlight,
     theme: Theme,
+    show_path: bool,
 ) -> Row<'static> {
-    let base = row_view
-        .process
-        .command
-        .clone()
-        .unwrap_or_else(|| row_view.process.name.clone());
+    let base = if show_path {
+        row_view
+            .process
+            .command
+            .clone()
+            .unwrap_or_else(|| row_view.process.name.clone())
+    } else {
+        row_view.process.name.clone()
+    };
     let shown = if tree {
         let indent = "  ".repeat(row_view.depth);
         let branch = if row_view.depth > 0 { "└─ " } else { "" };
@@ -3050,6 +3103,8 @@ mod tests {
                 start_time_secs: Some(1_700_000_000 + pid as u64),
                 processor: Some((pid - 1) % 4),
                 command: None,
+                is_thread: false,
+                kernel_thread: false,
                 io: ProcessIo::default(),
             })
             .collect();
@@ -5028,6 +5083,72 @@ mod tests {
                 .any(|row| row.contains("Avg") && row.contains('▅')),
             "graph style draws the sparkline: {rows:?}"
         );
+    }
+
+    /// Thread visibility, htop's H (and its hide-kernel-threads K, which
+    /// stays with the signal menu here): userland threads are hidden and
+    /// kernel threads shown by default; H cycles both on, then the
+    /// kernel threads off, then back (docs/parity.md: thread visibility).
+    #[test]
+    fn the_threads_cycle_shows_and_hides_rows() {
+        let mut s = sample();
+        let mut thread = s.processes[0].clone();
+        thread.pid = 101;
+        thread.parent = Some(s.processes[0].pid);
+        thread.is_thread = true;
+        thread.name = "worker-01/thr".to_string();
+        let mut kernel = s.processes[0].clone();
+        kernel.pid = 7;
+        kernel.parent = Some(2);
+        kernel.kernel_thread = true;
+        kernel.name = "kworker-a".to_string();
+        s.processes.push(thread);
+        s.processes.push(kernel);
+        // Default: the userland thread is hidden, the kernel thread shows.
+        let mut ui = ui_with(Some(s.clone()), None);
+        let rows = render(&ui, 80, 24);
+        assert!(!rows.iter().any(|row| row.contains("worker-01/thr")));
+        assert!(rows.iter().any(|row| row.contains("kworker-a")));
+        // One H: both visible.
+        handle_key(&mut ui, KeyEvent::from(KeyCode::Char('H')));
+        let rows = render(&ui, 80, 24);
+        assert!(rows.iter().any(|row| row.contains("worker-01/thr")));
+        assert!(rows.iter().any(|row| row.contains("kworker-a")));
+        // Two H: the kernel thread hides.
+        handle_key(&mut ui, KeyEvent::from(KeyCode::Char('H')));
+        let rows = render(&ui, 80, 24);
+        assert!(rows.iter().any(|row| row.contains("worker-01/thr")));
+        assert!(!rows.iter().any(|row| row.contains("kworker-a")));
+        // Three H: back to the default.
+        handle_key(&mut ui, KeyEvent::from(KeyCode::Char('H')));
+        let rows = render(&ui, 80, 24);
+        assert!(!rows.iter().any(|row| row.contains("worker-01/thr")));
+        assert!(rows.iter().any(|row| row.contains("kworker-a")));
+    }
+
+    /// The program-path toggle, htop's p: ztop shows the recorded
+    /// command in the name column whenever the OS reports one, so `p`
+    /// turns it off and back on.
+    #[test]
+    fn p_toggles_the_program_path() {
+        let mut s = sample();
+        s.processes[0].command = Some("opt/tools/worker-01 --serve".to_string());
+        let mut ui = ui_with(Some(s), None);
+        // Default: the full command is the name column's text.
+        let rows = render(&ui, 80, 24);
+        assert!(
+            rows.iter().any(|row| row.contains("opt/tools/worker-01")),
+            "{rows:?}"
+        );
+        // `p` once: the short name only.
+        handle_key(&mut ui, KeyEvent::from(KeyCode::Char('p')));
+        let rows = render(&ui, 80, 24);
+        assert!(!rows.iter().any(|row| row.contains("opt/tools/worker-01")));
+        assert!(rows.iter().any(|row| row.contains("worker-01")));
+        // `p` again: the path returns.
+        handle_key(&mut ui, KeyEvent::from(KeyCode::Char('p')));
+        let rows = render(&ui, 80, 24);
+        assert!(rows.iter().any(|row| row.contains("opt/tools/worker-01")));
     }
 
     /// The tab strip on the sub-screens marks the active screen and a

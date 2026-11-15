@@ -440,6 +440,15 @@ pub struct Process {
     /// means `None` and the name column shows the short name.
     #[serde(default)]
     pub command: Option<String>,
+    /// This row is a thread of the process named by `parent` (the thread
+    /// group), not a process of its own (Linux task entries, shown with
+    /// the threads toggle).
+    #[serde(default)]
+    pub is_thread: bool,
+    /// This process is a kernel thread: the same set the sample's
+    /// `kernel_threads` metric counts (Linux, parent 0 or 2).
+    #[serde(default)]
+    pub kernel_thread: bool,
     /// Per-process disk I/O, when the platform reports it (Linux).
     pub io: ProcessIo,
 }
@@ -616,6 +625,8 @@ mod tests {
                 start_time_secs: Some(1_700_000_000),
                 processor: Some(0),
                 command: None,
+                is_thread: false,
+                kernel_thread: false,
                 io: ProcessIo {
                     read_bytes: Some(1024),
                     write_bytes: Some(2048),
