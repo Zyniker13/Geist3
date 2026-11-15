@@ -771,7 +771,9 @@ mod live {
         parse_proc_stat, parse_proc_uptime, process_row,
     };
     use crate::collector::{CollectError, Collector};
-    use crate::model::{Cpu, Fan, Metric, Process, Sample, Sensors, TempSensor, Unit};
+    use crate::model::{
+        AppleSilicon, Cpu, Fan, Metric, Process, Sample, Sensors, TempSensor, Unit,
+    };
 
     /// Reads `/proc` and `/sys` on the running Linux host.
     ///
