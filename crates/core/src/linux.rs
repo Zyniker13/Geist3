@@ -34,8 +34,8 @@ use crate::fixture::{Fixture, FixtureError};
 #[cfg(any(target_os = "linux", test))]
 use crate::model::core_percents;
 use crate::model::{
-    AppleSilicon, Cpu, CpuTimes, Disk, Memory, Metric, NetIf, Process, ProcessIo, Sample, Sensors,
-    Unit,
+    AppleSilicon, Cpu, CpuTimes, Disk, Memory, Metric, NetIf, Pressure, Process, ProcessIo, Psi,
+    PsiAvg, Sample, Sensors, Unit,
 };
 #[cfg(any(target_os = "linux", test))]
 use crate::model::{Battery, BatteryState, Fan, TempSensor};
@@ -234,6 +234,36 @@ fn parse_cpuinfo_frequencies(text: &str) -> Vec<Metric> {
 /// Parses the first field of `/proc/uptime`, in seconds.
 fn parse_proc_uptime(text: &str) -> Option<f64> {
     text.split_whitespace().next()?.parse().ok()
+}
+
+/// Parses one `/proc/pressure/<resource>` file: the `some` line always,
+/// the `full` line when the kernel writes one (cpu has none). Returns
+/// `None` for unparseable or truncated text.
+fn parse_pressure(text: &str) -> Option<Psi> {
+    let mut some = None;
+    let mut full = None;
+    for line in text.lines() {
+        let (kind, rest) = line.split_once(' ')?;
+        let mut avg = PsiAvg::default();
+        for field in rest.split_whitespace() {
+            let (name, value) = field.split_once('=')?;
+            let value: f64 = value.parse().ok()?;
+            match name {
+                "avg10" => avg.ten = value,
+                "avg60" => avg.sixty = value,
+                "avg300" => avg.three_hundred = value,
+                // The `total=` microsecond counter is not needed here.
+                "total" => {}
+                _ => return None,
+            }
+        }
+        match kind {
+            "some" => some = Some(avg),
+            "full" => full = Some(avg),
+            _ => return None,
+        }
+    }
+    Some(Psi { some: some?, full })
 }
 
 /// Builds the `Sample.system` string from `/proc/sys/kernel/osrelease`
@@ -913,6 +943,9 @@ pub fn sample_from_fixture(dir: &Path) -> Result<Sample, FixtureSampleError> {
     let mut uptime = None;
     let mut disks = None;
     let mut net = None;
+    let mut pressure_cpu = None;
+    let mut pressure_memory = None;
+    let mut pressure_io = None;
     let mut pids: BTreeMap<u32, PidData> = BTreeMap::new();
 
     for name in fixture.entry_names() {
@@ -954,6 +987,9 @@ pub fn sample_from_fixture(dir: &Path) -> Result<Sample, FixtureSampleError> {
                 ));
             }
             "proc-net-dev" => net = Some(parse_proc_net_dev(&text)),
+            "proc-pressure-cpu" => pressure_cpu = parse_pressure(&text),
+            "proc-pressure-memory" => pressure_memory = parse_pressure(&text),
+            "proc-pressure-io" => pressure_io = parse_pressure(&text),
             _ => {}
         }
     }
@@ -962,6 +998,13 @@ pub fn sample_from_fixture(dir: &Path) -> Result<Sample, FixtureSampleError> {
     let meminfo = meminfo.ok_or_else(|| missing_source("proc-meminfo"))?;
     let loadavg = loadavg.ok_or_else(|| missing_source("proc-loadavg"))?;
     let uptime = uptime.ok_or_else(|| missing_source("proc-uptime"))?;
+    // Pressure is optional: older captures have no pressure files, and
+    // one file without the others shows nothing rather than a half
+    // picture.
+    let pressure = match (pressure_cpu, pressure_memory, pressure_io) {
+        (Some(cpu), Some(memory), Some(io)) => Some(Pressure { cpu, memory, io }),
+        _ => None,
+    };
 
     Ok(Sample {
         timestamp_ms: fixture.manifest().captured_at_unix * 1000,
@@ -1011,6 +1054,7 @@ pub fn sample_from_fixture(dir: &Path) -> Result<Sample, FixtureSampleError> {
             ..Sensors::default()
         },
         apple_silicon: AppleSilicon::default(),
+        pressure,
     })
 }
 
@@ -1032,7 +1076,7 @@ mod live {
     use super::{
         CpuTimes, PidData, PidIo, PidStat, USER_HZ, core_percents, counter_rate, disk_usage,
         io_rates, memory_from, parse_cpuinfo_frequencies, parse_hwmon, parse_pid_io,
-        parse_pid_stat, parse_pid_statm, parse_pid_status, parse_power_supply,
+        parse_pid_stat, parse_pid_statm, parse_pid_status, parse_power_supply, parse_pressure,
         parse_proc_diskstats, parse_proc_loadavg, parse_proc_loadavg_entities, parse_proc_meminfo,
         parse_proc_mounts, parse_proc_net_dev, parse_proc_stat, parse_proc_uptime, process_row,
         system_text,
@@ -1040,7 +1084,7 @@ mod live {
     use crate::collector::{CollectError, Collector};
     use crate::model::core_state_percents;
     use crate::model::{
-        AppleSilicon, Cpu, Fan, Metric, Process, Sample, Sensors, TempSensor, Unit,
+        AppleSilicon, Cpu, Fan, Metric, Pressure, Process, Sample, Sensors, TempSensor, Unit,
     };
 
     /// Reads `/proc` and `/sys` on the running Linux host.
@@ -1126,6 +1170,10 @@ mod live {
                 .as_deref()
                 .map(parse_proc_net_dev)
                 .unwrap_or_default();
+            // Pressure stall information: all three files must read and
+            // parse; one missing (kernel without PSI, or PSI disabled)
+            // hides the meters rather than showing a half picture.
+            let pressure = read_pressure();
 
             let mut pids: BTreeMap<u32, PidData> = BTreeMap::new();
             for entry in fs::read_dir("/proc")? {
@@ -1300,9 +1348,19 @@ mod live {
                     gpu_watts: Metric::unavailable(Unit::Watts),
                     system_watts: Metric::unavailable(Unit::Watts),
                 },
+                pressure,
                 apple_silicon: AppleSilicon::default(),
             })
         }
+    }
+
+    /// Reads and parses the three `/proc/pressure` files; `None` when
+    /// any of them is missing or unparseable.
+    fn read_pressure() -> Option<Pressure> {
+        let cpu = parse_pressure(&fs::read_to_string("/proc/pressure/cpu").ok()?)?;
+        let memory = parse_pressure(&fs::read_to_string("/proc/pressure/memory").ok()?)?;
+        let io = parse_pressure(&fs::read_to_string("/proc/pressure/io").ok()?)?;
+        Some(Pressure { cpu, memory, io })
     }
 
     /// Sorted file names of one directory, empty when it is absent.
@@ -1490,6 +1548,41 @@ mod tests {
         assert_eq!(parse_proc_uptime("61.77 110.52\n"), Some(61.77));
         assert_eq!(parse_proc_uptime("5\n"), Some(5.0));
         assert!(parse_proc_uptime("\n").is_none());
+    }
+
+    #[test]
+    fn pressure_reads_some_and_full_averages() {
+        let text = "some avg10=0.12 avg60=0.34 avg300=0.56 total=78901234\n\
+                    full avg10=1.23 avg60=4.56 avg300=7.89 total=12345\n";
+        let psi = parse_pressure(text).expect("parses");
+        assert_eq!(psi.some.ten, 0.12);
+        assert_eq!(psi.some.sixty, 0.34);
+        assert_eq!(psi.some.three_hundred, 0.56);
+        let full = psi.full.expect("full");
+        assert_eq!(full.ten, 1.23);
+        assert_eq!(full.three_hundred, 7.89);
+    }
+
+    #[test]
+    fn pressure_cpu_has_no_full_line() {
+        let psi =
+            parse_pressure("some avg10=3.50 avg60=2.00 avg300=1.00 total=9\n").expect("parses");
+        assert_eq!(psi.some.ten, 3.5);
+        assert!(psi.full.is_none());
+    }
+
+    #[test]
+    fn pressure_rejects_truncated_or_unknown_text() {
+        // Missing `some` line: the struct has no honest value.
+        assert!(parse_pressure("full avg10=1.0 avg60=0.0 avg300=0.0 total=1\n").is_none());
+        // A field the parser does not know must not be silently skipped.
+        assert!(parse_pressure("some avg10=1.0 avg60=0.0 avgX=0.0 total=1\n").is_none());
+        // A value that does not parse.
+        assert!(parse_pressure("some avg10=x avg60=0.0 avg300=0.0 total=1\n").is_none());
+        // Unknown kind line.
+        assert!(parse_pressure("odd avg10=1.0 avg60=0.0 avg300=0.0 total=1\n").is_none());
+        // Empty.
+        assert!(parse_pressure("").is_none());
     }
 
     #[test]

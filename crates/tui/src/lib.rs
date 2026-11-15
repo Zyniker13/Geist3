@@ -28,7 +28,7 @@ use ratatui::widgets::{Block, Borders, Cell, Gauge, Paragraph, Row, Table};
 
 use ztop_core::collector::{CollectError, Collector};
 use ztop_core::control::{self, Control, Plan};
-use ztop_core::model::{CpuTimes, Memory, Metric, Process, Sample, Unit};
+use ztop_core::model::{CpuTimes, Memory, Metric, Process, Psi, Sample, Unit};
 
 mod config;
 pub use config::{Config, Theme};
@@ -1442,14 +1442,18 @@ fn sensors_present(ui: &Ui) -> bool {
 
 /// The header's row count: title, cpu, memory, info and the status
 /// bar, plus the disk/network I/O line when the sample carries
-/// rates, plus the sensors line when it carries sensors.
+/// rates, plus the pressure line when it carries PSI, plus the
+/// sensors line when it carries sensors.
 fn header_height(ui: &Ui) -> u16 {
-    5 + u16::from(io_line(ui).is_some()) + u16::from(sensors_present(ui))
+    5 + u16::from(io_line(ui).is_some())
+        + u16::from(psi_line(ui).is_some())
+        + u16::from(sensors_present(ui))
 }
 
 fn draw_header(frame: &mut Frame, ui: &Ui, area: ratatui::layout::Rect) {
     let with_sensors = sensors_present(ui);
     let io = io_line(ui);
+    let psi = psi_line(ui);
     let mut constraints = vec![
         Constraint::Length(1), // title
         Constraint::Length(1), // cpu
@@ -1457,6 +1461,9 @@ fn draw_header(frame: &mut Frame, ui: &Ui, area: ratatui::layout::Rect) {
     ];
     if io.is_some() {
         constraints.push(Constraint::Length(1)); // io rates
+    }
+    if psi.is_some() {
+        constraints.push(Constraint::Length(1)); // pressure stalls
     }
     constraints.push(Constraint::Length(1)); // info
     if with_sensors {
@@ -1470,6 +1477,10 @@ fn draw_header(frame: &mut Frame, ui: &Ui, area: ratatui::layout::Rect) {
     let mut next = 3;
     if let Some(io) = io {
         frame.render_widget(Paragraph::new(io), rows[next]);
+        next += 1;
+    }
+    if let Some(psi) = psi {
+        frame.render_widget(Paragraph::new(psi), rows[next]);
         next += 1;
     }
     frame.render_widget(Paragraph::new(info_line(ui)), rows[next]);
@@ -1534,6 +1545,29 @@ fn io_line(ui: &Ui) -> Option<Line<'static>> {
         return None;
     }
     Some(Line::from(format!("io  {}", parts.join("  ·  "))))
+}
+
+/// The pressure stall (PSI) meter line, Linux only: the share of wall
+/// time tasks stalled waiting for cpu, memory and i/o (the 10-second
+/// averages; `s` = some tasks stalled, `f` = all stalled). The kernel
+/// reports no `full` for cpu. Absent when the sample carries no
+/// pressure — macOS collectors, replays of older fixtures, kernels
+/// with PSI disabled.
+fn psi_line(ui: &Ui) -> Option<Line<'static>> {
+    let pressure = ui.sample.as_ref()?.pressure.as_ref()?;
+    let kind = |psi: &Psi| {
+        let mut text = format!("s {:.1}%", psi.some.ten);
+        if let Some(full) = psi.full {
+            text.push_str(&format!(" f {:.1}%", full.ten));
+        }
+        text
+    };
+    Some(Line::from(format!(
+        "psi  cpu {}  ·  mem {}  ·  io {}",
+        kind(&pressure.cpu),
+        kind(&pressure.memory),
+        kind(&pressure.io)
+    )))
 }
 
 /// The setup screen (F2): the saved options, edited in place and saved to
@@ -2470,8 +2504,8 @@ fn process_row(
 mod tests {
     use super::*;
     use ztop_core::model::{
-        Battery, BatteryState, Cpu, CpuTimes, Disk, Fan, Metric, NetIf, ProcessIo, Sensors,
-        TempSensor, Unit,
+        Battery, BatteryState, Cpu, CpuTimes, Disk, Fan, Metric, NetIf, Pressure, ProcessIo, Psi,
+        PsiAvg, Sensors, TempSensor, Unit,
     };
 
     /// A 4-core, 12-process sample with spread-out values.
@@ -2547,6 +2581,7 @@ mod tests {
                 system_watts: Metric::unavailable(Unit::Watts),
             },
             apple_silicon: ztop_core::model::AppleSilicon::default(),
+            pressure: None,
         }
     }
 
@@ -3284,6 +3319,63 @@ mod tests {
         // sample() carries no disk or net rates at all.
         let rows = render(&ui_with(Some(sample()), None), 80, 24);
         assert!(rows.iter().all(|row| !row.contains("io  ")));
+    }
+
+    /// The pressure line reports the 10-second averages: cpu has no
+    /// `full` kind, memory and i/o do.
+    #[test]
+    fn the_psi_line_reports_pressure_averages() {
+        let mut s = sample();
+        s.pressure = Some(Pressure {
+            cpu: Psi {
+                some: PsiAvg {
+                    ten: 12.3,
+                    sixty: 8.0,
+                    three_hundred: 4.0,
+                },
+                full: None,
+            },
+            memory: Psi {
+                some: PsiAvg {
+                    ten: 0.1,
+                    sixty: 0.0,
+                    three_hundred: 0.0,
+                },
+                full: Some(PsiAvg {
+                    ten: 0.0,
+                    sixty: 0.0,
+                    three_hundred: 0.0,
+                }),
+            },
+            io: Psi {
+                some: PsiAvg {
+                    ten: 2.3,
+                    sixty: 1.0,
+                    three_hundred: 0.5,
+                },
+                full: Some(PsiAvg {
+                    ten: 1.1,
+                    sixty: 0.5,
+                    three_hundred: 0.2,
+                }),
+            },
+        });
+        let rows = render(&ui_with(Some(s), None), 80, 24);
+        let psi = rows
+            .iter()
+            .find(|row| row.contains("psi  "))
+            .expect("psi meter line");
+        assert!(
+            psi.contains("psi  cpu s 12.3%  ·  mem s 0.1% f 0.0%  ·  io s 2.3% f 1.1%"),
+            "{psi:?}"
+        );
+    }
+
+    #[test]
+    fn the_psi_line_stays_hidden_without_pressure() {
+        // sample() carries no pressure at all.
+        let rows = render(&ui_with(Some(sample()), None), 80, 24);
+        assert!(rows.iter().all(|row| !row.contains("psi  ")));
     }
 
     /// The memory gauge label reports compressed memory when the sample

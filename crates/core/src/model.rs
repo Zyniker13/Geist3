@@ -213,6 +213,15 @@ pub struct Sample {
     pub net: Vec<NetIf>,
     /// Temperatures, fans and battery, when the host provides them.
     pub sensors: Sensors,
+    /// Pressure stall information (Linux `/proc/pressure`): how much of
+    /// the recent wall time tasks stalled waiting for cpu, memory and
+    /// i/o. `None` when the kernel does not expose it or a file is
+    /// unreadable.
+    ///
+    /// Defaults so samples recorded before this field existed still
+    /// deserialize.
+    #[serde(default)]
+    pub pressure: Option<Pressure>,
     /// Apple Silicon–specific metrics (clusters, GPU, power, thermal
     /// pressure).  Unavailable on non-Apple Silicon and on Linux.
     ///
@@ -220,6 +229,32 @@ pub struct Sample {
     /// deserialize.
     #[serde(default)]
     pub apple_silicon: AppleSilicon,
+}
+
+/// One resource's pressure stall percentages: the share of wall time in
+/// which at least one task (`some`) or every non-idle task (`full`)
+/// stalled, averaged over 10 seconds, 1 minute and 5 minutes.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
+pub struct Psi {
+    pub some: PsiAvg,
+    /// The kernel reports no `full` line for cpu.
+    pub full: Option<PsiAvg>,
+}
+
+/// The three averages of one pressure stall kind.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
+pub struct PsiAvg {
+    pub ten: f64,
+    pub sixty: f64,
+    pub three_hundred: f64,
+}
+
+/// Pressure stall information for the three resources.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
+pub struct Pressure {
+    pub cpu: Psi,
+    pub memory: Psi,
+    pub io: Psi,
 }
 
 /// Lifetime IO counters of one block device, in bytes.
@@ -644,6 +679,7 @@ mod tests {
                     watts: 5.0,
                 }],
             },
+            pressure: None,
         };
         let json = serde_json::to_string(&sample).expect("serialize");
         let back: Sample = serde_json::from_str(&json).expect("deserialize");

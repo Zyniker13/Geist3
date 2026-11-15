@@ -524,6 +524,7 @@ pub(crate) fn sample_from_parts(
         net: Vec::new(),
         sensors: Sensors::default(),
         apple_silicon: AppleSilicon::default(),
+        pressure: None,
     })
 }
 
