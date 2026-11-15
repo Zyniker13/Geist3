@@ -233,13 +233,33 @@ Check an item only when it works and a test or a recorded check shows it. Add th
       `CTR` column (140+ columns, F2-toggleable) shows `runtime id` (decision 0034).
       Test: `detect_container_names_the_common_runtimes_and_nothing_else`,
       `the_container_column_identifies_containerized_processes`.
-- [ ] `ztop connect` shows a remote agent in the TUI
+- [x] `ztop connect` shows a remote agent in the TUI
+  - Round trip proven over a real socket: the agent serves a pushed
+    sample and `ztop_core::client::RemoteCollector` fetches and parses
+    it (envelope checked first); a warm-up agent (503) reads as
+    unavailable.
+    Tests: `the_remote_collector_reads_a_live_agent`,
+    `the_remote_collector_reports_a_warm_up_agent_as_unavailable`.
+  - The CLI drives the regular TUI loop with the remote collector;
+    connect is observation-only until control actions exist over the
+    protocol (they would otherwise hit the local process table).
+    Test: `connect_takes_a_target`.
 
 ## Agent and Hub
 
-- [ ] `ztop agent` with ring-buffer history
+- [x] `ztop agent` with ring-buffer history
+  - Protocol v1 over HTTP: `/v1/snapshot`, `/v1/processes`,
+    `/v1/history?seconds=N` from a 3,600-sample ring, `/healthz`,
+    `/v1/stream` live WebSocket; 503 "no sample yet" before the first
+    sample; a dedicated sampler thread owns the collector.
+    Tests: agent crate (10), including history window, ring drop and
+    stream tick.
 - [ ] TLS, pairing code and QR, pinned certificates, tokens with list and revoke
-- [ ] Localhost-only until configured
+- [x] Localhost-only until configured
+  - `serve` binds `("127.0.0.1", port)` — loopback only, by
+    construction; TLS and a configurable bind address arrive with
+    pairing (decision 0003). Test:
+    `the_remote_collector_reads_a_live_agent` connects over 127.0.0.1.
 - [ ] Bonjour discovery
 - [ ] Signals and renice only when the config and the token allow
 - [ ] `ztop hub` with SQLite history, serving the same protocol

@@ -3,13 +3,15 @@
 Updated after every working session.
 
 - **Current milestone:** M4 (Agent, Hub and the Bridge) — M3 complete pending CI on the 7ae commit.
-- **Last done:** M4 batch 8a SHIPPED as 2b4be22 — the agent's HTTP protocol v1 (decision 0035): `/v1/snapshot`, `/v1/processes`, `/v1/history?seconds=N`, the 3,600-sample ring, the dedicated sampler thread; agent tests 7/7; gate green; pushed after rebasing on two CI-recorded Linux fixture commits. Then batch 8b: `/v1/stream` WebSocket (decision 0036) — latest sample first, then one message per tick via a 16-deep broadcast; a lagged client is closed, never slows the sampler; axum gains the `ws` feature; agent tests 8/8.
-- **Next step:** gate + commit 8b; then 8c — TLS pairing and tokens (rustls, decision 0003), which unblocks `connect`.
+- **Last done:** M4 batch 8b SHIPPED as 1af76f7 — the agent's `/v1/stream` WebSocket (decision 0036): latest sample first, then one message per tick via a 16-deep broadcast; a lagged client is closed, never slows the sampler; axum gains the `ws` feature. Then batch 8c: `ztop connect` works (decision 0037) — `RemoteCollector` in `ztop_core::client` speaks minimal HTTP/1.1, unwraps the envelope, checks the protocol; connect drives the ordinary TUI and is forced observation-only; the client↔server round trip is tested in-process; live smoke run verified (protocol 1, 1,129 processes, history window). Parity: `connect`, `agent ring history` and `localhost-only` ticked.
+- **Next step:** gate + commit 8c; then 8d — TLS pairing and tokens (rustls, decision 0003).
 - **Blocked on:** nothing (7ac/7ad CI runs stuck in progress on Linux runners — infrastructure, not code; macOS jobs green).
 
 ## Log
 
 Newest first. One or two lines per session: what changed, what is next.
+
+- 2026-11-15: M4 batch 8c — `ztop connect` works (decision 0037): `RemoteCollector` in a new `ztop_core::client` speaks minimal HTTP/1.1 with envelope and protocol checks, drives the ordinary TUI (observation-only), and is proven against the real agent server in-process; live smoke run verified. Parity ticks: connect, agent ring history, localhost-only. Core 96, TUI 121, agent 10, CLI 7 tests.
 
 - 2026-11-15: M4 batch 8b — the agent's live stream (decision 0036): `/v1/stream` WebSocket sends the latest sample, then one message per tick through a 16-deep broadcast channel; a lagged client is closed instead of slowing the sampler; the axum workspace dependency gains its `ws` feature. Agent tests 8/8.
 

@@ -161,6 +161,17 @@ Monitor without being able to signal or renice anything.
 .TP
 .B ztop capture \-\-out capture
 Record this host's raw inputs as a fixture for collector tests.
+.TP
+.B ztop agent \-\-port 7100
+Serve the agent protocol on the loopback interface: a versioned
+snapshot, the process list, a ring\-buffer history (an hour at the
+one\-second default) and a live WebSocket stream. Loopback only until
+TLS and pairing arrive.
+.TP
+.B ztop connect 127.0.0.1:7100
+Drive the TUI from a remote agent or hub instead of the local host.
+The same keys and screens work; the view is observation\-only until
+control actions exist over the protocol.
 .SH SEE ALSO
 .BR top (1),
 .BR htop (1),

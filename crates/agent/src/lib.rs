@@ -24,7 +24,8 @@ use ztop_core::model::{Process, Sample};
 
 /// The protocol version served under `/v1`. Grows when a change breaks
 /// older clients; the client checks it before trusting any payload.
-pub const PROTOCOL_VERSION: u32 = 1;
+/// Defined beside the client so both halves share one number.
+pub use ztop_core::client::PROTOCOL_VERSION;
 
 /// How often the agent samples the host.
 pub const DEFAULT_INTERVAL: Duration = Duration::from_secs(1);
@@ -115,6 +116,15 @@ pub async fn serve(port: u16) -> std::io::Result<()> {
     let state = Arc::new(AgentState::default());
     spawn_sampler(state.clone(), DEFAULT_INTERVAL);
     let listener = tokio::net::TcpListener::bind(("127.0.0.1", port)).await?;
+    serve_on(state, listener).await
+}
+
+/// Serve the router over an already-bound listener: the seam the
+/// integration tests use to get an ephemeral port.
+pub async fn serve_on(
+    state: Arc<AgentState>,
+    listener: tokio::net::TcpListener,
+) -> std::io::Result<()> {
     axum::serve(listener, router(state)).await
 }
 
@@ -517,5 +527,63 @@ mod tests {
         super::tick(&mut collector, &state);
         assert_eq!(state.latest().map(|s| s.timestamp_ms), Some(42));
         assert_eq!(receiver.try_recv(), Err(TryRecvError::Empty));
+    }
+
+    /// The protocol's two halves against each other: the agent serves a
+    /// pushed sample, and the core crate's remote collector fetches it
+    /// over a real socket.
+    #[tokio::test]
+    async fn the_remote_collector_reads_a_live_agent() {
+        use ztop_core::collector::Collector as _;
+        let state = Arc::new(AgentState::default());
+        state.push({
+            let mut sample = a_sample();
+            sample.timestamp_ms = 7_000;
+            sample.hostname = "host-a".into();
+            sample
+        });
+        let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+            .await
+            .expect("bind");
+        let address = listener.local_addr().expect("address");
+        let server = tokio::spawn(async move { super::serve_on(state, listener).await });
+
+        // The client is blocking; run it off the async workers so the
+        // server task can make progress.
+        let fetched = tokio::task::spawn_blocking(move || {
+            let mut collector = ztop_core::client::RemoteCollector::new(address.to_string());
+            collector.sample()
+        })
+        .await
+        .expect("join");
+        let sample = fetched.expect("a sample");
+        assert_eq!(sample.hostname, "host-a");
+        assert_eq!(sample.timestamp_ms, 7_000);
+        server.abort();
+    }
+
+    /// An agent with no sample yet answers 503; the remote collector
+    /// turns that into an "unavailable" error instead of a panic or a
+    /// bogus sample.
+    #[tokio::test]
+    async fn the_remote_collector_reports_a_warm_up_agent_as_unavailable() {
+        use ztop_core::collector::Collector as _;
+        let state = Arc::new(AgentState::default());
+        let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+            .await
+            .expect("bind");
+        let address = listener.local_addr().expect("address");
+        let server = tokio::spawn(async move { super::serve_on(state, listener).await });
+
+        let fetched = tokio::task::spawn_blocking(move || {
+            ztop_core::client::RemoteCollector::new(address.to_string()).sample()
+        })
+        .await
+        .expect("join");
+        assert!(matches!(
+            fetched,
+            Err(ztop_core::collector::CollectError::Unavailable { .. })
+        ));
+        server.abort();
     }
 }

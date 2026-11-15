@@ -81,6 +81,27 @@ enum Command {
     },
 }
 
+/// Build the run flags from the CLI; `readonly` is passed in so
+/// `connect` can force observation-only regardless of the flag.
+fn flags_from(cli: &Cli, readonly: bool) -> Result<ztop_tui::RunFlags, Box<dyn Error>> {
+    if cli.delay < ztop_tui::MIN_DELAY.as_secs_f64() {
+        return Err(format!(
+            "delay must be at least {} seconds",
+            ztop_tui::MIN_DELAY.as_secs_f64()
+        )
+        .into());
+    }
+    Ok(ztop_tui::RunFlags {
+        readonly,
+        user: cli.user.clone(),
+        sort: match &cli.sort {
+            Some(name) => Some(name.parse()?),
+            None => None,
+        },
+        delay: std::time::Duration::from_secs_f64(cli.delay),
+    })
+}
+
 fn main() -> ExitCode {
     match run() {
         Ok(()) => ExitCode::SUCCESS,
@@ -113,22 +134,7 @@ fn run() -> Result<(), Box<dyn Error>> {
             if cli.tree {
                 config.start_in_tree = true;
             }
-            if cli.delay < ztop_tui::MIN_DELAY.as_secs_f64() {
-                return Err(format!(
-                    "delay must be at least {} seconds",
-                    ztop_tui::MIN_DELAY.as_secs_f64()
-                )
-                .into());
-            }
-            let flags = ztop_tui::RunFlags {
-                readonly: cli.readonly,
-                user: cli.user,
-                sort: match &cli.sort {
-                    Some(name) => Some(name.parse()?),
-                    None => None,
-                },
-                delay: std::time::Duration::from_secs_f64(cli.delay),
-            };
+            let flags = flags_from(&cli, cli.readonly)?;
             ztop_tui::run(&mut collector, &cli.pids, config, flags)?;
         }
         Some(Command::Capture { out }) => {
@@ -147,8 +153,21 @@ fn run() -> Result<(), Box<dyn Error>> {
                 .build()?;
             runtime.block_on(ztop_hub::serve(port))?;
         }
-        Some(Command::Connect { .. }) => {
-            return Err("connect lands with the protocol work in milestone M4".into());
+        Some(Command::Connect { ref target }) => {
+            // A remote view is observation-only for now: signals and
+            // renice through the protocol come with the pairing work
+            // (decision 0003), and until then acting on a row would
+            // hit the local process table under the same pid.
+            let mut config = ztop_tui::Config::load();
+            if cli.no_color {
+                config.theme = ztop_tui::Theme::Mono;
+            }
+            if cli.tree {
+                config.start_in_tree = true;
+            }
+            let flags = flags_from(&cli, true)?;
+            let mut collector = ztop_core::client::RemoteCollector::new(target.clone());
+            ztop_tui::run(&mut collector, &cli.pids, config, flags)?;
         }
         Some(Command::Replay { dir }) => {
             // One rendered frame through the production draw path: the same
