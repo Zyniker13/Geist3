@@ -1572,8 +1572,15 @@ mod tests {
             .expect("reads with the wire token");
 
         // A one-byte wrong pin: the collector reports the certificate,
-        // not the network.
-        let wrong_pin = format!("SHA256:{}00", &pin["SHA256:".len().."SHA256:".len() + 62]);
+        // not the network. The first hex character is replaced by a
+        // different one, so the wrong pin always differs (appending
+        // could rebuild the real pin whenever the tail is "00").
+        let flipped = if pin.as_bytes()["SHA256:".len()] == b'0' {
+            "1"
+        } else {
+            "0"
+        };
+        let wrong_pin = format!("SHA256:{}{}", flipped, &pin["SHA256:".len() + 1..]);
         let mut impostor =
             ztop_core::client::RemoteCollector::tls(target.clone(), &wrong_pin, None)
                 .expect("collector");

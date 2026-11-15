@@ -2,14 +2,17 @@
 
 Updated after every working session.
 
-- **Current milestone:** M4 complete in code (Bonjour shipped in 9c, a600964); M5 (ZTopKit) begins once CI is green on a600964.
-- **Last done:** M4 batch 9c pushed as a600964 — Bonjour discovery (mdns-sd 0.21; `--bind` with the non-loopback-needs-TLS rule; `--no-advertise`; decision 0044), live-verified via dns-sd browse, plus the tls load_or_create create_dir fix and the Linux-only unused-mut that ran 7e5ab1b/07baa44/c5acce5 red. Gate green (check=0, deny=0).
-- **Next step:** CI on the 9a/9x/9b/9c chain; then M5 ZTopKit (the SwiftUI app).
+- **Current milestone:** M5 (ZTopKit, the SwiftUI app) — client batch 10a pushed; CI green on a600964 (the first cross aarch64 clippy passed).
+- **Last done:** 10a — ZTopKit (swift/ZTopKit) gets the real protocol client: Codable mirror of the wire model (snake_case via convertFromSnakeCase), SHA-256 leaf pinning through a URLSession trust delegate (decision 0045), pair/snapshot/history against a real spawned agent (`agent --tls --pair --no-advertise`, random port), plus wire-shape decode tests with fake values. Fixed the 8f e2e wrong-pin builder that reproduced the real pin 1-in-256 (fired in CI on 437c45c): it now flips the first hex char. Gate green (check=0, deny=0).
+- **Next step:** 10b — the app shell (ZTopApp + host list/overview cards wired to AgentClient), then Keychain + detail views; CI on 437c45c-children as they land.
 - **Blocked on:** nothing.
 
 ## Log
 
 Newest first. One or two lines per session: what changed, what is next.
+
+- 2026-11-15: CI verdict on a600964: green — the first cross aarch64 clippy passed. The STATUS-only commit 437c45c ran red on the agent e2e test: its "wrong pin" (62 hex chars + "00") equals the real pin whenever the fingerprint tail is "00" — a 1-in-256 flake, now fixed to flip the first hex character (decision 0045 records it).
+- 2026-11-15: M5 batch 10a — ZTopKit speaks the protocol: Codable model mirror of crates/core model.rs (convertFromSnakeCase; Optional only for the real Option fields), AgentClient with snapshot/history/pair and SHA-256 leaf pinning via a URLSession trust delegate (decision 0045), and tests that spawn the real agent (--tls --pair --no-advertise, random port), pair with the printed code, read pinned snapshots and history, and meet a wrong pin as a handshake failure.
 
 - 2026-11-15: M4 batch 9c — Bonjour discovery closes M4: the agent gains --bind (default 127.0.0.1; non-loopback refused without --tls, tested) and, with TLS on, advertises _ztop._tcp via mdns-sd 0.21 (instance "ztop on <hostname>", TXT protocol; --no-advertise opts out; failures degrade to a note). Decision 0044. Live check: dns-sd browsed back the instance on the dev Mac; the full round trip lives in an #[ignore]d test for multicast-capable hosts. Also fixed: tls load_or_create now creates its directory (first real binary run with --tls failed with ENOENT).
 - 2026-11-15: M4 batch 9b — launchd and systemd service files (packaging/launchd/com.ztop.agent.plist, packaging/systemd/ztop-agent.service, packaging/README.md): read-only user services (agent --tls --pair, no control), checked by a new packaging stage in check.sh (required keys, refuses --allow-control in the shipped files, plutil -lint on macOS). ROADMAP re-check: hub aggregation is M6 (SQLite lands there, decision 0004), not an M4 leftover — M4's remaining items are Bonjour only.
