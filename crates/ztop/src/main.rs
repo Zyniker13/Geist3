@@ -23,6 +23,11 @@ struct Cli {
     #[arg(long)]
     no_color: bool,
 
+    /// Refuse every action that changes the system: signals and renice
+    /// are disabled for this run.
+    #[arg(long)]
+    readonly: bool,
+
     #[command(subcommand)]
     command: Option<Command>,
 }
@@ -88,7 +93,7 @@ fn run() -> Result<(), Box<dyn Error>> {
             if cli.no_color {
                 config.theme = ztop_tui::Theme::Mono;
             }
-            ztop_tui::run(&mut collector, &cli.pids, config)?;
+            ztop_tui::run(&mut collector, &cli.pids, config, cli.readonly)?;
         }
         Some(Command::Capture { out }) => {
             let count = ztop_core::capture::capture_to(&out)?;

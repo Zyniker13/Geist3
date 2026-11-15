@@ -161,6 +161,9 @@ pub struct Ui {
     /// Paused: the picture is frozen and no new samples arrive, but the
     /// keys (and actions) keep working.
     pub paused: bool,
+    /// Read-only run (`ztop --readonly`): every action that changes the
+    /// system — signals, renice — is refused.
+    pub readonly: bool,
     /// A Ctrl-L arrived: the event loop clears the screen so the next
     /// frame repaints everything.
     pub redraw_requested: bool,
@@ -190,6 +193,7 @@ impl Default for Ui {
             setup_return: Screen::ProcessTable,
             seen: std::collections::BTreeSet::new(),
             paused: false,
+            readonly: false,
             redraw_requested: false,
         }
     }
@@ -463,6 +467,10 @@ impl Ui {
     pub fn open_menu(&mut self) {
         self.filter = None;
         self.search = None;
+        if self.readonly {
+            self.notice = Some(READ_ONLY_NOTICE.to_string());
+            return;
+        }
         if !self.targets().is_empty() {
             self.menu = Some(0);
         }
@@ -847,19 +855,32 @@ type Tui = Terminal<CrosstermBackend<Stdout>>;
 /// `pids` is the `ztop -p` list: when it is not empty, the table lists only
 /// those processes.
 ///
+/// `readonly` is `ztop --readonly`: every action that changes the system
+/// (signals, renice) is refused for this run.
+///
 /// Returns when the user presses `q`, `Esc` or `Ctrl-C`; terminal state is
 /// restored even when drawing or sampling fails.
-pub fn run(collector: &mut dyn Collector, pids: &[u32], config: Config) -> io::Result<()> {
+pub fn run(
+    collector: &mut dyn Collector,
+    pids: &[u32],
+    config: Config,
+    readonly: bool,
+) -> io::Result<()> {
     enable_raw_mode()?;
-    let result = run_inner(collector, pids, config);
+    let result = run_inner(collector, pids, config, readonly);
     restore()?;
     result
 }
 
-fn run_inner(collector: &mut dyn Collector, pids: &[u32], config: Config) -> io::Result<()> {
+fn run_inner(
+    collector: &mut dyn Collector,
+    pids: &[u32],
+    config: Config,
+    readonly: bool,
+) -> io::Result<()> {
     execute!(io::stdout(), EnterAlternateScreen, EnableMouseCapture)?;
     let mut terminal = Terminal::new(CrosstermBackend::new(io::stdout()))?;
-    let result = event_loop(&mut terminal, collector, pids, config);
+    let result = event_loop(&mut terminal, collector, pids, config, readonly);
     execute!(io::stdout(), LeaveAlternateScreen, DisableMouseCapture)?;
     result
 }
@@ -986,8 +1007,10 @@ fn event_loop(
     collector: &mut dyn Collector,
     pids: &[u32],
     config: Config,
+    readonly: bool,
 ) -> io::Result<()> {
     let mut ui = Ui::with_config(config);
+    ui.readonly = readonly;
     ui.pid_filter = pids.iter().copied().collect();
     ui.apply(collector.sample());
     loop {
@@ -1018,9 +1041,17 @@ fn event_loop(
     }
 }
 
+/// What a refused action says in the status line, shared by the signal
+/// menu and the plan executor.
+const READ_ONLY_NOTICE: &str = "read-only: signals and renice are disabled";
+
 /// Execute a control plan against the real processes and record the
 /// outcome in the status line for one refresh.
 fn run_plan(ui: &mut Ui, plan: &Plan) {
+    if ui.readonly {
+        ui.notice = Some(READ_ONLY_NOTICE.to_string());
+        return;
+    }
     let results = control::execute(plan);
     let ok = results.iter().filter(|(_, result)| result.is_ok()).count();
     let failed = results.len() - ok;
@@ -3563,6 +3594,34 @@ mod tests {
         ui.redraw_requested = false;
         handle_key(&mut ui, KeyEvent::from(KeyCode::Char('l')));
         assert!(!ui.redraw_requested);
+    }
+
+    /// `--readonly` refuses the signal menu and every plan: the notice
+    /// says so, nothing opens, nothing executes.
+    #[test]
+    fn readonly_refuses_the_signal_menu_and_every_plan() {
+        let mut ui = ui_with(Some(sample()), None);
+        ui.readonly = true;
+        handle_key(&mut ui, KeyEvent::from(KeyCode::Char('K')));
+        assert!(ui.menu.is_none(), "the menu must not open");
+        let notice = ui.notice.clone().expect("refusal notice");
+        assert!(notice.contains("read-only"), "{notice:?}");
+        // F7 (renice lower) never reaches control::execute either: the
+        // notice is exactly the refusal, not an execution report. Renice
+        // needs a target, so put the cursor on a row first.
+        ui.notice = None;
+        ui.cursor = Some(sample().processes[0].pid);
+        handle_key(&mut ui, KeyEvent::from(KeyCode::F(7)));
+        assert_eq!(
+            ui.notice.as_deref(),
+            Some("read-only: signals and renice are disabled"),
+        );
+        // Without the flag the menu opens as usual (it needs a target,
+        // so the cursor is on a row).
+        let mut ui = ui_with(Some(sample()), None);
+        ui.cursor = Some(sample().processes[0].pid);
+        handle_key(&mut ui, KeyEvent::from(KeyCode::Char('K')));
+        assert!(ui.menu.is_some());
     }
 
     /// The memory gauge label reports compressed memory when the sample

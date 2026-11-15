@@ -49,7 +49,14 @@ Check an item only when it works and a test or a recorded check shows it. Add th
       docs/decisions/0021-pause-and-redraw.md; tests
       `z_toggles_pause_and_the_status_line_says_so`,
       `ctrl_l_requests_a_redraw_and_plain_l_does_not`).
-- [ ] Read-only mode (`--readonly`)
+- [x] Read-only mode (`--readonly`)
+      (per-run CLI flag, never a saved setting; the signal menu refuses
+      to open and `run_plan` refuses every plan before execution, so
+      future action keys are covered by the same guard; the status line
+      shows `read-only: signals and renice are disabled` for one
+      refresh; everything else keeps working;
+      docs/decisions/0022-readonly-mode.md; test
+      `readonly_refuses_the_signal_menu_and_every_plan`).
 
 ## htop: Setup and Options
 
