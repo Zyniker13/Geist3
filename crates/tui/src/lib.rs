@@ -158,6 +158,12 @@ pub struct Ui {
     /// Pids seen in the previous sample, so a just-arrived process can
     /// be highlighted as new.
     pub seen: std::collections::BTreeSet<u32>,
+    /// Paused: the picture is frozen and no new samples arrive, but the
+    /// keys (and actions) keep working.
+    pub paused: bool,
+    /// A Ctrl-L arrived: the event loop clears the screen so the next
+    /// frame repaints everything.
+    pub redraw_requested: bool,
 }
 
 impl Default for Ui {
@@ -183,6 +189,8 @@ impl Default for Ui {
             setup_select: 0,
             setup_return: Screen::ProcessTable,
             seen: std::collections::BTreeSet::new(),
+            paused: false,
+            redraw_requested: false,
         }
     }
 }
@@ -871,6 +879,11 @@ fn handle_key(ui: &mut Ui, key: KeyEvent) -> bool {
     match key.code {
         // Ctrl-C always quits, even while typing a filter.
         KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => return true,
+        // Ctrl-L forces a full repaint, top-style. It works everywhere,
+        // including while a prompt or menu is open.
+        KeyCode::Char('l') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+            ui.redraw_requested = true;
+        }
         // While the setup screen (F2) is open the keys drive
         // it: Esc/F2 close it (saving), j/k move, Space or
         // Enter toggle the selected option; everything else
@@ -927,6 +940,9 @@ fn handle_key(ui: &mut Ui, key: KeyEvent) -> bool {
         KeyCode::Char('d') => ui.goto_screen(Screen::Disk),
         KeyCode::Char('n') => ui.goto_screen(Screen::Network),
         KeyCode::Char('t') => ui.goto_screen(Screen::Thermal),
+        // `Z` pauses sampling: the picture freezes but the keys keep
+        // working; a second press resumes. Global, like the screens.
+        KeyCode::Char('Z') => ui.paused = !ui.paused,
         // F2 opens the setup screen from any sample screen.
         KeyCode::F(2) if ui.screen != Screen::Setup => ui.open_setup(),
         // On the extra screens the table keys have no meaning, so they
@@ -990,8 +1006,14 @@ fn event_loop(
                     }
                 }
             }
-        } else {
+        } else if !ui.paused {
             ui.apply(collector.sample());
+        }
+        if ui.redraw_requested {
+            // Ctrl-L: drop what the terminal thinks is on screen so the
+            // next frame repaints everything from scratch.
+            terminal.clear()?;
+            ui.redraw_requested = false;
         }
     }
 }
@@ -2062,6 +2084,9 @@ fn status_parts(ui: &Ui) -> Vec<String> {
         return vec!["waiting for the first sample · q: quit".to_string()];
     }
     let mut parts = Vec::new();
+    if ui.paused {
+        parts.push("paused".to_string());
+    }
     if let Some(pattern) = &ui.filter {
         parts.push(format!("filter:/{pattern}"));
     }
@@ -3503,6 +3528,41 @@ mod tests {
         ui.config.theme = Theme::Mono;
         let colors = row_colors(&ui, "worker-01");
         assert!(colors.iter().all(|c| *c == Color::Reset), "{colors:?}");
+    }
+
+    /// `Z` pauses sampling: the flag flips, the status line says so, and
+    /// a second press resumes. Works off the process table too.
+    #[test]
+    fn z_toggles_pause_and_the_status_line_says_so() {
+        let mut ui = ui_with(Some(sample()), None);
+        assert!(!ui.paused);
+        handle_key(&mut ui, KeyEvent::from(KeyCode::Char('Z')));
+        assert!(ui.paused);
+        let rows = render(&ui, 80, 24);
+        assert!(rows.iter().any(|row| row.contains("paused")));
+        handle_key(&mut ui, KeyEvent::from(KeyCode::Char('Z')));
+        assert!(!ui.paused);
+        let rows = render(&ui, 80, 24);
+        assert!(rows.iter().all(|row| !row.contains("paused")));
+        // Pause is global: it toggles on the disk screen too.
+        handle_key(&mut ui, KeyEvent::from(KeyCode::Char('d')));
+        handle_key(&mut ui, KeyEvent::from(KeyCode::Char('Z')));
+        assert!(ui.paused);
+    }
+
+    /// Ctrl-L requests a full repaint (the event loop clears the screen);
+    /// a plain `l` does nothing.
+    #[test]
+    fn ctrl_l_requests_a_redraw_and_plain_l_does_not() {
+        let mut ui = ui_with(Some(sample()), None);
+        handle_key(
+            &mut ui,
+            KeyEvent::new(KeyCode::Char('l'), KeyModifiers::CONTROL),
+        );
+        assert!(ui.redraw_requested);
+        ui.redraw_requested = false;
+        handle_key(&mut ui, KeyEvent::from(KeyCode::Char('l')));
+        assert!(!ui.redraw_requested);
     }
 
     /// The memory gauge label reports compressed memory when the sample

@@ -42,7 +42,13 @@ Check an item only when it works and a test or a recorded check shows it. Add th
       `a_process_new_since_the_last_sample_highlights`,
       `a_zombie_highlights_as_dying_and_mono_stays_plain`,
       `large_numbers_color_their_cells`).
-- [ ] Pause updates (Z) and redraw (Ctrl-L)
+- [x] Pause updates (Z) and redraw (Ctrl-L)
+      (`Z` toggles the pause globally: no new samples, keys and actions
+      keep working, the status line shows `paused`; Ctrl-L clears the
+      terminal for a full repaint and works even while a prompt is open;
+      docs/decisions/0021-pause-and-redraw.md; tests
+      `z_toggles_pause_and_the_status_line_says_so`,
+      `ctrl_l_requests_a_redraw_and_plain_l_does_not`).
 - [ ] Read-only mode (`--readonly`)
 
 ## htop: Setup and Options
