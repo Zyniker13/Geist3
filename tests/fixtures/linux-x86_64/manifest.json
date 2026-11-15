@@ -2,8 +2,8 @@
   "format": 1,
   "platform": "linux",
   "arch": "x86_64",
-  "kernel": "7.0.0-1016-aws",
-  "captured_at_unix": 1794750416,
+  "kernel": "7.0.0-1019-azure",
+  "captured_at_unix": 1794754033,
   "source": "ztop 0.1.0-scrubbed",
   "entries": [
     {
@@ -57,63 +57,38 @@
       "kind": "text"
     },
     {
-      "name": "proc-100-statm",
-      "path": "data/proc-100-statm",
+      "name": "proc-1007-statm",
+      "path": "data/proc-1007-statm",
       "kind": "text"
     },
     {
-      "name": "proc-101-statm",
-      "path": "data/proc-101-statm",
+      "name": "proc-1019-statm",
+      "path": "data/proc-1019-statm",
       "kind": "text"
     },
     {
-      "name": "proc-1015-statm",
-      "path": "data/proc-1015-statm",
+      "name": "proc-1026-statm",
+      "path": "data/proc-1026-statm",
       "kind": "text"
     },
     {
-      "name": "proc-102-statm",
-      "path": "data/proc-102-statm",
+      "name": "proc-1041-statm",
+      "path": "data/proc-1041-statm",
       "kind": "text"
     },
     {
-      "name": "proc-103-statm",
-      "path": "data/proc-103-statm",
+      "name": "proc-1052-statm",
+      "path": "data/proc-1052-statm",
       "kind": "text"
     },
     {
-      "name": "proc-104-statm",
-      "path": "data/proc-104-statm",
-      "kind": "text"
-    },
-    {
-      "name": "proc-105-statm",
-      "path": "data/proc-105-statm",
-      "kind": "text"
-    },
-    {
-      "name": "proc-106-statm",
-      "path": "data/proc-106-statm",
-      "kind": "text"
-    },
-    {
-      "name": "proc-107-statm",
-      "path": "data/proc-107-statm",
-      "kind": "text"
-    },
-    {
-      "name": "proc-108-statm",
-      "path": "data/proc-108-statm",
+      "name": "proc-1059-statm",
+      "path": "data/proc-1059-statm",
       "kind": "text"
     },
     {
       "name": "proc-109-statm",
       "path": "data/proc-109-statm",
-      "kind": "text"
-    },
-    {
-      "name": "proc-1096-statm",
-      "path": "data/proc-1096-statm",
       "kind": "text"
     },
     {
@@ -152,63 +127,38 @@
       "kind": "text"
     },
     {
-      "name": "proc-112-statm",
-      "path": "data/proc-112-statm",
+      "name": "proc-1121-statm",
+      "path": "data/proc-1121-statm",
       "kind": "text"
     },
     {
-      "name": "proc-113-statm",
-      "path": "data/proc-113-statm",
+      "name": "proc-1129-statm",
+      "path": "data/proc-1129-statm",
       "kind": "text"
     },
     {
-      "name": "proc-114-statm",
-      "path": "data/proc-114-statm",
+      "name": "proc-1137-statm",
+      "path": "data/proc-1137-statm",
       "kind": "text"
     },
     {
-      "name": "proc-115-statm",
-      "path": "data/proc-115-statm",
+      "name": "proc-1138-statm",
+      "path": "data/proc-1138-statm",
       "kind": "text"
     },
     {
-      "name": "proc-116-statm",
-      "path": "data/proc-116-statm",
+      "name": "proc-1143-statm",
+      "path": "data/proc-1143-statm",
       "kind": "text"
     },
     {
-      "name": "proc-117-statm",
-      "path": "data/proc-117-statm",
-      "kind": "text"
-    },
-    {
-      "name": "proc-118-statm",
-      "path": "data/proc-118-statm",
-      "kind": "text"
-    },
-    {
-      "name": "proc-119-statm",
-      "path": "data/proc-119-statm",
-      "kind": "text"
-    },
-    {
-      "name": "proc-1191-statm",
-      "path": "data/proc-1191-statm",
+      "name": "proc-1175-statm",
+      "path": "data/proc-1175-statm",
       "kind": "text"
     },
     {
       "name": "proc-1192-statm",
       "path": "data/proc-1192-statm",
-      "kind": "text"
-    },
-    {
-      "name": "proc-1194-statm",
-      "path": "data/proc-1194-statm",
-      "kind": "text"
-    },
-    {
-      "name": "proc-1195-statm",
-      "path": "data/proc-1195-statm",
       "kind": "text"
     },
     {
@@ -237,88 +187,33 @@
       "kind": "text"
     },
     {
-      "name": "proc-120-statm",
-      "path": "data/proc-120-statm",
+      "name": "proc-1216-statm",
+      "path": "data/proc-1216-statm",
       "kind": "text"
     },
     {
-      "name": "proc-1206-statm",
-      "path": "data/proc-1206-statm",
+      "name": "proc-1217-statm",
+      "path": "data/proc-1217-statm",
       "kind": "text"
     },
     {
-      "name": "proc-121-statm",
-      "path": "data/proc-121-statm",
+      "name": "proc-1228-statm",
+      "path": "data/proc-1228-statm",
       "kind": "text"
     },
     {
-      "name": "proc-1210-statm",
-      "path": "data/proc-1210-statm",
+      "name": "proc-1272-statm",
+      "path": "data/proc-1272-statm",
       "kind": "text"
     },
     {
-      "name": "proc-1211-statm",
-      "path": "data/proc-1211-statm",
+      "name": "proc-1274-statm",
+      "path": "data/proc-1274-statm",
       "kind": "text"
     },
     {
-      "name": "proc-1214-statm",
-      "path": "data/proc-1214-statm",
-      "kind": "text"
-    },
-    {
-      "name": "proc-122-statm",
-      "path": "data/proc-122-statm",
-      "kind": "text"
-    },
-    {
-      "name": "proc-123-statm",
-      "path": "data/proc-123-statm",
-      "kind": "text"
-    },
-    {
-      "name": "proc-124-statm",
-      "path": "data/proc-124-statm",
-      "kind": "text"
-    },
-    {
-      "name": "proc-1246-statm",
-      "path": "data/proc-1246-statm",
-      "kind": "text"
-    },
-    {
-      "name": "proc-125-statm",
-      "path": "data/proc-125-statm",
-      "kind": "text"
-    },
-    {
-      "name": "proc-126-statm",
-      "path": "data/proc-126-statm",
-      "kind": "text"
-    },
-    {
-      "name": "proc-1260-statm",
-      "path": "data/proc-1260-statm",
-      "kind": "text"
-    },
-    {
-      "name": "proc-1262-statm",
-      "path": "data/proc-1262-statm",
-      "kind": "text"
-    },
-    {
-      "name": "proc-127-statm",
-      "path": "data/proc-127-statm",
-      "kind": "text"
-    },
-    {
-      "name": "proc-128-statm",
-      "path": "data/proc-128-statm",
-      "kind": "text"
-    },
-    {
-      "name": "proc-1281-statm",
-      "path": "data/proc-1281-statm",
+      "name": "proc-1289-statm",
+      "path": "data/proc-1289-statm",
       "kind": "text"
     },
     {
@@ -327,28 +222,8 @@
       "kind": "text"
     },
     {
-      "name": "proc-130-statm",
-      "path": "data/proc-130-statm",
-      "kind": "text"
-    },
-    {
-      "name": "proc-1320-statm",
-      "path": "data/proc-1320-statm",
-      "kind": "text"
-    },
-    {
-      "name": "proc-1340-statm",
-      "path": "data/proc-1340-statm",
-      "kind": "text"
-    },
-    {
-      "name": "proc-1358-statm",
-      "path": "data/proc-1358-statm",
-      "kind": "text"
-    },
-    {
-      "name": "proc-1366-statm",
-      "path": "data/proc-1366-statm",
+      "name": "proc-1313-statm",
+      "path": "data/proc-1313-statm",
       "kind": "text"
     },
     {
@@ -357,43 +232,13 @@
       "kind": "text"
     },
     {
-      "name": "proc-141-statm",
-      "path": "data/proc-141-statm",
-      "kind": "text"
-    },
-    {
-      "name": "proc-142-statm",
-      "path": "data/proc-142-statm",
-      "kind": "text"
-    },
-    {
-      "name": "proc-1430-statm",
-      "path": "data/proc-1430-statm",
-      "kind": "text"
-    },
-    {
-      "name": "proc-1438-statm",
-      "path": "data/proc-1438-statm",
-      "kind": "text"
-    },
-    {
-      "name": "proc-1481-statm",
-      "path": "data/proc-1481-statm",
-      "kind": "text"
-    },
-    {
-      "name": "proc-1496-statm",
-      "path": "data/proc-1496-statm",
-      "kind": "text"
-    },
-    {
       "name": "proc-15-statm",
       "path": "data/proc-15-statm",
       "kind": "text"
     },
     {
-      "name": "proc-1518-statm",
-      "path": "data/proc-1518-statm",
+      "name": "proc-152-statm",
+      "path": "data/proc-152-statm",
       "kind": "text"
     },
     {
@@ -402,18 +247,8 @@
       "kind": "text"
     },
     {
-      "name": "proc-1639-statm",
-      "path": "data/proc-1639-statm",
-      "kind": "text"
-    },
-    {
-      "name": "proc-1666-statm",
-      "path": "data/proc-1666-statm",
-      "kind": "text"
-    },
-    {
-      "name": "proc-1667-statm",
-      "path": "data/proc-1667-statm",
+      "name": "proc-165-statm",
+      "path": "data/proc-165-statm",
       "kind": "text"
     },
     {
@@ -422,8 +257,28 @@
       "kind": "text"
     },
     {
+      "name": "proc-178-statm",
+      "path": "data/proc-178-statm",
+      "kind": "text"
+    },
+    {
+      "name": "proc-179-statm",
+      "path": "data/proc-179-statm",
+      "kind": "text"
+    },
+    {
       "name": "proc-18-statm",
       "path": "data/proc-18-statm",
+      "kind": "text"
+    },
+    {
+      "name": "proc-181-statm",
+      "path": "data/proc-181-statm",
+      "kind": "text"
+    },
+    {
+      "name": "proc-186-statm",
+      "path": "data/proc-186-statm",
       "kind": "text"
     },
     {
@@ -432,8 +287,28 @@
       "kind": "text"
     },
     {
-      "name": "proc-196-statm",
-      "path": "data/proc-196-statm",
+      "name": "proc-1973-statm",
+      "path": "data/proc-1973-statm",
+      "kind": "text"
+    },
+    {
+      "name": "proc-1975-io",
+      "path": "data/proc-1975-io",
+      "kind": "text"
+    },
+    {
+      "name": "proc-1975-statm",
+      "path": "data/proc-1975-statm",
+      "kind": "text"
+    },
+    {
+      "name": "proc-1994-statm",
+      "path": "data/proc-1994-statm",
+      "kind": "text"
+    },
+    {
+      "name": "proc-1997-statm",
+      "path": "data/proc-1997-statm",
       "kind": "text"
     },
     {
@@ -467,38 +342,43 @@
       "kind": "text"
     },
     {
+      "name": "proc-203-statm",
+      "path": "data/proc-203-statm",
+      "kind": "text"
+    },
+    {
+      "name": "proc-2038-io",
+      "path": "data/proc-2038-io",
+      "kind": "text"
+    },
+    {
+      "name": "proc-2038-statm",
+      "path": "data/proc-2038-statm",
+      "kind": "text"
+    },
+    {
+      "name": "proc-2057-io",
+      "path": "data/proc-2057-io",
+      "kind": "text"
+    },
+    {
+      "name": "proc-2057-statm",
+      "path": "data/proc-2057-statm",
+      "kind": "text"
+    },
+    {
       "name": "proc-21-statm",
       "path": "data/proc-21-statm",
       "kind": "text"
     },
     {
-      "name": "proc-2145-statm",
-      "path": "data/proc-2145-statm",
+      "name": "proc-216-statm",
+      "path": "data/proc-216-statm",
       "kind": "text"
     },
     {
-      "name": "proc-2146-io",
-      "path": "data/proc-2146-io",
-      "kind": "text"
-    },
-    {
-      "name": "proc-2146-statm",
-      "path": "data/proc-2146-statm",
-      "kind": "text"
-    },
-    {
-      "name": "proc-2162-statm",
-      "path": "data/proc-2162-statm",
-      "kind": "text"
-    },
-    {
-      "name": "proc-2186-statm",
-      "path": "data/proc-2186-statm",
-      "kind": "text"
-    },
-    {
-      "name": "proc-2190-statm",
-      "path": "data/proc-2190-statm",
+      "name": "proc-218-statm",
+      "path": "data/proc-218-statm",
       "kind": "text"
     },
     {
@@ -507,28 +387,8 @@
       "kind": "text"
     },
     {
-      "name": "proc-2209-statm",
-      "path": "data/proc-2209-statm",
-      "kind": "text"
-    },
-    {
-      "name": "proc-2218-io",
-      "path": "data/proc-2218-io",
-      "kind": "text"
-    },
-    {
-      "name": "proc-2218-statm",
-      "path": "data/proc-2218-statm",
-      "kind": "text"
-    },
-    {
-      "name": "proc-2237-io",
-      "path": "data/proc-2237-io",
-      "kind": "text"
-    },
-    {
-      "name": "proc-2237-statm",
-      "path": "data/proc-2237-statm",
+      "name": "proc-222-statm",
+      "path": "data/proc-222-statm",
       "kind": "text"
     },
     {
@@ -537,18 +397,33 @@
       "kind": "text"
     },
     {
+      "name": "proc-2311-io",
+      "path": "data/proc-2311-io",
+      "kind": "text"
+    },
+    {
+      "name": "proc-2311-statm",
+      "path": "data/proc-2311-statm",
+      "kind": "text"
+    },
+    {
+      "name": "proc-233-statm",
+      "path": "data/proc-233-statm",
+      "kind": "text"
+    },
+    {
+      "name": "proc-234-statm",
+      "path": "data/proc-234-statm",
+      "kind": "text"
+    },
+    {
+      "name": "proc-239-statm",
+      "path": "data/proc-239-statm",
+      "kind": "text"
+    },
+    {
       "name": "proc-24-statm",
       "path": "data/proc-24-statm",
-      "kind": "text"
-    },
-    {
-      "name": "proc-2487-io",
-      "path": "data/proc-2487-io",
-      "kind": "text"
-    },
-    {
-      "name": "proc-2487-statm",
-      "path": "data/proc-2487-statm",
       "kind": "text"
     },
     {
@@ -567,8 +442,18 @@
       "kind": "text"
     },
     {
+      "name": "proc-2724-statm",
+      "path": "data/proc-2724-statm",
+      "kind": "text"
+    },
+    {
       "name": "proc-28-statm",
       "path": "data/proc-28-statm",
+      "kind": "text"
+    },
+    {
+      "name": "proc-287-statm",
+      "path": "data/proc-287-statm",
       "kind": "text"
     },
     {
@@ -607,8 +492,28 @@
       "kind": "text"
     },
     {
+      "name": "proc-305-statm",
+      "path": "data/proc-305-statm",
+      "kind": "text"
+    },
+    {
+      "name": "proc-306-statm",
+      "path": "data/proc-306-statm",
+      "kind": "text"
+    },
+    {
       "name": "proc-31-statm",
       "path": "data/proc-31-statm",
+      "kind": "text"
+    },
+    {
+      "name": "proc-3162-io",
+      "path": "data/proc-3162-io",
+      "kind": "text"
+    },
+    {
+      "name": "proc-3162-statm",
+      "path": "data/proc-3162-statm",
       "kind": "text"
     },
     {
@@ -617,18 +522,53 @@
       "kind": "text"
     },
     {
+      "name": "proc-322-statm",
+      "path": "data/proc-322-statm",
+      "kind": "text"
+    },
+    {
+      "name": "proc-323-statm",
+      "path": "data/proc-323-statm",
+      "kind": "text"
+    },
+    {
+      "name": "proc-324-statm",
+      "path": "data/proc-324-statm",
+      "kind": "text"
+    },
+    {
+      "name": "proc-325-statm",
+      "path": "data/proc-325-statm",
+      "kind": "text"
+    },
+    {
+      "name": "proc-326-statm",
+      "path": "data/proc-326-statm",
+      "kind": "text"
+    },
+    {
+      "name": "proc-327-statm",
+      "path": "data/proc-327-statm",
+      "kind": "text"
+    },
+    {
+      "name": "proc-328-statm",
+      "path": "data/proc-328-statm",
+      "kind": "text"
+    },
+    {
+      "name": "proc-329-statm",
+      "path": "data/proc-329-statm",
+      "kind": "text"
+    },
+    {
       "name": "proc-33-statm",
       "path": "data/proc-33-statm",
       "kind": "text"
     },
     {
-      "name": "proc-3330-io",
-      "path": "data/proc-3330-io",
-      "kind": "text"
-    },
-    {
-      "name": "proc-3330-statm",
-      "path": "data/proc-3330-statm",
+      "name": "proc-330-statm",
+      "path": "data/proc-330-statm",
       "kind": "text"
     },
     {
@@ -637,13 +577,48 @@
       "kind": "text"
     },
     {
+      "name": "proc-342-statm",
+      "path": "data/proc-342-statm",
+      "kind": "text"
+    },
+    {
+      "name": "proc-343-statm",
+      "path": "data/proc-343-statm",
+      "kind": "text"
+    },
+    {
+      "name": "proc-344-statm",
+      "path": "data/proc-344-statm",
+      "kind": "text"
+    },
+    {
+      "name": "proc-345-statm",
+      "path": "data/proc-345-statm",
+      "kind": "text"
+    },
+    {
+      "name": "proc-346-statm",
+      "path": "data/proc-346-statm",
+      "kind": "text"
+    },
+    {
       "name": "proc-35-statm",
       "path": "data/proc-35-statm",
       "kind": "text"
     },
     {
+      "name": "proc-355-statm",
+      "path": "data/proc-355-statm",
+      "kind": "text"
+    },
+    {
       "name": "proc-356-statm",
       "path": "data/proc-356-statm",
+      "kind": "text"
+    },
+    {
+      "name": "proc-358-statm",
+      "path": "data/proc-358-statm",
       "kind": "text"
     },
     {
@@ -659,16 +634,6 @@
     {
       "name": "proc-38-statm",
       "path": "data/proc-38-statm",
-      "kind": "text"
-    },
-    {
-      "name": "proc-382-statm",
-      "path": "data/proc-382-statm",
-      "kind": "text"
-    },
-    {
-      "name": "proc-384-statm",
-      "path": "data/proc-384-statm",
       "kind": "text"
     },
     {
@@ -707,6 +672,11 @@
       "kind": "text"
     },
     {
+      "name": "proc-407-statm",
+      "path": "data/proc-407-statm",
+      "kind": "text"
+    },
+    {
       "name": "proc-41-statm",
       "path": "data/proc-41-statm",
       "kind": "text"
@@ -722,23 +692,13 @@
       "kind": "text"
     },
     {
-      "name": "proc-438-statm",
-      "path": "data/proc-438-statm",
-      "kind": "text"
-    },
-    {
-      "name": "proc-439-statm",
-      "path": "data/proc-439-statm",
+      "name": "proc-432-statm",
+      "path": "data/proc-432-statm",
       "kind": "text"
     },
     {
       "name": "proc-44-statm",
       "path": "data/proc-44-statm",
-      "kind": "text"
-    },
-    {
-      "name": "proc-440-statm",
-      "path": "data/proc-440-statm",
       "kind": "text"
     },
     {
@@ -764,21 +724,6 @@
     {
       "name": "proc-49-statm",
       "path": "data/proc-49-statm",
-      "kind": "text"
-    },
-    {
-      "name": "proc-491-statm",
-      "path": "data/proc-491-statm",
-      "kind": "text"
-    },
-    {
-      "name": "proc-494-statm",
-      "path": "data/proc-494-statm",
-      "kind": "text"
-    },
-    {
-      "name": "proc-495-statm",
-      "path": "data/proc-495-statm",
       "kind": "text"
     },
     {
@@ -837,11 +782,6 @@
       "kind": "text"
     },
     {
-      "name": "proc-559-statm",
-      "path": "data/proc-559-statm",
-      "kind": "text"
-    },
-    {
       "name": "proc-56-statm",
       "path": "data/proc-56-statm",
       "kind": "text"
@@ -897,33 +837,18 @@
       "kind": "text"
     },
     {
-      "name": "proc-613-statm",
-      "path": "data/proc-613-statm",
-      "kind": "text"
-    },
-    {
       "name": "proc-62-statm",
       "path": "data/proc-62-statm",
       "kind": "text"
     },
     {
+      "name": "proc-627-statm",
+      "path": "data/proc-627-statm",
+      "kind": "text"
+    },
+    {
       "name": "proc-63-statm",
       "path": "data/proc-63-statm",
-      "kind": "text"
-    },
-    {
-      "name": "proc-637-statm",
-      "path": "data/proc-637-statm",
-      "kind": "text"
-    },
-    {
-      "name": "proc-638-statm",
-      "path": "data/proc-638-statm",
-      "kind": "text"
-    },
-    {
-      "name": "proc-639-statm",
-      "path": "data/proc-639-statm",
       "kind": "text"
     },
     {
@@ -937,23 +862,8 @@
       "kind": "text"
     },
     {
-      "name": "proc-653-statm",
-      "path": "data/proc-653-statm",
-      "kind": "text"
-    },
-    {
-      "name": "proc-659-statm",
-      "path": "data/proc-659-statm",
-      "kind": "text"
-    },
-    {
       "name": "proc-66-statm",
       "path": "data/proc-66-statm",
-      "kind": "text"
-    },
-    {
-      "name": "proc-667-statm",
-      "path": "data/proc-667-statm",
       "kind": "text"
     },
     {
@@ -962,23 +872,8 @@
       "kind": "text"
     },
     {
-      "name": "proc-675-statm",
-      "path": "data/proc-675-statm",
-      "kind": "text"
-    },
-    {
-      "name": "proc-679-statm",
-      "path": "data/proc-679-statm",
-      "kind": "text"
-    },
-    {
       "name": "proc-68-statm",
       "path": "data/proc-68-statm",
-      "kind": "text"
-    },
-    {
-      "name": "proc-682-statm",
-      "path": "data/proc-682-statm",
       "kind": "text"
     },
     {
@@ -1027,6 +922,11 @@
       "kind": "text"
     },
     {
+      "name": "proc-725-statm",
+      "path": "data/proc-725-statm",
+      "kind": "text"
+    },
+    {
       "name": "proc-73-statm",
       "path": "data/proc-73-statm",
       "kind": "text"
@@ -1052,23 +952,8 @@
       "kind": "text"
     },
     {
-      "name": "proc-776-statm",
-      "path": "data/proc-776-statm",
-      "kind": "text"
-    },
-    {
       "name": "proc-78-statm",
       "path": "data/proc-78-statm",
-      "kind": "text"
-    },
-    {
-      "name": "proc-785-statm",
-      "path": "data/proc-785-statm",
-      "kind": "text"
-    },
-    {
-      "name": "proc-786-statm",
-      "path": "data/proc-786-statm",
       "kind": "text"
     },
     {
@@ -1117,6 +1002,11 @@
       "kind": "text"
     },
     {
+      "name": "proc-829-statm",
+      "path": "data/proc-829-statm",
+      "kind": "text"
+    },
+    {
       "name": "proc-83-statm",
       "path": "data/proc-83-statm",
       "kind": "text"
@@ -1152,6 +1042,11 @@
       "kind": "text"
     },
     {
+      "name": "proc-899-statm",
+      "path": "data/proc-899-statm",
+      "kind": "text"
+    },
+    {
       "name": "proc-9-cmdline",
       "path": "data/proc-9-cmdline",
       "kind": "text"
@@ -1182,8 +1077,18 @@
       "kind": "text"
     },
     {
+      "name": "proc-901-statm",
+      "path": "data/proc-901-statm",
+      "kind": "text"
+    },
+    {
       "name": "proc-91-statm",
       "path": "data/proc-91-statm",
+      "kind": "text"
+    },
+    {
+      "name": "proc-915-statm",
+      "path": "data/proc-915-statm",
       "kind": "text"
     },
     {
@@ -1197,8 +1102,18 @@
       "kind": "text"
     },
     {
+      "name": "proc-939-statm",
+      "path": "data/proc-939-statm",
+      "kind": "text"
+    },
+    {
       "name": "proc-94-statm",
       "path": "data/proc-94-statm",
+      "kind": "text"
+    },
+    {
+      "name": "proc-949-statm",
+      "path": "data/proc-949-statm",
       "kind": "text"
     },
     {
@@ -1212,18 +1127,8 @@
       "kind": "text"
     },
     {
-      "name": "proc-97-statm",
-      "path": "data/proc-97-statm",
-      "kind": "text"
-    },
-    {
       "name": "proc-98-statm",
       "path": "data/proc-98-statm",
-      "kind": "text"
-    },
-    {
-      "name": "proc-99-statm",
-      "path": "data/proc-99-statm",
       "kind": "text"
     },
     {
@@ -1254,6 +1159,21 @@
     {
       "name": "proc-net-dev",
       "path": "data/proc-net-dev",
+      "kind": "text"
+    },
+    {
+      "name": "proc-pressure-cpu",
+      "path": "data/proc-pressure-cpu",
+      "kind": "text"
+    },
+    {
+      "name": "proc-pressure-io",
+      "path": "data/proc-pressure-io",
+      "kind": "text"
+    },
+    {
+      "name": "proc-pressure-memory",
+      "path": "data/proc-pressure-memory",
       "kind": "text"
     },
     {
@@ -1299,21 +1219,6 @@
     {
       "name": "sys-class-hwmon-hwmon0-temp1_label",
       "path": "data/sys-class-hwmon-hwmon0-temp1_label",
-      "kind": "text"
-    },
-    {
-      "name": "sys-class-hwmon-hwmon1-name",
-      "path": "data/sys-class-hwmon-hwmon1-name",
-      "kind": "text"
-    },
-    {
-      "name": "sys-class-hwmon-hwmon1-temp1_input",
-      "path": "data/sys-class-hwmon-hwmon1-temp1_input",
-      "kind": "text"
-    },
-    {
-      "name": "sys-class-hwmon-hwmon1-temp1_label",
-      "path": "data/sys-class-hwmon-hwmon1-temp1_label",
       "kind": "text"
     }
   ]
