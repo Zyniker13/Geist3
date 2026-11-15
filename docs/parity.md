@@ -15,7 +15,13 @@ Check an item only when it works and a test or a recorded check shows it. Add th
   `meter_styles_change_the_header_rendering`; history trims at 120
   samples). Configurable columns of meters: still open, split out.
 - [ ] Configurable columns of meters (htop's meter-layout editor)
-- [ ] Screen tabs, including a dedicated I/O screen
+- [x] Screen tabs, including a dedicated I/O screen (decision 0026: a
+  tab strip above every sub-screen's panel marks the active screen and
+  its labels are clickable; the I/O screen, key `o`, lists per-process
+  read/write rates and totals busiest first, with the standard empty
+  state where the OS reports no per-process I/O. Tests
+  `tab_strip_marks_the_active_screen_and_clicks_switch`,
+  `the_io_screen_lists_rates_or_says_none`; snapshots byte-identical)
 
 ## htop: Process Table
 

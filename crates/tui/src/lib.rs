@@ -133,6 +133,8 @@ pub enum Screen {
     AppleSilicon,
     Disk,
     Network,
+    /// Per-process disk I/O: who is reading and writing, at what rate.
+    Io,
     Thermal,
     Setup,
 }
@@ -1065,6 +1067,7 @@ fn handle_key(ui: &mut Ui, key: KeyEvent) -> bool {
         KeyCode::Char('a') => ui.goto_screen(Screen::AppleSilicon),
         KeyCode::Char('d') => ui.goto_screen(Screen::Disk),
         KeyCode::Char('n') => ui.goto_screen(Screen::Network),
+        KeyCode::Char('o') => ui.goto_screen(Screen::Io),
         KeyCode::Char('t') => ui.goto_screen(Screen::Thermal),
         // `Z` pauses sampling: the picture freezes but the keys keep
         // working; a second press resumes. Global, like the screens.
@@ -1230,31 +1233,149 @@ fn draw_screen(frame: &mut Frame, ui: &Ui) {
         draw_setup(frame, ui, frame.area());
         return;
     }
-    if ui.screen == Screen::AppleSilicon {
-        draw_silicon(frame, ui, frame.area());
+    if ui.screen == Screen::ProcessTable {
+        let (header_area, table_area) = split_table_area(ui, frame.area());
+        draw_header(frame, ui, header_area);
+        draw_processes(frame, ui, table_area);
         if ui.menu.is_some() {
             draw_menu(frame, ui, frame.area());
         }
         return;
     }
-    if ui.screen == Screen::Disk {
-        draw_disks(frame, ui, frame.area());
-        return;
+    // Every other screen is a tab: a one-row strip above the panel shows
+    // where you are and clicking a tab switches screens (the mouse handler
+    // maps the strip's row through `tab_at`).
+    let area = frame.area();
+    let strip = ratatui::layout::Rect { height: 1, ..area };
+    let panel = ratatui::layout::Rect {
+        y: area.y + 1,
+        height: area.height.saturating_sub(1),
+        ..area
+    };
+    frame.render_widget(Paragraph::new(tab_bar(ui)), strip);
+    match ui.screen {
+        Screen::AppleSilicon => draw_silicon(frame, ui, panel),
+        Screen::Disk => draw_disks(frame, ui, panel),
+        Screen::Network => draw_network(frame, ui, panel),
+        Screen::Io => draw_io(frame, ui, panel),
+        Screen::Thermal => draw_thermal(frame, ui, panel),
+        _ => {}
     }
-    if ui.screen == Screen::Network {
-        draw_network(frame, ui, frame.area());
-        return;
-    }
-    if ui.screen == Screen::Thermal {
-        draw_thermal(frame, ui, frame.area());
-        return;
-    }
-    let (header_area, table_area) = split_table_area(ui, frame.area());
-    draw_header(frame, ui, header_area);
-    draw_processes(frame, ui, table_area);
-    if ui.menu.is_some() {
+    if ui.screen == Screen::AppleSilicon && ui.menu.is_some() {
         draw_menu(frame, ui, frame.area());
     }
+}
+
+/// The tab strip's text: the screens in tab order with the active one
+/// bracketed. Setup is a modal screen with its own keys, so it has no tab.
+fn tab_bar(ui: &Ui) -> Line<'static> {
+    const TABS: [(Screen, &str); 6] = [
+        (Screen::ProcessTable, "main"),
+        (Screen::AppleSilicon, "silicon"),
+        (Screen::Disk, "disks"),
+        (Screen::Network, "net"),
+        (Screen::Io, "io"),
+        (Screen::Thermal, "temps"),
+    ];
+    let mut spans = Vec::new();
+    for (screen, label) in TABS {
+        let text = if ui.screen == screen {
+            format!("[{label}] ")
+        } else {
+            format!("{label}  ")
+        };
+        spans.push(Span::from(text));
+    }
+    let line = Line::from(spans);
+    match ui.config.theme {
+        Theme::Color => line.style(Style::new().bold()),
+        Theme::Mono => line,
+    }
+}
+
+/// The screen a click on the tab strip's row lands on: the label under
+/// the column, or `None` between labels. Mirrors `tab_bar`'s widths.
+fn tab_at(ui: &Ui, column: u16) -> Option<Screen> {
+    const TABS: [(Screen, &str); 6] = [
+        (Screen::ProcessTable, "main"),
+        (Screen::AppleSilicon, "silicon"),
+        (Screen::Disk, "disks"),
+        (Screen::Network, "net"),
+        (Screen::Io, "io"),
+        (Screen::Thermal, "temps"),
+    ];
+    let mut offset = 0u16;
+    for (screen, label) in TABS {
+        let width = label.chars().count() as u16;
+        if column < offset + width {
+            return Some(screen);
+        }
+        if ui.screen == screen {
+            offset += width + 1; // "] " after the active label
+        } else {
+            offset += width + 2; // two spaces after an inactive label
+        }
+    }
+    None
+}
+
+/// The per-process I/O panel: who is reading and writing, at what rate,
+/// busiest first. Linux fills `/proc/<pid>/io`; on macOS and in replays
+/// the sample carries no per-process I/O and the panel says so.
+fn draw_io(frame: &mut Frame, ui: &Ui, area: ratatui::layout::Rect) {
+    let titled = |title: &'static str| Block::default().borders(Borders::ALL).title(title);
+    let Some(sample) = ui.sample.as_ref() else {
+        frame.render_widget(
+            Paragraph::new(vec![Line::from("no sample yet")]).block(titled("Process I/O")),
+            area,
+        );
+        return;
+    };
+    let mut rows: Vec<&Process> = sample
+        .processes
+        .iter()
+        .filter(|p| {
+            p.io.read_bytes.is_some()
+                || p.io.write_bytes.is_some()
+                || p.io.read_rate.is_some()
+                || p.io.write_rate.is_some()
+        })
+        .collect();
+    if rows.is_empty() {
+        frame.render_widget(panel_empty("Process I/O", "per-process I/O", 'o'), area);
+        return;
+    }
+    rows.sort_by(|a, b| {
+        let key = |p: &Process| p.io.read_rate.unwrap_or(0.0) + p.io.write_rate.unwrap_or(0.0);
+        key(b)
+            .partial_cmp(&key(a))
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    let rate = |rate: Option<f64>| rate.map_or_else(|| "-".to_string(), |r| rate_text(Some(r)));
+    let total =
+        |bytes: Option<u64>| bytes.map_or_else(|| "-".to_string(), |b| bytes_text(b as f64));
+    let mut lines = vec![Line::from(
+        format!(
+            "{:<7} {:<9} {:>9} {:>9} {:>9} {:>9} {}",
+            "pid", "user", "read/s", "write/s", "read", "write", "name"
+        )
+        .bold(),
+    )];
+    for process in rows.iter().take(area.height.saturating_sub(5) as usize) {
+        lines.push(Line::from(format!(
+            "{:<7} {:<9.9} {:>9} {:>9} {:>9} {:>9} {}",
+            process.pid,
+            process.user,
+            rate(process.io.read_rate),
+            rate(process.io.write_rate),
+            total(process.io.read_bytes),
+            total(process.io.write_bytes),
+            process.name,
+        )));
+    }
+    lines.push(Line::from(""));
+    lines.push(Line::from("o process table · q quit"));
+    frame.render_widget(Paragraph::new(lines).block(titled("Process I/O")), area);
 }
 
 /// One `label     value` row for the Apple Silicon screen.
@@ -1635,7 +1756,7 @@ fn help_lines() -> Vec<Line<'static>> {
         ("Space, c, U", "tag row, tag children, untag all"),
         ("F9, K", "send a signal to the tagged rows"),
         ("F7, F8", "renice -1 / +1"),
-        ("a, d, n, t", "silicon, disks, network, thermal"),
+        ("a, d, n, o, t", "silicon, disks, network, io, thermal"),
     ];
     let mut lines = vec![Line::from("Keys (any key closes)").bold()];
     for (keys, what) in rows {
@@ -2415,7 +2536,7 @@ fn status_parts(ui: &Ui) -> Vec<String> {
         parts.push(notice.clone());
     }
     parts.push(format!(
-        "q: quit · tab: sort {} · i: reverse · f3: search · f4: filter · u: user · space: tag · j/k: select · f: follow · f5: tree · enter: fold · f9: signal · f7/f8: renice · a: silicon · d: disks · n: net · t: temps",
+        "q: quit · tab: sort {} · i: reverse · f3: search · f4: filter · u: user · space: tag · j/k: select · f: follow · f5: tree · enter: fold · f9: signal · f7/f8: renice · a: silicon · d: disks · n: net · o: io · t: temps",
         sort_label(ui.sort, ui.descending)
     ));
     parts
@@ -2476,6 +2597,7 @@ fn hint_key(label: &str) -> Option<KeyEvent> {
         "a" => KeyCode::Char('a'),
         "d" => KeyCode::Char('d'),
         "n" => KeyCode::Char('n'),
+        "o" => KeyCode::Char('o'),
         "t" => KeyCode::Char('t'),
         _ => return None,
     };
@@ -2698,11 +2820,23 @@ fn handle_mouse(
     row: u16,
     total: ratatui::layout::Rect,
 ) -> Option<KeyEvent> {
-    if ui.screen != Screen::ProcessTable
+    if ui.screen == Screen::Setup
         || ui.menu.is_some()
         || ui.filter.is_some()
         || ui.search.is_some()
+        || ui.help
     {
+        return None;
+    }
+    // The sub-screens are tabs: their first row is the tab strip, and a
+    // click on a label switches screens (clicking the active tab returns
+    // to the process table, matching the keys' toggle behavior).
+    if ui.screen != Screen::ProcessTable {
+        if kind == MouseEventKind::Down(MouseButton::Left) && row == total.y {
+            if let Some(screen) = tab_at(ui, column) {
+                ui.goto_screen(screen);
+            }
+        }
         return None;
     }
     let (header, table) = split_table_area(ui, total);
@@ -4896,7 +5030,96 @@ mod tests {
         );
     }
 
-    /// Mouse support (docs/parity.md: "click to select, sort and use the
+    /// The tab strip on the sub-screens marks the active screen and a
+    /// click on a label switches screens (docs/parity.md: screen tabs).
+    #[test]
+    fn tab_strip_marks_the_active_screen_and_clicks_switch() {
+        let mut ui = ui_with(Some(sample()), None);
+        ui.screen = Screen::Disk;
+        let rows = render(&ui, 80, 24);
+        assert!(
+            rows[0].contains("[disks]") && rows[0].contains("main"),
+            "the strip marks the active tab: {rows:?}"
+        );
+        // Clicking another label switches to it.
+        let mut ui = ui_with(Some(sample()), None);
+        ui.screen = Screen::Disk;
+        let event = handle_mouse(
+            &mut ui,
+            MouseEventKind::Down(MouseButton::Left),
+            23, // inside "net": main(4+2) silicon(7+2) disks(5+2)=20..23
+            0,
+            ratatui::layout::Rect::new(0, 0, 80, 24),
+        );
+        assert!(event.is_none());
+        assert_eq!(ui.screen, Screen::Network, "the click switched tabs");
+        // Clicking the active tab returns to the process table.
+        let mut ui = ui_with(Some(sample()), None);
+        ui.screen = Screen::Disk;
+        handle_mouse(
+            &mut ui,
+            MouseEventKind::Down(MouseButton::Left),
+            15, // inside "disks"
+            0,
+            ratatui::layout::Rect::new(0, 0, 80, 24),
+        );
+        assert_eq!(ui.screen, Screen::ProcessTable, "the active tab returns");
+        // A click below the strip does nothing on a sub-screen.
+        let mut ui = ui_with(Some(sample()), None);
+        ui.screen = Screen::Disk;
+        handle_mouse(
+            &mut ui,
+            MouseEventKind::Down(MouseButton::Left),
+            0,
+            5,
+            ratatui::layout::Rect::new(0, 0, 80, 24),
+        );
+        assert_eq!(ui.screen, Screen::Disk, "the panel is not clickable");
+    }
+
+    /// The I/O screen (key `o`): a live sample with per-process I/O lists
+    /// the busiest processes first; without any I/O the panel says so.
+    #[test]
+    fn the_io_screen_lists_rates_or_says_none() {
+        let mut ui = ui_with(Some(sample()), None);
+        ui.goto_screen(Screen::Io);
+        let rows = render(&ui, 80, 24);
+        assert!(
+            rows.iter().any(|row| row.contains("Process I/O")),
+            "the panel opens: {rows:?}"
+        );
+        // The test sample carries no per-process I/O, so the panel says so.
+        assert!(
+            rows.iter()
+                .any(|row| row.contains("No per-process I/O data")),
+            "{rows:?}"
+        );
+        // With I/O data the rows show rates and totals, hottest first.
+        let mut sample = sample();
+        for (index, process) in sample.processes.iter_mut().enumerate() {
+            process.io.read_rate = Some(index as f64 * 100.0);
+            process.io.write_rate = Some(0.0);
+            process.io.read_bytes = Some(1024 * (index as u64 + 1));
+        }
+        let mut ui = ui_with(Some(sample), None);
+        ui.goto_screen(Screen::Io);
+        let rows = render(&ui, 80, 24);
+        assert!(
+            rows.iter()
+                .any(|row| row.contains("read/s") && row.contains("pid")),
+            "the table header: {rows:?}"
+        );
+        // The busiest process (the highest rate) leads the rows.
+        let data_rows: Vec<&String> = rows
+            .iter()
+            .filter(|row| row.contains("worker") || row.contains("init"))
+            .collect();
+        assert!(data_rows.len() >= 2, "io rows render: {data_rows:?}");
+        // A second `o` returns to the process table.
+        ui.goto_screen(Screen::Io);
+        assert_eq!(ui.screen, Screen::ProcessTable);
+    }
+
     /// function bar"): a left click on a process row moves the selection
     /// to that row, and the wheel walks the selection.
     #[test]
