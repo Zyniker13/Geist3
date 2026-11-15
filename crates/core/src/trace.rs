@@ -133,7 +133,8 @@ pub fn start(pid: u32) -> Result<TraceHandle, String> {
 }
 
 /// The tracer thread: wait for stops, read one syscall-info record per
-/// stop, and resume. Exit events become lines; entry events just resume.
+/// stop, and resume. Exit events become lines, named by the entry that
+/// preceded them; entry events just resume.
 #[cfg(target_os = "linux")]
 fn trace_loop(
     pid: libc::pid_t,
@@ -142,9 +143,10 @@ fn trace_loop(
 ) {
     // Kick the tracee: a seized tracee that is already running produces
     // no stops on its own, so waiting alone would never see a syscall.
-    // The interrupt's group-stop is where syscall stepping begins — the
-    // resume logic in the loop below steps it through every boundary,
-    // and the syscall it was interrupted in is reported as exiting.
+    // The interrupt's stop is where syscall stepping begins. The syscall
+    // the tracee was interrupted in is not reported as exiting — the
+    // kernel restarts it, so its entry is what steps first — and the
+    // loop below skips exit reports whose entry it never saw.
     unsafe {
         libc::ptrace(libc::PTRACE_INTERRUPT, pid, 0, 0);
     }
@@ -153,6 +155,10 @@ fn trace_loop(
     // tracee's pid specifically — never -1 — so the tracer can never
     // reap another part of the process tree.
     const WALL: libc::c_int = 0x4000_0000;
+    // The syscall number of the entry most recently stepped past: an
+    // exit record carries no number, so the line's name comes from the
+    // entry that preceded the exit.
+    let mut current: Option<u64> = None;
     loop {
         if stop.load(std::sync::atomic::Ordering::SeqCst) {
             break;
@@ -168,53 +174,59 @@ fn trace_loop(
             break;
         }
         if libc::WIFSTOPPED(status) {
-            let mut info = [0u8; 128];
-            // A short read means the stop is not a syscall stop; op
-            // stays out of the entry/exit range, so the resume below
-            // treats it like a signal-delivery stop it knows nothing
-            // about and passes the signal through.
-            let mut op: u8 = u8::MAX;
+            // Ask the kernel what kind of stop this is: the buffer size
+            // goes in the addr argument and the buffer itself in data —
+            // a zero size would leave the buffer unfilled. An exit stop
+            // reports the return value and an error flag but carries no
+            // syscall number; the entry stop carried that.
+            let mut info: libc::ptrace_syscall_info = unsafe { std::mem::zeroed() };
             let read = unsafe {
                 libc::ptrace(
                     libc::PTRACE_GET_SYSCALL_INFO,
                     pid,
-                    0,
-                    info.as_mut_ptr() as *mut libc::c_void,
+                    std::mem::size_of::<libc::ptrace_syscall_info>() as *mut libc::c_void,
+                    &mut info as *mut libc::ptrace_syscall_info as *mut libc::c_void,
                 )
             };
-            if read as usize >= 32 {
-                // The record: op u8, pad[3], arch u32, two u64 pointers,
-                // then the op-specific union (entry: nr + args[6];
-                // exit: nr + args[6] + ret + is_error). The offsets are
-                // identical on every 64-bit architecture.
-                op = info[0];
-                let nr = u64::from_ne_bytes(info[32..40].try_into().expect("32 bytes"));
-                if op == 2 {
-                    // Exit: ret at 88, is_error at 96.
-                    let ret = i64::from_ne_bytes(info[88..96].try_into().expect("88 bytes"));
-                    let is_error = info[96];
-                    let line = if is_error != 0 {
-                        format!("{} = -{}", syscall_name(nr), -ret)
-                    } else {
-                        format!("{} = {ret:#x}", syscall_name(nr))
-                    };
-                    let mut ring = lines.lock().expect("trace ring");
-                    if ring.len() == RING_LINES {
-                        ring.pop_front();
+            if read > 0 {
+                match info.op {
+                    libc::PTRACE_SYSCALL_INFO_ENTRY => {
+                        current = Some(unsafe { info.u.entry.nr });
                     }
-                    ring.push_back(line);
+                    libc::PTRACE_SYSCALL_INFO_EXIT => {
+                        // An exit without the entry we traced — the
+                        // syscall the tracee was interrupted in at
+                        // attach — has no number to name; the restarted
+                        // syscall reports its own entry soon after.
+                        if let Some(nr) = current.take() {
+                            let (sval, is_error) =
+                                unsafe { (info.u.exit.sval, info.u.exit.is_error) };
+                            let line = if is_error != 0 {
+                                format!("{} = -{}", syscall_name(nr), -sval)
+                            } else {
+                                format!("{} = {sval:#x}", syscall_name(nr))
+                            };
+                            let mut ring = lines.lock().expect("trace ring");
+                            if ring.len() == RING_LINES {
+                                ring.pop_front();
+                            }
+                            ring.push_back(line);
+                        }
+                    }
+                    _ => {}
                 }
             }
-            // Resume: step to the next syscall stop. A stop that is not a
-            // syscall stop is a signal-delivery-stop; resuming it with 0
-            // would swallow the signal, so real signals are passed back
-            // unchanged (SIGTRAP and SIGSTOP belong to the tracer/stop
-            // machinery itself). Group-stops resume too — a tracee
-            // stopped before the trace continues under the tracer.
-            let resume_sig = if op == 0 {
+            // Resume: step to the next syscall stop. A stop that is not
+            // a syscall stop is a signal-delivery or event stop; real
+            // signals pass through unchanged. SIGTRAP and SIGSTOP
+            // belong to the tracer machinery itself, and event stops
+            // encode their kind in the stop-signal bits — not a
+            // deliverable signal.
+            let resume_sig = if info.op == libc::PTRACE_SYSCALL_INFO_NONE {
                 match libc::WSTOPSIG(status) {
                     libc::SIGTRAP | libc::SIGSTOP => 0,
-                    sig => sig,
+                    sig if sig < 128 => sig,
+                    _ => 0,
                 }
             } else {
                 0
@@ -316,6 +328,7 @@ const X86_64_SYSCALLS: &[(u64, &str)] = &[
     (186, "gettid"),
     (202, "futex"),
     (218, "set_tid_address"),
+    (219, "restart_syscall"),
     (228, "clock_gettime"),
     (230, "clock_nanosleep"),
     (232, "epoll_wait"),
@@ -443,9 +456,13 @@ mod tests {
 
     /// A child ztop may trace without privileges (yama's default allows
     /// tracing your own children), kept alive for the test's duration.
+    /// Short sleeps in a loop: the tracer sees a syscall boundary every
+    /// few tens of milliseconds, so the test never waits on the one
+    /// long sleep a single `sleep 30` would sit inside.
     fn traceable_child() -> std::process::Child {
-        std::process::Command::new("/bin/sleep")
-            .arg("30")
+        std::process::Command::new("/bin/sh")
+            .arg("-c")
+            .arg("while :; do sleep 0.05; done")
             .spawn()
             .expect("spawn the traced child")
     }
@@ -455,10 +472,11 @@ mod tests {
         let mut child = traceable_child();
         let pid = child.id();
         let trace = start(pid).expect("trace the child");
-        // The tracer interrupts the tracee out of its nanosleep; the
-        // interrupted syscall's exit is the first recorded line. Poll
-        // with a deadline instead of sleeping a fixed slice — CI
-        // machines vary in speed.
+        // The tracer interrupts the tracee out of its first sleep; the
+        // restarted sleep and every later one report entry and exit
+        // stops, and the exits become the recorded lines. Poll with a
+        // deadline instead of sleeping a fixed slice — CI machines
+        // vary in speed.
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
         let mut lines: Vec<String> = Vec::new();
         while std::time::Instant::now() < deadline {

@@ -76,6 +76,24 @@ live test polls with a 3 s deadline instead of a fixed sleep, and a
 failed trace-thread spawn now detaches the tracee instead of leaving
 it attached and stopped.
 
+## Amendment 2026-11-15b — the record was never read
+
+CI failed again on the same live test: the ring stayed empty even with
+the attach kick. Two defects sat in the record read itself. The size
+argument went into the addr slot as 0, so the kernel copied nothing
+into the buffer and the op byte stayed 0 (never an exit). And the
+hand-rolled offsets assumed a 32-byte header with a number inside the
+exit variant — the real record (linux/ptrace.h, mirrored by libc's
+`ptrace_syscall_info`) has a 24-byte header and an exit variant of
+only `{ sval, is_error }`. The loop now passes its buffer's size,
+matches the op against libc's `PTRACE_SYSCALL_INFO_*` constants,
+remembers the entry's syscall number (an exit record has none) and
+skips exit reports whose entry it never saw — the syscall the tracee
+was interrupted in comes back as a restart entry, not an exit. The
+live test's child now runs `sh -c 'while :; do sleep 0.05; done'` so
+syscall boundaries arrive every few tens of milliseconds instead of
+hiding behind one 30-second sleep.
+
 ## Consequences
 
 - The detail line of `docs/parity.md` is now fully checked once this
