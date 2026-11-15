@@ -116,6 +116,13 @@ and userland threads hidden by default)
 toggle the program path in the name column (the path shows whenever the
 system reports one)
 .TP
+.BR e ", " l
+read the environment or the open files of the tagged rows (else the
+cursor's row) live from the OS into a popup: j/k scroll, Esc or q closes;
+what the OS allows decides the outcome \- a same\-user process works
+unprivileged, another user's process needs privileges, and the OS error
+shows in the status line
+.TP
 .BR a ", " d ", " n ", " o ", " t
 silicon, disks, network, io, thermal
 .PP

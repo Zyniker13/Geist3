@@ -62,7 +62,21 @@ Check an item only when it works and a test or a recorded check shows it. Add th
   default. Tests `process_row_marks_thread_entries`,
   `the_threads_cycle_shows_and_hides_rows`, `p_toggles_the_program_path`;
   snapshots byte-identical)
-- [ ] Process environment (e), open files (l) and syscall trace (s) where the OS allows
+- [x] Process environment (e) and open files (l) where the OS allows
+      (decision 0029; live reads in `crates/core/src/detail.rs`:
+      Linux `/proc/<pid>/environ` + `/proc/<pid>/fd`, macOS
+      `KERN_PROCARGS2` + `proc_pidinfo`/`proc_pidfdinfo`; failures
+      reported on the status line, read-only mode allows the passive
+      read; popup with j/k scroll, Esc/q closes; tests
+      `the_own_process_environment_reads_back`,
+      `the_own_process_open_files_read_back`, `a_gone_process_reports_an_error`,
+      `the_environment_overlay_renders_and_scrolls`,
+      `the_open_files_overlay_lists_fds`,
+      `e_and_l_report_a_failed_read_and_stay_closed`,
+      `the_status_hints_replay_the_detail_keys`; snapshots byte-identical)
+- [ ] Syscall trace (s) of the selected process where the OS allows
+      (the ptrace tracer ships as its own batch; Linux-only, macOS
+      reports unavailable; needs its own decision)
 - [x] Highlight new and dying processes, and large numbers
       (new: yellow row, pid not in the previous sample's set; dying:
       red row for state `Z`; large numbers: CPU% >= 100 and MEM% >= 50

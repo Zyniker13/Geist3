@@ -3,13 +3,15 @@
 Updated after every working session.
 
 - **Current milestone:** M3 (Full TUI Parity).
-- **Last done:** M3 batch 7y — I/O priority and CPU affinity pickers (decision 0028): `Control::{IoPriority, Affinity}` via `ioprio_set`/`sched_setaffinity` (Linux-only, honest refusal elsewhere); `I`/`A` open pickers sharing the signal menu's popup (tagged rows or cursor; readonly refuses); Linux CI tests exercise both syscalls on the test's own pid. Snapshots byte-identical. Tests: 6 (1 core, 5 TUI). Earlier this session: 7x (threads + path, 0027) as `5990bd1`; 7w (screen tabs + I/O screen, 0026) as `0c438bc`.
-- **Next step:** the remaining open `docs/parity.md` items — env/open-files/trace, setup screens, configurable meter columns — then M4+. (7g macOS CPU frequency remains settled: decision 0011 and `docs/m2-power-checks.md`.)
+- **Last done:** M3 batch 7z — per-process detail reads (decision 0029): `e` opens the environment and `l` the open files of the tagged rows (else the cursor's) in a scrollable popup; live reads in `ztop_core::detail` (`/proc/<pid>/environ` + `/proc/<pid>/fd` on Linux, `KERN_PROCARGS2` + `proc_pidinfo` on macOS), failures reported on the status line, read-only mode allows the passive read. Snapshots byte-identical. Tests: 7 (3 core, 4 TUI). Earlier this session: 7y (I/O priority + affinity, 0028) as `3399499`; 7x (threads + path, 0027) as `5990bd1`.
+- **Next step:** batch 7aa — the syscall trace (`s`), the one remaining piece of the detail line; then setup screens, configurable meter columns — then M4+. (7g macOS CPU frequency remains settled: decision 0011 and `docs/m2-power-checks.md`.)
 - **Blocked on:** nothing.
 
 ## Log
 
 Newest first. One or two lines per session: what changed, what is next.
+
+- 2026-11-15: M3 batch 7z — per-process detail reads (decision 0029): `e` opens the environment and `l` the open files of the tagged rows (else the cursor's) in a scrollable popup; live reads in `ztop_core::detail` (Linux `/proc/<pid>/environ` + `/proc/<pid>/fd`, macOS `KERN_PROCARGS2` + `proc_pidinfo`/`proc_pidfdinfo`); failures report on the status line, read-only mode allows the passive read. Snapshots byte-identical; core 86, TUI 102. The syscall trace (`s`) split into its own batch; next: 7aa trace, then setup screens, meter columns.
 
 - 2026-11-15: M3 batch 7y — I/O priority and CPU affinity pickers (decision 0028): `Control::{IoPriority, Affinity}` via `ioprio_set`/`sched_setaffinity` (Linux-only, honest refusal elsewhere); `I`/`A` open pickers sharing the signal menu's popup; Linux CI tests exercise both syscalls on the test's own pid. Snapshots byte-identical; core 83, TUI 98. Next: env/open-files/trace, setup screens, meter columns.
 

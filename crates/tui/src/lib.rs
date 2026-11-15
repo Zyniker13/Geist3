@@ -151,6 +151,32 @@ pub enum MenuKind {
     Affinity,
 }
 
+/// Which detail read the overlay shows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DetailKind {
+    /// The process's environment, one `KEY=VALUE` line per entry.
+    Environment,
+    /// The process's open file descriptors, sorted by fd.
+    OpenFiles,
+}
+
+/// The open detail overlay: one process's environment or open files,
+/// read live from the OS when the overlay opened (never part of a
+/// sample), scrolled from the top.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Detail {
+    /// Which read the lines carry.
+    pub kind: DetailKind,
+    /// The pid the read was taken from.
+    pub pid: u32,
+    /// The process name when the sample still has it, else `pid N`.
+    pub name: String,
+    /// The read's lines, in OS order (sorted by fd for open files).
+    pub lines: Vec<String>,
+    /// The first visible line.
+    pub top: usize,
+}
+
 /// Everything the render needs: the last sample, the last error, the sort,
 /// and the active filters.
 ///
@@ -192,6 +218,8 @@ pub struct Ui {
     /// Which picker the menu shows: the signal menu (F9/K) or the I/O
     /// priority and CPU affinity pickers (I/A).
     pub menu_kind: MenuKind,
+    /// The open detail overlay (environment or open files).
+    pub detail: Option<Detail>,
     /// The F1 help overlay is open; every key closes it.
     pub help: bool,
     /// The last control action's outcome, shown in the status line until
@@ -256,6 +284,7 @@ impl Default for Ui {
             tags: std::collections::BTreeSet::new(),
             menu: None,
             menu_kind: MenuKind::Signals,
+            detail: None,
             help: false,
             show_user_threads: false,
             show_kernel_threads: true,
@@ -649,6 +678,57 @@ impl Ui {
             pids,
             action: Control::Renice(delta),
         })
+    }
+
+    /// Open the detail overlay (environment or open files) for the first
+    /// tagged row, else the cursor's row, reading live from the OS now.
+    ///
+    /// A failed read keeps the overlay closed and reports the OS error in
+    /// the status line; a read is passive, so read-only mode allows it.
+    pub fn open_detail(&mut self, kind: DetailKind) {
+        let Some(pid) = self.targets().into_iter().next() else {
+            return;
+        };
+        let name = self
+            .sample
+            .as_ref()
+            .and_then(|s| s.processes.iter().find(|p| p.pid == pid))
+            .map(|p| p.name.clone())
+            .unwrap_or_else(|| format!("pid {pid}"));
+        let read = match kind {
+            DetailKind::Environment => ztop_core::detail::environment(pid),
+            DetailKind::OpenFiles => ztop_core::detail::open_files(pid),
+        };
+        match read {
+            Ok(lines) => {
+                self.detail = Some(Detail {
+                    kind,
+                    pid,
+                    name,
+                    lines,
+                    top: 0,
+                });
+            }
+            Err(error) => self.notice = Some(error),
+        }
+    }
+
+    /// Close the detail overlay (Esc or q).
+    pub fn close_detail(&mut self) {
+        self.detail = None;
+    }
+
+    /// Scroll the detail overlay one line down (j) or up (k), stopping at
+    /// the list's ends.
+    pub fn detail_scroll(&mut self, down: bool) {
+        if let Some(detail) = &mut self.detail {
+            let last = detail.lines.len().saturating_sub(1);
+            if down {
+                detail.top = (detail.top + 1).min(last);
+            } else {
+                detail.top = detail.top.saturating_sub(1);
+            }
+        }
     }
 
     /// Cycle the user filter through the users present in the current
@@ -1145,6 +1225,12 @@ fn handle_key(ui: &mut Ui, key: KeyEvent) -> bool {
             }
         }
         _ if ui.menu.is_some() => {}
+        // While a detail overlay is open the keys scroll it: Esc or q
+        // closes, j/k move, everything else does nothing.
+        KeyCode::Esc | KeyCode::Char('q') if ui.detail.is_some() => ui.close_detail(),
+        KeyCode::Char('j') | KeyCode::Down if ui.detail.is_some() => ui.detail_scroll(true),
+        KeyCode::Char('k') | KeyCode::Up if ui.detail.is_some() => ui.detail_scroll(false),
+        _ if ui.detail.is_some() => {}
         KeyCode::Char('q') | KeyCode::Esc => return true,
         // `a` flips between the process table and the Apple
         // Silicon screen; on the silicon screen the table
@@ -1156,6 +1242,10 @@ fn handle_key(ui: &mut Ui, key: KeyEvent) -> bool {
         KeyCode::Char('n') => ui.goto_screen(Screen::Network),
         KeyCode::Char('o') => ui.goto_screen(Screen::Io),
         KeyCode::Char('t') => ui.goto_screen(Screen::Thermal),
+        // `e` and `l` read the first tagged row (else the cursor's) live
+        // from the OS: the environment, the open files.
+        KeyCode::Char('e') => ui.open_detail(DetailKind::Environment),
+        KeyCode::Char('l') => ui.open_detail(DetailKind::OpenFiles),
         // `Z` pauses sampling: the picture freezes but the keys keep
         // working; a second press resumes. Global, like the screens.
         KeyCode::Char('Z') => ui.paused = !ui.paused,
@@ -1326,6 +1416,60 @@ pub fn draw(frame: &mut Frame, ui: &Ui) {
     }
 }
 
+/// A detail overlay: a bordered popup centered over the screen with the
+/// lines that were read when it opened — the environment or the open
+/// files of one process, one line per entry, scrollable with j/k.
+fn draw_detail(frame: &mut Frame, ui: &Ui, area: ratatui::layout::Rect) {
+    let Some(detail) = &ui.detail else {
+        return;
+    };
+    let width = 100.min(area.width).max(20);
+    let height = 20.min(area.height).max(6);
+    let popup = ratatui::layout::Rect {
+        x: area.x + (area.width.saturating_sub(width)) / 2,
+        y: area.y + (area.height.saturating_sub(height)) / 2,
+        width,
+        height,
+    };
+    frame.render_widget(ratatui::widgets::Clear, popup);
+    let count = detail.lines.len();
+    let what = match detail.kind {
+        DetailKind::Environment => "environment",
+        DetailKind::OpenFiles => "open files",
+    };
+    let title = format!(
+        "{} of {} (pid {}) — Esc closes",
+        what, detail.name, detail.pid
+    );
+    let mut lines = vec![Line::from(title).bold()];
+    if count == 0 {
+        lines.push(Line::from("(none)"));
+    } else {
+        // The window leaves room for the borders, the title and the
+        // scroll hint.
+        let visible = popup.height.saturating_sub(4) as usize;
+        let top = detail.top.min(count.saturating_sub(1));
+        let window = (top + visible).min(count);
+        lines.extend(
+            detail.lines[top..window]
+                .iter()
+                .map(|line| Line::from(line.clone())),
+        );
+        if window == count && top > 0 {
+            lines.push(Line::from(format!("… of {count} (j/k scroll)")));
+        } else if window < count {
+            lines.push(Line::from(format!(
+                "… lines {}–{} of {} (j/k scroll)",
+                top + 1,
+                window,
+                count
+            )));
+        }
+    }
+    let panel = Paragraph::new(lines).block(Block::new().borders(Borders::ALL));
+    frame.render_widget(panel, popup);
+}
+
 /// Render one screen (the process table or an extra screen), with the
 /// signal menu over it when the menu is open.
 fn draw_screen(frame: &mut Frame, ui: &Ui) {
@@ -1339,6 +1483,9 @@ fn draw_screen(frame: &mut Frame, ui: &Ui) {
         draw_processes(frame, ui, table_area);
         if ui.menu.is_some() {
             draw_menu(frame, ui, frame.area());
+        }
+        if ui.detail.is_some() {
+            draw_detail(frame, ui, frame.area());
         }
         return;
     }
@@ -1363,6 +1510,9 @@ fn draw_screen(frame: &mut Frame, ui: &Ui) {
     }
     if ui.screen == Screen::AppleSilicon && ui.menu.is_some() {
         draw_menu(frame, ui, frame.area());
+    }
+    if ui.detail.is_some() {
+        draw_detail(frame, ui, frame.area());
     }
 }
 
@@ -1883,6 +2033,7 @@ fn help_lines() -> Vec<Line<'static>> {
         ("F7, F8", "renice -1 / +1"),
         ("I, A", "io priority, cpu affinity (Linux)"),
         ("H, p", "threads cycle, program path"),
+        ("e, l", "environment, open files of the cursor/tags"),
         ("a, d, n, o, t", "silicon, disks, network, io, thermal"),
     ];
     let mut lines = vec![Line::from("Keys (any key closes)").bold()];
@@ -2663,7 +2814,7 @@ fn status_parts(ui: &Ui) -> Vec<String> {
         parts.push(notice.clone());
     }
     parts.push(format!(
-        "q: quit · tab: sort {} · i: reverse · f3: search · f4: filter · u: user · space: tag · j/k: select · f: follow · f5: tree · enter: fold · f9: signal · f7/f8: renice · I: ionice · A: affinity · H: threads · p: path · a: silicon · d: disks · n: net · o: io · t: temps",
+        "q: quit · tab: sort {} · i: reverse · f3: search · f4: filter · u: user · space: tag · j/k: select · f: follow · f5: tree · enter: fold · f9: signal · f7/f8: renice · I: ionice · A: affinity · H: threads · p: path · e: env · l: files · a: silicon · d: disks · n: net · o: io · t: temps",
         sort_label(ui.sort, ui.descending)
     ));
     parts
@@ -2730,6 +2881,8 @@ fn hint_key(label: &str) -> Option<KeyEvent> {
         "p" => KeyCode::Char('p'),
         "I" => KeyCode::Char('I'),
         "A" => KeyCode::Char('A'),
+        "e" => KeyCode::Char('e'),
+        "l" => KeyCode::Char('l'),
         _ => return None,
     };
     Some(KeyEvent::from(code))
@@ -2957,6 +3110,7 @@ fn handle_mouse(
         || ui.filter.is_some()
         || ui.search.is_some()
         || ui.help
+        || ui.detail.is_some()
     {
         return None;
     }
@@ -4965,6 +5119,117 @@ mod tests {
         assert_eq!(key.code, KeyCode::Char('I'));
         let key = hint_key("A").expect("A hint");
         assert_eq!(key.code, KeyCode::Char('A'));
+    }
+
+    /// A sample pid the OS has nothing for, so a detail read is an error
+    /// on every platform: no such process (or the same refusal through
+    /// permissions), never a panic and never a silent empty overlay.
+    const NO_SUCH_PID: u32 = 399_999_999;
+
+    /// The environment overlay renders a scrollable window with a title
+    /// and a "lines x–y of n" hint, and j/k walk it.
+    #[test]
+    fn the_environment_overlay_renders_and_scrolls() {
+        let mut ui = ui_with(Some(sample()), None);
+        ui.detail = Some(Detail {
+            kind: DetailKind::Environment,
+            pid: 100,
+            name: "worker-01".into(),
+            lines: (0..40).map(|i| format!("KEY-{i}=value-{i}")).collect(),
+            top: 0,
+        });
+        let rows = render(&ui, 80, 24);
+        assert!(
+            rows.iter()
+                .any(|row| row.contains("environment of worker-01 (pid 100)")),
+            "{rows:?}"
+        );
+        assert!(rows.iter().any(|row| row.contains("KEY-0=value-0")));
+        assert!(rows.iter().any(|row| row.contains("… lines 1–16 of 40")));
+        // One down: the window moves, one up at the top stays.
+        handle_key(&mut ui, KeyEvent::from(KeyCode::Char('j')));
+        let rows = render(&ui, 80, 24);
+        assert!(rows.iter().any(|row| row.contains("KEY-1=value-1")));
+        assert!(rows.iter().any(|row| row.contains("… lines 2–17 of 40")));
+        handle_key(&mut ui, KeyEvent::from(KeyCode::Char('k')));
+        handle_key(&mut ui, KeyEvent::from(KeyCode::Char('k')));
+        assert_eq!(ui.detail.as_ref().expect("detail").top, 0);
+        // Esc closes; q while the overlay is open closes it instead of
+        // quitting.
+        handle_key(&mut ui, KeyEvent::from(KeyCode::Char('j')));
+        assert!(!handle_key(&mut ui, KeyEvent::from(KeyCode::Char('q'))));
+        assert!(ui.detail.is_none());
+    }
+
+    /// The open-files overlay lists fd rows, and an empty read renders
+    /// `(none)` rather than nothing.
+    #[test]
+    fn the_open_files_overlay_lists_fds() {
+        let mut ui = ui_with(Some(sample()), None);
+        ui.detail = Some(Detail {
+            kind: DetailKind::OpenFiles,
+            pid: 100,
+            name: "worker-01".into(),
+            lines: vec!["fd 0 -> /dev/null".into(), "fd 3 -> /tmp/a.log".into()],
+            top: 0,
+        });
+        let rows = render(&ui, 80, 24);
+        assert!(
+            rows.iter()
+                .any(|row| row.contains("open files of worker-01 (pid 100)")),
+            "{rows:?}"
+        );
+        assert!(rows.iter().any(|row| row.contains("fd 0 -> /dev/null")));
+        assert!(rows.iter().any(|row| row.contains("fd 3 -> /tmp/a.log")));
+        // An empty list says so instead of showing an empty box.
+        ui.detail.as_mut().expect("detail").lines.clear();
+        let rows = render(&ui, 80, 24);
+        assert!(rows.iter().any(|row| row.contains("(none)")));
+    }
+
+    /// `e` and `l` read the cursor's process live: a pid nothing owns
+    /// reports the OS error in the status line and keeps the overlay
+    /// closed, in normal and in read-only mode (a detail read is passive,
+    /// so read-only mode allows it — the refusal here is the OS's, not
+    /// ztop's).
+    #[test]
+    fn e_and_l_report_a_failed_read_and_stay_closed() {
+        let mut ui = ui_with(Some(sample()), None);
+        ui.cursor = Some(NO_SUCH_PID);
+        handle_key(&mut ui, KeyEvent::from(KeyCode::Char('e')));
+        assert!(ui.detail.is_none());
+        let notice = ui.notice.clone().expect("environ error");
+        assert!(notice.contains("environ"), "{notice}");
+        ui.notice = None;
+        handle_key(&mut ui, KeyEvent::from(KeyCode::Char('l')));
+        let notice = ui.notice.clone().expect("open files error");
+        assert!(notice.contains("open files"), "{notice}");
+        // Read-only mode does not add its own refusal on top.
+        let mut ui = ui_with(Some(sample()), None);
+        ui.readonly = true;
+        ui.cursor = Some(NO_SUCH_PID);
+        handle_key(&mut ui, KeyEvent::from(KeyCode::Char('e')));
+        let notice = ui.notice.clone().expect("environ error");
+        assert!(notice.contains("environ"), "{notice}");
+    }
+
+    /// The `e: env` and `l: files` hints replay the detail keys, and the
+    /// F1 help lists them.
+    #[test]
+    fn the_status_hints_replay_the_detail_keys() {
+        let line = status_parts(&ui_with(Some(sample()), None)).join(" · ");
+        assert!(line.contains("e: env"), "{line}");
+        assert!(line.contains("l: files"), "{line}");
+        let key = hint_key("e").expect("e hint");
+        assert_eq!(key.code, KeyCode::Char('e'));
+        let key = hint_key("l").expect("l hint");
+        assert_eq!(key.code, KeyCode::Char('l'));
+        let help = help_lines()
+            .iter()
+            .map(|line| line.to_string())
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(help.contains("environment, open files"), "{help}");
     }
 
     #[test]
