@@ -2,8 +2,8 @@
 
 Updated after every working session.
 
-- **Current milestone:** M4 (Agent, Hub and the Bridge) — M3 complete pending CI on the 7ae commit.
-- **Last done:** M4 batch 9a coded — signals/renice over the protocol (decision 0042): `Control`/`Plan` are serde; the `Collector` trait gains `execute_plan` (default = local `control::execute`, unchanged behavior), `RemoteCollector` overrides it to `POST /v1/control` (refuses without TLS or a token; 401 says "pair with --code"; per-pid replies mapped back, unanswered pids read as failures), and the agent's new route gates three ways — TLS required, `ztop agent --allow-control` (off by default), and a token carrying the `control` right (rights live on the token record with a serde default of `["read"]`, so saved tokens stay readable and read-only; re-pairing from a control-allowing agent grants it). Signal 0 is the safe permission probe. Also this window: CI's TUI live-trace test needed the same skip-on-refusal/deadline pattern decision 0040 gave the core tracer test (ubuntu accepts the attach but delivers no stops) — that is why 4d02c15/a61cab6 ran red. Core 100, agent 21, TUI 121, CLI 7 tests; gate check.sh + cargo deny green locally, Linux clippies on CI.
+- **Current milestone:** M4 complete in code (Bonjour shipped in 9c, a600964); M5 (ZTopKit) begins once CI is green on a600964.
+- **Last done:** M4 batch 9c pushed as a600964 — Bonjour discovery (mdns-sd 0.21; `--bind` with the non-loopback-needs-TLS rule; `--no-advertise`; decision 0044), live-verified via dns-sd browse, plus the tls load_or_create create_dir fix and the Linux-only unused-mut that ran 7e5ab1b/07baa44/c5acce5 red. Gate green (check=0, deny=0).
 - **Next step:** CI on the 9a/9x/9b/9c chain; then M5 ZTopKit (the SwiftUI app).
 - **Blocked on:** nothing.
 
