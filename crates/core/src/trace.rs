@@ -193,10 +193,7 @@ fn trace_loop(
     // exit record carries no number, so the line's name comes from the
     // entry that preceded the exit.
     let mut current: Option<u64> = None;
-    loop {
-        let Some(status) = wait_stopped(pid, &stop) else {
-            break;
-        };
+    while let Some(status) = wait_stopped(pid, &stop) {
         if libc::WIFSTOPPED(status) {
             // Ask the kernel what kind of stop this is: the buffer size
             // goes in the addr argument and the buffer itself in data —
@@ -493,7 +490,7 @@ mod tests {
 
     #[test]
     fn the_tracer_records_syscalls_of_a_child() {
-        let mut child = traceable_child();
+        let child = traceable_child();
         let pid = child.id();
         let finish = |mut child: std::process::Child| {
             child.kill().expect("kill the traced child");
