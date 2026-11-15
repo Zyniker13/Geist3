@@ -48,10 +48,13 @@ pub enum SortKey {
     Cpu,
     Mem,
     Resident,
+    Virtual,
+    Shared,
     Nice,
     TotalTime,
     Start,
     Processor,
+    Parent,
     Name,
 }
 
@@ -72,10 +75,13 @@ fn sort_label(sort: SortKey, descending: bool) -> String {
         SortKey::Cpu => "cpu",
         SortKey::Mem => "mem",
         SortKey::Resident => "res",
+        SortKey::Virtual => "virt",
+        SortKey::Shared => "shr",
         SortKey::Nice => "nice",
         SortKey::TotalTime => "time",
         SortKey::Start => "start",
         SortKey::Processor => "cpu-core",
+        SortKey::Parent => "ppid",
         SortKey::Name => "name",
     };
     format!("{name}{}", if descending { " ↓" } else { " ↑" })
@@ -185,11 +191,14 @@ impl Ui {
             SortKey::User => SortKey::Cpu,
             SortKey::Cpu => SortKey::Mem,
             SortKey::Mem => SortKey::Resident,
-            SortKey::Resident => SortKey::Nice,
+            SortKey::Resident => SortKey::Virtual,
+            SortKey::Virtual => SortKey::Shared,
+            SortKey::Shared => SortKey::Nice,
             SortKey::Nice => SortKey::TotalTime,
             SortKey::TotalTime => SortKey::Start,
             SortKey::Start => SortKey::Processor,
-            SortKey::Processor => SortKey::Name,
+            SortKey::Processor => SortKey::Parent,
+            SortKey::Parent => SortKey::Name,
             SortKey::Name => SortKey::Pid,
         };
     }
@@ -557,10 +566,13 @@ impl Ui {
             SortKey::Cpu => a.cpu_percent.total_cmp(&b.cpu_percent),
             SortKey::Mem => a.mem_percent.total_cmp(&b.mem_percent),
             SortKey::Resident => a.resident_bytes.cmp(&b.resident_bytes),
+            SortKey::Virtual => a.virtual_bytes.cmp(&b.virtual_bytes),
+            SortKey::Shared => a.shared_bytes.cmp(&b.shared_bytes),
             SortKey::Nice => a.nice.cmp(&b.nice),
             SortKey::TotalTime => a.total_time_ns.cmp(&b.total_time_ns),
             SortKey::Start => a.start_time_secs.cmp(&b.start_time_secs),
             SortKey::Processor => a.processor.cmp(&b.processor),
+            SortKey::Parent => a.parent.cmp(&b.parent),
             SortKey::Name => a.name.cmp(&b.name),
         };
         if self.descending { ord.reverse() } else { ord }
@@ -1941,22 +1953,11 @@ fn split_table_area(
 fn draw_processes(frame: &mut Frame, ui: &Ui, area: ratatui::layout::Rect) {
     // I/O columns appear only when some visible process actually moves
     // data: otherwise they are two mostly blank columns at 80 columns.
-    // START and the last processor need a wider terminal still.
+    // The wide-terminal columns tier by width (see Columns::plan).
     let procs = ui.ordered_rows();
     let show_io = procs_io_visible(&procs);
-    let wide = area.width >= 100;
-    let mut header_names = vec![
-        "PID", "USER", "STATE", "CPU%", "MEM%", "THR", "RES", "NICE", "TIME+", "NAME",
-    ];
-    if wide {
-        header_names.splice(9..9, ["START", "CPU"]);
-    }
-    if show_io {
-        // Inserted before NAME, which stays the flexible last column.
-        let before_name = if wide { 11 } else { 9 };
-        header_names.splice(before_name..before_name, ["RD/s", "WR/s"]);
-    }
-    let header = Row::new(header_names).bold();
+    let columns = Columns::plan(area.width, show_io);
+    let header = Row::new(columns.names.clone()).bold();
     let mut rows: Vec<Row<'static>> = Vec::new();
     // Keep the cursor in view: scroll only far enough. The fold is what fits
     // under the table header (the block's top border takes one line).
@@ -1968,16 +1969,14 @@ fn draw_processes(frame: &mut Frame, ui: &Ui, area: ratatui::layout::Rect) {
             row_view,
             ui.tree,
             ui.tags.contains(&row_view.process.pid),
-            show_io,
-            wide,
+            &columns,
         );
         if Some(row_view.process.pid) == ui.cursor {
             row = row.style(ratatui::style::Style::default().reversed());
         }
         rows.push(row);
     }
-    let widths = table_widths(show_io, wide);
-    let table = Table::new(rows, widths)
+    let table = Table::new(rows, columns.widths)
         .header(header)
         .block(Block::new().borders(Borders::TOP));
     frame.render_widget(table, area);
@@ -2002,68 +2001,105 @@ fn procs_io_visible<'a>(rows: impl IntoIterator<Item = &'a TreeRow<'a>>) -> bool
     })
 }
 
-/// The table's column widths, in order. The draw path and mouse clicks
-/// share this, so a click lands on the column it points at.
-fn table_widths(show_io: bool, wide: bool) -> Vec<Constraint> {
-    let mut widths = vec![
-        Constraint::Length(7),
-        Constraint::Length(7),
-        Constraint::Length(5),
-        Constraint::Length(5),
-        Constraint::Length(5),
-        Constraint::Length(3),
-        Constraint::Length(8),
-        Constraint::Length(4),
-        Constraint::Length(7),
-    ];
-    if wide {
-        // START (MM/DD HH:MM) and the last processor join the table only
-        // where the terminal is wide enough to keep names legible.
-        widths.extend([Constraint::Length(11), Constraint::Length(3)]);
-    }
-    if show_io {
-        widths.extend([Constraint::Length(5), Constraint::Length(5)]);
-    }
-    widths.push(Constraint::Min(1));
-    widths
+/// The process table's columns for one draw: which columns show, their
+/// widths and the sort key each header sorts by. The draw path, the row
+/// cells and the click map all read this one plan, so a click always
+/// lands on the column it points at.
+///
+/// Columns tier by terminal width so 80-column layouts keep NAME legible
+/// and the recorded snapshots stay stable: the base columns at any width,
+/// START and the last processor from 100 columns, VIRT and SHR from 120,
+/// PPID from 140. The I/O rate columns join whenever a visible process
+/// moves data, just before NAME.
+struct Columns {
+    /// Header labels in draw order, NAME last.
+    names: Vec<&'static str>,
+    /// Column widths in the same order, NAME the flexible remainder.
+    widths: Vec<Constraint>,
+    /// Sort key per column, None where the column does not sort (state,
+    /// threads, the I/O rates).
+    keys: Vec<Option<SortKey>>,
 }
 
-/// The sort key a click on table column `x` (relative to the table's left
-/// edge) lands on, or None for columns that do not sort (state, threads,
-/// the I/O rates). One cell of column spacing separates the columns,
-/// matching the draw path's table layout.
-fn sort_column_at(x: u16, show_io: bool, wide: bool) -> Option<SortKey> {
-    let widths = table_widths(show_io, wide);
-    let mut keys: Vec<Option<SortKey>> = vec![
-        Some(SortKey::Pid),
-        Some(SortKey::User),
-        None,
-        Some(SortKey::Cpu),
-        Some(SortKey::Mem),
-        None,
-        Some(SortKey::Resident),
-        Some(SortKey::Nice),
-        Some(SortKey::TotalTime),
-    ];
-    if wide {
-        keys.extend([Some(SortKey::Start), Some(SortKey::Processor)]);
-    }
-    if show_io {
-        keys.extend([None, None]);
-    }
-    keys.push(Some(SortKey::Name));
-    let mut left = 0u16;
-    for (index, width) in widths.iter().enumerate() {
-        let Constraint::Length(width) = width else {
-            // The name column takes the rest of the table.
-            return keys.get(index).copied().flatten();
+impl Columns {
+    fn plan(area_width: u16, show_io: bool) -> Self {
+        let mut names: Vec<&'static str> = vec![
+            "PID", "USER", "STATE", "CPU%", "MEM%", "THR", "RES", "NICE", "TIME+",
+        ];
+        let mut keys: Vec<Option<SortKey>> = vec![
+            Some(SortKey::Pid),
+            Some(SortKey::User),
+            None,
+            Some(SortKey::Cpu),
+            Some(SortKey::Mem),
+            None,
+            Some(SortKey::Resident),
+            Some(SortKey::Nice),
+            Some(SortKey::TotalTime),
+        ];
+        let mut widths: Vec<Constraint> = vec![
+            Constraint::Length(7),
+            Constraint::Length(7),
+            Constraint::Length(5),
+            Constraint::Length(5),
+            Constraint::Length(5),
+            Constraint::Length(3),
+            Constraint::Length(8),
+            Constraint::Length(4),
+            Constraint::Length(7),
+        ];
+        let mut extend = |names_add: &[(&'static str, u16, Option<SortKey>)]| {
+            for (name, width, key) in names_add {
+                names.push(name);
+                keys.push(*key);
+                widths.push(Constraint::Length(*width));
+            }
         };
-        if x >= left && x < left + width {
-            return keys.get(index).copied().flatten();
+        if area_width >= 100 {
+            extend(&[
+                ("START", 11, Some(SortKey::Start)),
+                ("CPU", 3, Some(SortKey::Processor)),
+            ]);
         }
-        left += width + 1;
+        if area_width >= 120 {
+            extend(&[
+                ("VIRT", 8, Some(SortKey::Virtual)),
+                ("SHR", 7, Some(SortKey::Shared)),
+            ]);
+        }
+        if area_width >= 140 {
+            extend(&[("PPID", 7, Some(SortKey::Parent))]);
+        }
+        if show_io {
+            extend(&[("RD/s", 5, None), ("WR/s", 5, None)]);
+        }
+        names.push("NAME");
+        keys.push(Some(SortKey::Name));
+        widths.push(Constraint::Min(1));
+        Self {
+            names,
+            widths,
+            keys,
+        }
     }
-    None
+
+    /// The sort key a click on column `x` (relative to the table's left
+    /// edge) lands on, or None for a column that does not sort. One cell
+    /// of column spacing separates the columns, matching the draw path.
+    fn sort_key_at(&self, x: u16) -> Option<SortKey> {
+        let mut left = 0u16;
+        for (index, width) in self.widths.iter().enumerate() {
+            let Constraint::Length(width) = width else {
+                // The name column takes the rest of the table.
+                return self.keys[index];
+            };
+            if x >= left && x < left + width {
+                return self.keys[index];
+            }
+            left += width + 1;
+        }
+        None
+    }
 }
 
 /// One mouse event on the process table: a left click selects the row it
@@ -2102,8 +2138,8 @@ fn handle_mouse(
             if local == 1 {
                 let procs = ui.ordered_rows();
                 let show_io = procs_io_visible(&procs);
-                let wide = table.width >= 100;
-                if let Some(key) = sort_column_at(column.saturating_sub(table.x), show_io, wide) {
+                let columns = Columns::plan(table.width, show_io);
+                if let Some(key) = columns.sort_key_at(column.saturating_sub(table.x)) {
                     ui.sort_by(key);
                 }
             } else if local >= 2 {
@@ -2121,13 +2157,14 @@ fn handle_mouse(
     None
 }
 
-/// One table row. Tagged processes carry a `*` before the name, htop-style.
+/// One table row: the cells follow the column plan, so a column exists in
+/// a row exactly when its header does. Tagged processes carry a `*`
+/// before the name, htop-style.
 fn process_row(
     row_view: &TreeRow<'_>,
     tree: bool,
     tagged: bool,
-    show_io: bool,
-    wide: bool,
+    columns: &Columns,
 ) -> Row<'static> {
     let name = if tree {
         let indent = "  ".repeat(row_view.depth);
@@ -2142,56 +2179,52 @@ fn process_row(
         row_view.process.name.clone()
     };
     let name = if tagged { format!("* {name}") } else { name };
-    let mut cells = vec![
-        Cell::from(format!("{:>7}", row_view.process.pid)),
-        Cell::from(format!("{:>7}", row_view.process.user)),
-        Cell::from(row_view.process.state.clone()),
-        Cell::from(format!("{:>5.1}", row_view.process.cpu_percent)),
-        Cell::from(format!("{:>5.1}", row_view.process.mem_percent)),
-        Cell::from(format!("{:>3}", row_view.process.threads)),
-        Cell::from(format!(
-            "{:>8}",
-            bytes_text(row_view.process.resident_bytes as f64)
-        )),
-    ];
-    if let Some(nice) = row_view.process.nice {
-        cells.push(Cell::from(format!("{:>4}", nice)));
-    } else {
-        cells.push(Cell::from(""));
-    }
-    cells.push(Cell::from(format!(
-        "{:>7}",
-        time_text(row_view.process.total_time_ns)
-    )));
-    if wide {
-        // Start time in local MM/DD HH:MM and the last processor the
-        // process ran on; both blank when the collector could not tell.
-        cells.push(Cell::from(format!(
-            "{:>11}",
-            match row_view.process.start_time_secs {
-                Some(secs) => ztop_core::clock::local_start_text(secs),
-                None => String::new(),
-            }
-        )));
-        cells.push(Cell::from(format!(
-            "{:>3}",
-            match row_view.process.processor {
-                Some(cpu) => cpu.to_string(),
-                None => String::new(),
-            }
-        )));
-    }
-    if show_io {
-        cells.push(Cell::from(format!(
-            "{:>5}",
-            rate_text(row_view.process.io.read_rate)
-        )));
-        cells.push(Cell::from(format!(
-            "{:>5}",
-            rate_text(row_view.process.io.write_rate)
-        )));
-    }
-    cells.push(Cell::from(name));
+    let process = row_view.process;
+    let cells: Vec<Cell<'static>> = columns
+        .names
+        .iter()
+        .map(|column| match *column {
+            "PID" => Cell::from(format!("{:>7}", process.pid)),
+            "USER" => Cell::from(format!("{:>7}", process.user)),
+            "STATE" => Cell::from(process.state.clone()),
+            "CPU%" => Cell::from(format!("{:>5.1}", process.cpu_percent)),
+            "MEM%" => Cell::from(format!("{:>5.1}", process.mem_percent)),
+            "THR" => Cell::from(format!("{:>3}", process.threads)),
+            "RES" => Cell::from(format!("{:>8}", bytes_text(process.resident_bytes as f64))),
+            "NICE" => match process.nice {
+                Some(nice) => Cell::from(format!("{:>4}", nice)),
+                None => Cell::from(""),
+            },
+            "TIME+" => Cell::from(format!("{:>7}", time_text(process.total_time_ns))),
+            // Start time in local MM/DD HH:MM and the last processor the
+            // process ran on; both blank when the collector could not tell.
+            "START" => match process.start_time_secs {
+                Some(secs) => {
+                    Cell::from(format!("{:>11}", ztop_core::clock::local_start_text(secs)))
+                }
+                None => Cell::from(""),
+            },
+            "CPU" => match process.processor {
+                Some(core) => Cell::from(format!("{:>3}", core)),
+                None => Cell::from(""),
+            },
+            "VIRT" => Cell::from(format!("{:>8}", bytes_text(process.virtual_bytes as f64))),
+            // Shared bytes are blank where the platform does not report
+            // them (macOS today).
+            "SHR" => match process.shared_bytes {
+                Some(bytes) => Cell::from(format!("{:>7}", bytes_text(bytes as f64))),
+                None => Cell::from(""),
+            },
+            "PPID" => match process.parent {
+                Some(parent) => Cell::from(format!("{:>7}", parent)),
+                None => Cell::from(""),
+            },
+            "RD/s" => Cell::from(format!("{:>5}", rate_text(process.io.read_rate))),
+            "WR/s" => Cell::from(format!("{:>5}", rate_text(process.io.write_rate))),
+            "NAME" => Cell::from(name.clone()),
+            other => unreachable!("unknown process table column {other:?}"),
+        })
+        .collect();
     Row::new(cells)
 }
 
@@ -2561,6 +2594,70 @@ mod tests {
             "{:?}",
             rows[header_row + 1]
         );
+    }
+
+    #[test]
+    fn wider_terminals_gain_virt_shr_and_ppid() {
+        // 120 columns add VIRT and SHR; PPID waits for 140.
+        let at_120 = render(&ui_with(Some(sample()), None), 120, 24);
+        assert!(at_120.iter().any(|row| row.contains("VIRT")));
+        assert!(at_120.iter().any(|row| row.contains("SHR")));
+        assert!(!at_120.iter().any(|row| row.contains("PPID")));
+        assert!(
+            render(&ui_with(Some(sample()), None), 100, 24)
+                .iter()
+                .all(|row| !row.contains("VIRT"))
+        );
+        assert!(
+            render(&ui_with(Some(sample()), None), 140, 24)
+                .iter()
+                .any(|row| row.contains("PPID"))
+        );
+        // Clicking VIRT (x 76 at 120 columns) sorts by virtual size; the
+        // sample scales virtual bytes by pid, so worker-12 leads.
+        let mut ui = ui_with(Some(sample()), None);
+        let screen = ratatui::layout::Rect::new(0, 0, 120, 24);
+        handle_mouse(
+            &mut ui,
+            MouseEventKind::Down(MouseButton::Left),
+            76,
+            6,
+            screen,
+        );
+        assert_eq!(ui.sort, SortKey::Virtual);
+        let rows = render(&ui, 120, 24);
+        let header_row = rows
+            .iter()
+            .position(|row| row.contains("VIRT"))
+            .expect("VIRT header");
+        assert!(
+            rows[header_row + 1].contains("worker-12"),
+            "{:?}",
+            rows[header_row + 1]
+        );
+        // SHR (x 85) and PPID (x 93 at 140) map to their sort keys too;
+        // the sample's shared bytes and parents are all equal or absent,
+        // so only the key itself is asserted.
+        let mut ui = ui_with(Some(sample()), None);
+        let screen = ratatui::layout::Rect::new(0, 0, 120, 24);
+        handle_mouse(
+            &mut ui,
+            MouseEventKind::Down(MouseButton::Left),
+            85,
+            6,
+            screen,
+        );
+        assert_eq!(ui.sort, SortKey::Shared);
+        let mut ui = ui_with(Some(sample()), None);
+        let screen = ratatui::layout::Rect::new(0, 0, 140, 24);
+        handle_mouse(
+            &mut ui,
+            MouseEventKind::Down(MouseButton::Left),
+            93,
+            6,
+            screen,
+        );
+        assert_eq!(ui.sort, SortKey::Parent);
     }
 
     #[test]
@@ -3412,6 +3509,10 @@ mod tests {
         ui.cycle_sort();
         assert_eq!(ui.sort, SortKey::Resident);
         ui.cycle_sort();
+        assert_eq!(ui.sort, SortKey::Virtual);
+        ui.cycle_sort();
+        assert_eq!(ui.sort, SortKey::Shared);
+        ui.cycle_sort();
         assert_eq!(ui.sort, SortKey::Nice);
         ui.cycle_sort();
         assert_eq!(ui.sort, SortKey::TotalTime);
@@ -3419,6 +3520,8 @@ mod tests {
         assert_eq!(ui.sort, SortKey::Start);
         ui.cycle_sort();
         assert_eq!(ui.sort, SortKey::Processor);
+        ui.cycle_sort();
+        assert_eq!(ui.sort, SortKey::Parent);
         ui.cycle_sort();
         assert_eq!(ui.sort, SortKey::Name);
         ui.cycle_sort();

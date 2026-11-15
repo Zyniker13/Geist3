@@ -3,13 +3,15 @@
 Updated after every working session.
 
 - **Current milestone:** M3 (Full TUI Parity).
-- **Last done:** M3 batch 7j — the START and last-processor ("CPU") columns, shown only on terminals 100+ columns wide so 80-column layouts and the recorded snapshots stay unchanged. START renders the local `MM/DD HH:MM` start time (new `ztop_core::clock::local_start_text` via `localtime_r`/`strftime`, `n/a` on conversion failure, blank when the collector has no value) and CPU renders the core the process last ran on (Linux `stat` field 39; blank on macOS); both headers are clickable and sort (`SortKey::Start`, `SortKey::Processor`, sort label `cpu-core`), the sort cycle gained the two keys, and the click map re-derives the key layout from the same widths the draw path uses so IO + wide combinations stay aligned. Three test changes: the extended cycle walk, the wide-columns render/click test, and the start-text shape test.
-- **Next step:** 7k — the remaining columns from what the model already carries (VIRT, SHR, PPID, command) or the next open M3 parity item, then the M3 leftovers. (The previously listed 7g macOS CPU frequency is settled: decision 0011 and `docs/m2-power-checks.md` record that no unprivileged source exists and MHz conversion is never attempted; the title's `f X.X GHz` shows it where reported, i.e. Linux.)
+- **Last done:** M3 batch 7k — VIRT, SHR and PPID columns, and the column layout rebuilt around one `Columns` plan that the header, the row cells and the click map all read (so a click cannot land on a column that is not drawn). Columns tier by terminal width (decision 0015): the 80-column base set is unchanged, 100+ columns add START and the last processor (from 7j), 120+ add VIRT and SHR (SHR blank where unreported, macOS today), 140+ adds PPID. Each new header sorts and clicks (`SortKey::Virtual`/`Shared`/`Parent`, labels `virt`/`shr`/`ppid`), and the sort cycle gained the three keys. Also backfilled decision 0014 (the 4 KiB page assumption in `parse_pid_statm` that its comment cited but no file recorded). One new test (tier renders, VIRT/SHR/PPID header clicks).
+- **Next step:** 7l — the full command line (Linux `/proc/<pid>/cmdline`, macOS `ps` args) so the NAME column can become a real COMMAND column where argv differs from `comm`, or the next open M3 parity item. (The previously listed 7g macOS CPU frequency is settled: decision 0011 and `docs/m2-power-checks.md` record that no unprivileged source exists and MHz conversion is never attempted; the title's `f X.X GHz` shows it where reported, i.e. Linux.)
 - **Blocked on:** nothing.
 
 ## Log
 
 Newest first. One or two lines per session: what changed, what is next.
+
+- 2026-11-15: M3 batch 7k — VIRT/SHR/PPID columns tiering by width (120+/140+), `Columns` plan as the single source for header, cells and click map, SortKey::Virtual/Shared/Parent in the cycle, decision records 0014 (statm 4 KiB page) and 0015 (tier ladder). 80-column snapshots unchanged by construction. Next: 7l — the full command line, then remaining M3 items.
 
 - 2026-11-15: M3 batch 7j — START (local `MM/DD HH:MM`) and last-processor ("CPU") columns on 100+-column terminals only, both sortable and clickable, new `local_start_text` in the clock module, click map now derives keys from the drawn widths. Tests extended (cycle, wide render/click, start shape). Next: 7k — VIRT/SHR/PPID/command columns, then remaining M3 items.
 
