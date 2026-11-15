@@ -306,7 +306,15 @@ Check an item only when it works and a test or a recorded check shows it. Add th
     `control_answers_per_pid_when_all_the_gates_pass`,
     `control_replies_map_back_onto_the_plan`.
 - [ ] `ztop hub` with SQLite history, serving the same protocol
-- [ ] launchd and systemd services
+- [x] launchd and systemd services
+  - `packaging/launchd/com.ztop.agent.plist` and
+    `packaging/systemd/ztop-agent.service` run the agent as a
+    read-only user service (`agent --tls --pair`, no control), with
+    install/stop instructions and the first-start log locations in
+    `packaging/README.md`. Recorded check: the packaging stage in
+    `scripts/check.sh` verifies both files carry their required keys,
+    refuses `--allow-control` in either shipped file, and
+    `plutil -lint` passes on the plist (macOS).
 
 ## App
 

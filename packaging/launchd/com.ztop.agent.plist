@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  SPDX-License-Identifier: MIT OR Apache-2.0
+
+  User agent service for macOS. Install with:
+
+      cp com.ztop.agent.plist ~/Library/LaunchAgents/
+      launchctl load ~/Library/LaunchAgents/com.ztop.agent.plist
+
+  The service is read-only: it serves TLS and pairing but does not
+  pass --allow-control, so no client can signal or renice through it.
+  Edit the plist first if you want control, and re-pair afterwards.
+  Point ProgramArguments at wherever your package manager put ztop.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.ztop.agent</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/local/bin/ztop</string>
+        <string>agent</string>
+        <string>--tls</string>
+        <string>--pair</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/tmp/ztop-agent.out</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/ztop-agent.err</string>
+</dict>
+</plist>

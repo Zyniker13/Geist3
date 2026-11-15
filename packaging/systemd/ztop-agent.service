@@ -1,0 +1,26 @@
+# SPDX-License-Identifier: MIT OR Apache-2.0
+#
+# User service for systemd. Install with:
+#
+#     mkdir -p ~/.config/systemd/user
+#     cp ztop-agent.service ~/.config/systemd/user/
+#     systemctl --user daemon-reload
+#     systemctl --user enable --now ztop-agent
+#
+# The service is read-only: it serves TLS and pairing but does not
+# pass --allow-control, so no client can signal or renice through it.
+# Add the flag first if you want control, and re-pair afterwards.
+# Point ExecStart at wherever your package manager put ztop.
+
+[Unit]
+Description=zTop agent: local metrics over the zTop protocol
+Documentation=https://github.com/Zyniker13/Geist3
+After=network.target
+
+[Service]
+ExecStart=/usr/local/bin/ztop agent --tls --pair
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target

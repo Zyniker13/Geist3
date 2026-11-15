@@ -45,6 +45,27 @@ run smoke sh -c '
     done
 '
 run deny cargo deny check licenses bans sources
+# The service files: the plist is linted where plutil exists (macOS);
+# both are checked for the keys a service needs on either platform.
+run packaging sh -c '
+    set -e
+    test -f packaging/launchd/com.ztop.agent.plist
+    test -f packaging/systemd/ztop-agent.service
+    grep -q "ProgramArguments" packaging/launchd/com.ztop.agent.plist
+    grep -q "ExecStart" packaging/systemd/ztop-agent.service
+    # The shipped services are read-only: no --allow-control argument.
+    if grep -q "<string>--allow-control</string>" packaging/launchd/com.ztop.agent.plist; then
+        echo "the launchd service must not allow control by default"
+        exit 1
+    fi
+    if grep -q "^ExecStart=.*--allow-control" packaging/systemd/ztop-agent.service; then
+        echo "the systemd service must not allow control by default"
+        exit 1
+    fi
+    if command -v plutil >/dev/null 2>&1; then
+        plutil -lint packaging/launchd/com.ztop.agent.plist
+    fi
+'
 
 if command -v xcodebuild >/dev/null 2>&1; then
     run swift-build swift build --package-path swift/ZTopKit
