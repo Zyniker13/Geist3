@@ -48,6 +48,7 @@ pub enum SortKey {
     Cpu,
     Mem,
     Resident,
+    Nice,
     Name,
 }
 
@@ -68,6 +69,7 @@ fn sort_label(sort: SortKey, descending: bool) -> String {
         SortKey::Cpu => "cpu",
         SortKey::Mem => "mem",
         SortKey::Resident => "res",
+        SortKey::Nice => "nice",
         SortKey::Name => "name",
     };
     format!("{name}{}", if descending { " ↓" } else { " ↑" })
@@ -177,7 +179,8 @@ impl Ui {
             SortKey::User => SortKey::Cpu,
             SortKey::Cpu => SortKey::Mem,
             SortKey::Mem => SortKey::Resident,
-            SortKey::Resident => SortKey::Name,
+            SortKey::Resident => SortKey::Nice,
+            SortKey::Nice => SortKey::Name,
             SortKey::Name => SortKey::Pid,
         };
     }
@@ -545,6 +548,7 @@ impl Ui {
             SortKey::Cpu => a.cpu_percent.total_cmp(&b.cpu_percent),
             SortKey::Mem => a.mem_percent.total_cmp(&b.mem_percent),
             SortKey::Resident => a.resident_bytes.cmp(&b.resident_bytes),
+            SortKey::Nice => a.nice.cmp(&b.nice),
             SortKey::Name => a.name.cmp(&b.name),
         };
         if self.descending { ord.reverse() } else { ord }
@@ -1902,7 +1906,9 @@ fn draw_processes(frame: &mut Frame, ui: &Ui, area: ratatui::layout::Rect) {
     // data: otherwise they are two mostly blank columns at 80 columns.
     let procs = ui.ordered_rows();
     let show_io = procs_io_visible(&procs);
-    let mut header_names = vec!["PID", "USER", "STATE", "CPU%", "MEM%", "THR", "RES", "NAME"];
+    let mut header_names = vec![
+        "PID", "USER", "STATE", "CPU%", "MEM%", "THR", "RES", "NICE", "NAME",
+    ];
     if show_io {
         // Inserted before NAME, which stays the flexible last column.
         header_names.splice(7..7, ["RD/s", "WR/s"]);
@@ -1958,11 +1964,12 @@ fn table_widths(show_io: bool) -> Vec<Constraint> {
     let mut widths = vec![
         Constraint::Length(8),
         Constraint::Length(10),
-        Constraint::Length(7),
-        Constraint::Length(7),
-        Constraint::Length(7),
         Constraint::Length(5),
-        Constraint::Length(9),
+        Constraint::Length(6),
+        Constraint::Length(6),
+        Constraint::Length(4),
+        Constraint::Length(8),
+        Constraint::Length(5),
     ];
     if show_io {
         widths.extend([Constraint::Length(5), Constraint::Length(5)]);
@@ -1985,6 +1992,7 @@ fn sort_column_at(x: u16, show_io: bool) -> Option<SortKey> {
         Some(SortKey::Mem),
         None,
         Some(SortKey::Resident),
+        Some(SortKey::Nice),
         None,
         None,
         Some(SortKey::Name),
@@ -2084,6 +2092,11 @@ fn process_row(row_view: &TreeRow<'_>, tree: bool, tagged: bool, show_io: bool) 
             bytes_text(row_view.process.resident_bytes as f64)
         )),
     ];
+    if let Some(nice) = row_view.process.nice {
+        cells.push(Cell::from(format!("{:>5}", nice)));
+    } else {
+        cells.push(Cell::from(""));
+    }
     if show_io {
         cells.push(Cell::from(format!(
             "{:>5}",
@@ -2133,6 +2146,12 @@ mod tests {
                 virtual_bytes: pid as u64 * 1_000_000,
                 resident_bytes: pid as u64 * 100_000,
                 threads: pid,
+                priority: Some((20 + pid) as i32),
+                nice: Some(0),
+                shared_bytes: Some(4096),
+                total_time_ns: Some(pid as u64 * 1_000_000_000),
+                start_time_secs: Some(1_700_000_000 + pid as u64),
+                processor: Some((pid - 1) % 4),
                 io: ProcessIo::default(),
             })
             .collect();
@@ -3185,9 +3204,13 @@ mod tests {
         assert!(ui.descending);
         ui.cycle_sort();
         assert_eq!(ui.sort, SortKey::Mem);
-        for _ in 0..3 {
-            ui.cycle_sort();
-        }
+        ui.cycle_sort();
+        assert_eq!(ui.sort, SortKey::Resident);
+        ui.cycle_sort();
+        assert_eq!(ui.sort, SortKey::Nice);
+        ui.cycle_sort();
+        assert_eq!(ui.sort, SortKey::Name);
+        ui.cycle_sort();
         assert_eq!(ui.sort, SortKey::Pid);
         ui.cycle_sort();
         assert_eq!(ui.sort, SortKey::User);

@@ -310,6 +310,30 @@ pub struct Process {
     pub virtual_bytes: u64,
     pub resident_bytes: u64,
     pub threads: u32,
+    /// Scheduling priority, when the platform reports it (Linux `stat`,
+    /// macOS task priority).
+    #[serde(default)]
+    pub priority: Option<i32>,
+    /// Nice value, when the platform reports it (Linux `stat`, macOS
+    /// `proc_bsdinfo`).
+    #[serde(default)]
+    pub nice: Option<i32>,
+    /// Shared memory bytes, when the platform reports them (Linux
+    /// `statm`).
+    #[serde(default)]
+    pub shared_bytes: Option<u64>,
+    /// Total CPU time (user plus system) since process start, when the
+    /// platform reports it.
+    #[serde(default)]
+    pub total_time_ns: Option<u64>,
+    /// Wall-clock start time in Unix seconds, when the platform reports
+    /// it.
+    #[serde(default)]
+    pub start_time_secs: Option<u64>,
+    /// Index of the core the process last ran on, when the platform
+    /// reports it (Linux `stat`).
+    #[serde(default)]
+    pub processor: Option<u32>,
     /// Per-process disk I/O, when the platform reports it (Linux).
     pub io: ProcessIo,
 }
@@ -442,6 +466,12 @@ mod tests {
                 virtual_bytes: 1 << 30,
                 resident_bytes: 1 << 20,
                 threads: 4,
+                priority: Some(31),
+                nice: Some(0),
+                shared_bytes: Some(4096),
+                total_time_ns: Some(1_000_000_000),
+                start_time_secs: Some(1_700_000_000),
+                processor: Some(0),
                 io: ProcessIo {
                     read_bytes: Some(1024),
                     write_bytes: Some(2048),

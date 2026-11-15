@@ -90,6 +90,15 @@ pub struct MacProcess {
     /// Cumulative task usage when the kernel allowed the read, `None`
     /// when the capture recorded `-` for all four fields.
     pub task: Option<TaskUsage>,
+    /// Virtual memory size in bytes (task.virtual_size), when available.
+    pub vsize: Option<u64>,
+    /// Scheduling priority (task.priority), when available.
+    pub priority: Option<i32>,
+    /// Nice value (proc_bsdinfo.nice), when available.
+    pub nice: Option<i32>,
+    /// Wall-clock start time in Unix seconds (proc_bsdinfo.start_tvsec),
+    /// when available.
+    pub start_secs: Option<u64>,
     pub name: String,
 }
 
@@ -223,7 +232,8 @@ fn status_letter(status: u32) -> &'static str {
 }
 
 /// Parses one `processes` line: `pid ppid status uid utime stime rss
-/// threads "name"`.
+/// threads "name"` (8 fields) or `pid ppid status uid utime stime rss
+/// threads vsize priority nice start "name"` (12 fields).
 fn parse_process_line(line: &str) -> Option<MacProcess> {
     let (prefix, quoted) = line.split_once(" \"")?;
     let name = quoted.strip_suffix('"')?;
@@ -233,10 +243,10 @@ fn parse_process_line(line: &str) -> Option<MacProcess> {
     let status = fields.next()?.parse().ok()?;
     let uid = fields.next()?.parse().ok()?;
     let rest: Vec<&str> = fields.collect();
-    if rest.len() != 4 {
+    if rest.len() != 4 && rest.len() != 8 {
         return None;
     }
-    let task = if rest.iter().all(|field| *field == "-") {
+    let task = if rest[..4].iter().all(|field| *field == "-") {
         None
     } else {
         Some(TaskUsage {
@@ -246,12 +256,26 @@ fn parse_process_line(line: &str) -> Option<MacProcess> {
             threads: rest[3].parse().ok()?,
         })
     };
+    let (vsize, priority, nice, start_secs) = if rest.len() == 8 {
+        (
+            rest[4].parse().ok(),
+            rest[5].parse().ok(),
+            rest[6].parse().ok(),
+            rest[7].parse().ok(),
+        )
+    } else {
+        (None, None, None, None)
+    };
     Some(MacProcess {
         pid,
         ppid,
         status,
         uid,
         task,
+        vsize,
+        priority,
+        nice,
+        start_secs,
         name: name.to_string(),
     })
 }
@@ -419,9 +443,15 @@ pub(crate) fn sample_from_parts(
                 name: mac.name.clone(),
                 cpu_percent: 0.0,
                 mem_percent,
-                virtual_bytes: 0,
+                virtual_bytes: mac.vsize.unwrap_or(0),
                 resident_bytes: resident,
                 threads,
+                priority: mac.priority,
+                nice: mac.nice,
+                shared_bytes: None,
+                total_time_ns: mac.task.map(|t| t.utime_ns + t.stime_ns),
+                start_time_secs: mac.start_secs,
+                processor: None,
                 io: ProcessIo::default(),
             }
         })
@@ -676,9 +706,10 @@ mod tests {
     #[test]
     fn processes_parse_both_recorded_shapes() {
         let text = "0 0 2 0 - - - - \"kernel_task\"\n\
-                    58372 1 2 502 580186517500 789640461958 34619392 7 \"Safari\"\n";
+                    58372 1 2 502 580186517500 789640461958 34619392 7 \"Safari\"\n\
+                    600 1 2 502 100 200 4096 3 268435456 20 10 1700000000 \"new\"\n";
         let procs = parse_processes(text);
-        assert_eq!(procs.len(), 2);
+        assert_eq!(procs.len(), 3);
         assert_eq!(procs[0].pid, 0);
         assert_eq!(procs[0].task, None);
         assert_eq!(procs[0].name, "kernel_task");
@@ -692,6 +723,12 @@ mod tests {
                 threads: 7
             })
         );
+        // The extended capture shape carries the M3 columns after the
+        // task block: vsize, priority, nice, start.
+        assert_eq!(procs[2].vsize, Some(268_435_456));
+        assert_eq!(procs[2].priority, Some(20));
+        assert_eq!(procs[2].nice, Some(10));
+        assert_eq!(procs[2].start_secs, Some(1_700_000_000));
     }
 
     #[test]

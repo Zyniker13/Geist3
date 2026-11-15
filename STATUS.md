@@ -3,13 +3,15 @@
 Updated after every working session.
 
 - **Current milestone:** M3 (Full TUI Parity).
-- **Last done:** M3 batch 7f — the header grew thread and kernel-thread counts on the info line (Linux: from `/proc/loadavg` scheduling-entity total and processes whose recorded PPid is 0 or 2; macOS: sum of per-process `num_threads`), the title shows mean CPU frequency as `f X.X GHz` when reported (Linux from `/proc/cpuinfo` `cpu MHz`), the CPU row leads with an `Avg` gauge (mean across all cores), and the memory gauge label shows `comp` for macOS compressed memory. The title's redundant `cpu %` segment was dropped to keep the load averages legible at 80 cols. Five new tests (thread/frequency fixture derivation, avg gauge, compressed gauge label, thread info line, snapshot positions). Gate plus both cross-target clippies green.
+- **Last done:** M3 batch 7h — the process table gained a NICE column (Linux from `stat` field 16, macOS from the extended 12-field `ps` capture shape, blank when unavailable), nice joined the sort cycle and header clicks, and the model now collects priority, shared bytes (Linux `statm`), total CPU time, start time and the last processor (Linux `stat`) for later columns. Column widths were rebalanced (STATE 5, CPU%/MEM% 6, THR 4, RES 8, NICE 5) so names and fold counts stay legible at 80 columns with and without the I/O columns. Fixture `stat` lines extended to the full 39-field kernel shape; the macOS 12-field parse shape now has test coverage; the three replay snapshots regenerated. Gate plus both cross-target clippies green.
 - **Next step:** 7g — macOS CPU frequency (via IOReport `cpu_ticks` idle-residency conversion), model fields on `Sample`, collector wiring, and the agent report.
 - **Blocked on:** nothing.
 
 ## Log
 
 Newest first. One or two lines per session: what changed, what is next.
+
+- 2026-11-15: M3 batch 7h — NICE column (Linux `stat` / macOS extended capture), nice sort key, model fields for priority/shared/total-time/start/processor, rebalanced column widths, extended `stat` fixtures to 39 fields, macOS 12-field shape test, regenerated replay snapshots. Gate plus both cross-target clippies green. Parity's column item updated (still open: PPID, VIRT, SHR, TIME+, command, start time, processor columns). Next: 7g — macOS CPU frequency, model fields, collector wiring.
 
 - 2026-11-15: M3 batch 7f — thread and kernel-thread counts on the info line (Linux: `/proc/loadavg` scheduling-entity total and processes whose recorded PPid is 0 or 2; macOS: sum of per-process `num_threads`), mean CPU frequency as `f X.X GHz` in the title (Linux: `/proc/cpuinfo` `cpu MHz`), the CPU row leads with an `Avg` gauge (mean across all cores), and the memory gauge label shows `comp` for macOS compressed memory. The title's redundant `cpu %` segment was dropped to keep load averages legible at 80 cols. Five new tests (thread/frequency fixture derivation, avg gauge, compressed gauge label, thread info line, snapshot positions). Gate plus both cross-target clippies green. Parity ticks avg gauge, memory gauge, load avg/title items. Next: 7g — macOS CPU frequency, model fields, collector wiring.
 

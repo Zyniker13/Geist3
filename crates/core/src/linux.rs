@@ -43,10 +43,14 @@ use crate::model::{Battery, BatteryState, Fan, TempSensor};
 /// Jiffies per second: the fixed `USER_HZ` of the kernel/user ABI.
 const USER_HZ: f64 = 100.0;
 
-/// Parsed `/proc/stat`: one [`CpuTimes`] per core, ordered by core number.
-#[derive(Debug, Clone)]
+/// Parsed `/proc/stat`: one [`CpuTimes`] per core, ordered by core number,
+/// plus the boot time (`btime`) when the line is present.
+#[derive(Debug, Clone, Default)]
 pub(crate) struct ProcStat {
     pub(crate) cores: Vec<CpuTimes>,
+    /// Boot time in Unix seconds; `None` when the `btime` line is
+    /// missing, which turns every start time unavailable.
+    pub(crate) btime: Option<u64>,
 }
 
 /// Parses `/proc/stat` into per-core CPU times.
@@ -59,7 +63,12 @@ pub(crate) struct ProcStat {
 /// reports per-core times.
 fn parse_proc_stat(text: &str) -> Option<ProcStat> {
     let mut cores: Vec<(usize, CpuTimes)> = Vec::new();
+    let mut btime = None;
     for line in text.lines() {
+        if let Some(rest) = line.strip_prefix("btime ") {
+            btime = rest.trim().parse().ok();
+            continue;
+        }
         let Some(rest) = line.strip_prefix("cpu") else {
             continue;
         };
@@ -87,6 +96,7 @@ fn parse_proc_stat(text: &str) -> Option<ProcStat> {
     }
     Some(ProcStat {
         cores: cores.into_iter().map(|(_, times)| times).collect(),
+        btime,
     })
 }
 
@@ -402,7 +412,7 @@ fn kib_bytes(value: &str) -> u64 {
         .unwrap_or(0)
 }
 
-/// Parsed CPU jiffies from one process's `stat` file.
+/// Parsed fields from one process's `stat` file.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct PidStat {
     // Read only by the live collector's CPU-percentage deltas, which do
@@ -411,10 +421,22 @@ pub(crate) struct PidStat {
     pub(crate) utime_jiffies: u64,
     #[cfg_attr(not(any(target_os = "linux", test)), allow(dead_code))]
     pub(crate) stime_jiffies: u64,
+    /// Scheduling priority (`stat` field 18).
+    pub(crate) priority: i32,
+    /// Nice value (`stat` field 19).
+    pub(crate) nice: i32,
+    /// Start time in jiffies since boot (`stat` field 22).
+    pub(crate) start_jiffies: u64,
+    /// Core the process last ran on (`stat` field 39).
+    pub(crate) processor: u32,
 }
 
-/// Parses the `utime` and `stime` fields of `stat`, which sit after the
+/// Parses the per-process fields of `stat`, which sit after the
 /// parenthesised command and must therefore not be split naively.
+///
+/// All parsed fields are mandatory: a `stat` line short enough to miss
+/// one is treated as unparsed rather than half-known, matching the
+/// fixture-parser rule that column drift must fail, not guess.
 fn parse_pid_stat(text: &str) -> Option<PidStat> {
     let open = text.find('(')?;
     let close = text.rfind(')')?;
@@ -424,10 +446,38 @@ fn parse_pid_stat(text: &str) -> Option<PidStat> {
     let mut fields = text[close + 1..].split_whitespace();
     let utime_jiffies: u64 = fields.nth(11)?.parse().ok()?;
     let stime_jiffies: u64 = fields.next()?.parse().ok()?;
+    // Fields 16 and 17 (`cutime`, `cstime`) are skipped.
+    let _cutime: i64 = fields.next()?.parse().ok()?;
+    let _cstime: i64 = fields.next()?.parse().ok()?;
+    let priority: i32 = fields.next()?.parse().ok()?;
+    let nice: i32 = fields.next()?.parse().ok()?;
+    let _num_threads: i64 = fields.next()?.parse().ok()?;
+    let _itreal: i64 = fields.next()?.parse().ok()?;
+    let start_jiffies: u64 = fields.next()?.parse().ok()?;
+    // Fields 23 through 38 (`vsize` .. `exit_signal`) are skipped.
+    for _ in 0..16 {
+        let _skipped: &str = fields.next()?;
+    }
+    let processor: u32 = fields.next()?.parse().ok()?;
     Some(PidStat {
         utime_jiffies,
         stime_jiffies,
+        priority,
+        nice,
+        start_jiffies,
+        processor,
     })
+}
+
+/// Shared memory bytes from one process's `statm` file: the third field
+/// (shared pages) times the page size.
+///
+/// The page size is the 4 KiB that every recorded Linux host and CI
+/// runner uses; kernels with larger pages would report a proportionally
+/// larger shared footprint as smaller. Decision 0014 records this.
+fn parse_pid_statm(text: &str) -> Option<u64> {
+    let shared_pages: u64 = text.split_whitespace().nth(2)?.parse().ok()?;
+    Some(shared_pages * 4096)
 }
 
 /// Disk I/O counters from `/proc/<pid>/io` for one process.
@@ -511,13 +561,22 @@ pub(crate) struct PidData {
     pub(crate) stat: Option<PidStat>,
     pub(crate) comm: Option<String>,
     pub(crate) io: Option<PidIo>,
+    pub(crate) statm: Option<u64>,
 }
 
 /// Builds one [`Process`] row.
 ///
 /// The user is the numeric uid; the name falls back from `status` to
 /// `comm` to `pid-<pid>`. Memory percentages use the recorded `MemTotal`.
-fn process_row(pid: u32, data: &PidData, total_mem_bytes: u64, cpu_percent: f64) -> Process {
+/// `btime` (the boot time from `/proc/stat`) turns a `stat` start time
+/// into a wall-clock start; without it the start stays unavailable.
+fn process_row(
+    pid: u32,
+    data: &PidData,
+    total_mem_bytes: u64,
+    cpu_percent: f64,
+    btime: Option<u64>,
+) -> Process {
     let status = data.status.as_ref();
     let comm = data.comm.as_deref().map(str::trim_end);
     let name = match (status.map(|status| status.name.as_str()), comm) {
@@ -542,6 +601,10 @@ fn process_row(pid: u32, data: &PidData, total_mem_bytes: u64, cpu_percent: f64)
     } else {
         0.0
     };
+    let start_time_secs = match (btime, data.stat.as_ref()) {
+        (Some(boot), Some(stat)) => Some(boot + stat.start_jiffies / (USER_HZ as u64)),
+        _ => None,
+    };
     Process {
         pid,
         parent: status.and_then(|status| status.parent),
@@ -553,6 +616,14 @@ fn process_row(pid: u32, data: &PidData, total_mem_bytes: u64, cpu_percent: f64)
         virtual_bytes,
         resident_bytes,
         threads,
+        priority: data.stat.as_ref().map(|stat| stat.priority),
+        nice: data.stat.as_ref().map(|stat| stat.nice),
+        shared_bytes: data.statm,
+        total_time_ns: data.stat.as_ref().map(|stat| {
+            (stat.utime_jiffies + stat.stime_jiffies) * 1_000_000_000 / (USER_HZ as u64)
+        }),
+        start_time_secs,
+        processor: data.stat.as_ref().map(|stat| stat.processor),
         io: ProcessIo {
             read_bytes: data.io.map(|io| io.read_bytes),
             write_bytes: data.io.map(|io| io.write_bytes),
@@ -566,13 +637,17 @@ fn process_row(pid: u32, data: &PidData, total_mem_bytes: u64, cpu_percent: f64)
 ///
 /// Only pids with a `status` or a `comm` produce a row; a `stat`-only
 /// entry carries no usable name.
-fn process_table(pids: &BTreeMap<u32, PidData>, total_mem_bytes: u64) -> Vec<Process> {
+fn process_table(
+    pids: &BTreeMap<u32, PidData>,
+    total_mem_bytes: u64,
+    btime: Option<u64>,
+) -> Vec<Process> {
     let mut rows = Vec::new();
     for (pid, data) in pids {
         if data.status.is_none() && data.comm.is_none() {
             continue;
         }
-        rows.push(process_row(*pid, data, total_mem_bytes, 0.0));
+        rows.push(process_row(*pid, data, total_mem_bytes, 0.0, btime));
     }
     rows
 }
@@ -836,6 +911,7 @@ pub fn sample_from_fixture(dir: &Path) -> Result<Sample, FixtureSampleError> {
                 "status" => data.status = Some(parse_pid_status(&text)),
                 "comm" => data.comm = Some(text),
                 "io" => data.io = parse_pid_io(&text),
+                "statm" => data.statm = parse_pid_statm(&text),
                 _ => {} // cmdline: nothing beyond `comm` is useful here
             }
             continue;
@@ -910,7 +986,7 @@ pub fn sample_from_fixture(dir: &Path) -> Result<Sample, FixtureSampleError> {
                 .count() as f64,
             Unit::Count,
         ),
-        processes: process_table(&pids, meminfo.total),
+        processes: process_table(&pids, meminfo.total, stat.btime),
         disks: disks.unwrap_or_default(),
         net: net.unwrap_or_default(),
         sensors: Sensors {
@@ -941,9 +1017,10 @@ mod live {
     use super::{
         CpuTimes, PidData, PidIo, PidStat, USER_HZ, core_percents, counter_rate, disk_usage,
         io_rates, memory_from, parse_cpuinfo_frequencies, parse_hwmon, parse_pid_io,
-        parse_pid_stat, parse_pid_status, parse_power_supply, parse_proc_diskstats,
-        parse_proc_loadavg, parse_proc_loadavg_entities, parse_proc_meminfo, parse_proc_mounts,
-        parse_proc_net_dev, parse_proc_stat, parse_proc_uptime, process_row, system_text,
+        parse_pid_stat, parse_pid_statm, parse_pid_status, parse_power_supply,
+        parse_proc_diskstats, parse_proc_loadavg, parse_proc_loadavg_entities, parse_proc_meminfo,
+        parse_proc_mounts, parse_proc_net_dev, parse_proc_stat, parse_proc_uptime, process_row,
+        system_text,
     };
     use crate::collector::{CollectError, Collector};
     use crate::model::{
@@ -1053,6 +1130,9 @@ mod live {
                 data.io = fs::read_to_string(base.join("io"))
                     .ok()
                     .and_then(|text| parse_pid_io(&text));
+                data.statm = fs::read_to_string(base.join("statm"))
+                    .ok()
+                    .and_then(|text| parse_pid_statm(&text));
             }
 
             let mut temps: Vec<TempSensor> = Vec::new();
@@ -1123,7 +1203,7 @@ mod live {
                     }
                     _ => 0.0,
                 };
-                let mut row = process_row(*pid, data, total_mem_bytes, cpu_percent);
+                let mut row = process_row(*pid, data, total_mem_bytes, cpu_percent, stat.btime);
                 let (read_rate, write_rate) = io_rates(
                     data.io,
                     prev_ios.and_then(|ios| ios.get(pid)).copied(),
@@ -1443,15 +1523,24 @@ mod tests {
 
     #[test]
     fn pid_stat_skips_the_parenthesised_command() {
-        let line = "1 (proc-a-1) S 0 1 1 0 -1 4194560 37747 373471 29 1045 151 189 395 371 20 0 1 0 40 26316800 4140 18446744073709551615\n";
+        // Kernel stat fields after `)`: state(0) ppid(1) pgrp(2) session(3)
+        // tty_nr(4) tpgid(5) flags(6) minflt(7) cminflt(8) majflt(9)
+        // cmajflt(10) utime(11) stime(12) cutime(13) cstime(14) priority(15)
+        // nice(16) num_threads(17) itrealvalue(18) starttime(19) ...
+        // processor at index 36.
+        let line = "1 (proc-a-1) S 0 1 1 0 -1 4194560 37747 373471 29 0 151 189 395 371 371 20 0 1 40 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0\n";
         let stat = parse_pid_stat(line).expect("stat parses");
         assert_eq!(stat.utime_jiffies, 151);
         assert_eq!(stat.stime_jiffies, 189);
+        assert_eq!(stat.priority, 371);
+        assert_eq!(stat.nice, 20);
+        assert_eq!(stat.start_jiffies, 40);
+        assert_eq!(stat.processor, 0);
     }
 
     #[test]
     fn pid_stat_handles_commands_with_parentheses() {
-        let line = "7 ((sd-pam) ) S 1 1 1 0 -1 4194560 0 0 0 0 0 0 0 0 20 0 1 0 44 70000 100 18446744073709551615\n";
+        let line = "7 ((sd-pam) ) S 1 1 1 0 -1 4194560 0 0 0 0 0 0 0 0 20 0 1 0 44 70000 100 18446744073709551615 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0\n";
         let stat = parse_pid_stat(line).expect("stat parses");
         assert_eq!(stat.utime_jiffies, 0);
         assert_eq!(stat.stime_jiffies, 0);
@@ -1553,8 +1642,9 @@ mod tests {
             stat: None,
             comm: Some("proc-a-1\n".to_string()),
             io: None,
+            statm: None,
         };
-        let row = process_row(1, &data, 16366640 * 1024, 0.0);
+        let row = process_row(1, &data, 16366640 * 1024, 0.0, None);
         assert_eq!(row.pid, 1);
         assert_eq!(row.name, "proc-a-1");
         assert_eq!(row.state, "S");
@@ -1572,8 +1662,9 @@ mod tests {
             stat: None,
             comm: Some("worker-a\n".to_string()),
             io: None,
+            statm: None,
         };
-        let row = process_row(9, &data, 1000 * 1024, 0.0);
+        let row = process_row(9, &data, 1000 * 1024, 0.0, None);
         assert_eq!(row.name, "worker-a");
         assert_eq!(row.state, "?");
         assert_eq!(row.user, "?");
@@ -1583,7 +1674,7 @@ mod tests {
     #[test]
     fn process_row_falls_back_when_names_are_missing() {
         let data = PidData::default();
-        let row = process_row(42, &data, 0, 0.0);
+        let row = process_row(42, &data, 0, 0.0, None);
         assert_eq!(row.name, "pid-42");
         assert_eq!(row.state, "?");
         assert_eq!(row.user, "?");

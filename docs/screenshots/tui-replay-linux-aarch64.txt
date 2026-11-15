@@ -4,19 +4,19 @@ zTop 0.1.0  linux-aarch64  up 00:02:11  12 procs  load 1.74 0.50 0.17
 17:36:50  Tasks: 12, 0 running  256 thr  12 kthr  Linux 7.0.0-1017-azure        
 q: quit · tab: sort cpu ↓ · i: reverse · f3: search · f4: filter · u: user · spa
 ────────────────────────────────────────────────────────────────────────────────
-PID      USER       STATE   CPU%    MEM%    THR   RES       NAME                
-      1          0  S          0.0     0.1     1  13.4 MiB  proc-a-1            
-      2          0  S          0.0     0.0     1       0 B  proc-b-2            
-      3          0  S          0.0     0.0     1       0 B  proc-c-3            
-      4          0  I          0.0     0.0     1       0 B  proc-d-4            
-      5          0  I          0.0     0.0     1       0 B  proc-e-5            
-      6          0  I          0.0     0.0     1       0 B  proc-f-6            
-      7          0  I          0.0     0.0     1       0 B  proc-g-7            
-      8          0  I          0.0     0.0     1       0 B  proc-h-8            
-      9          0  I          0.0     0.0     1       0 B  proc-i-9            
-     10          0  I          0.0     0.0     1       0 B  proc-j-10           
-     11          0  I          0.0     0.0     1       0 B  proc-k-11           
-     12          0  I          0.0     0.0     1       0 B  proc-l-12           
+PID      USER       STATE CPU%   MEM%   THR  RES      NICE  NAME                
+      1          0  S        0.0    0.1    1 13.4 MiB     0 proc-a-1            
+      2          0  S        0.0    0.0    1      0 B     0 proc-b-2            
+      3          0  S        0.0    0.0    1      0 B     0 proc-c-3            
+      4          0  I        0.0    0.0    1      0 B   -20 proc-d-4            
+      5          0  I        0.0    0.0    1      0 B   -20 proc-e-5            
+      6          0  I        0.0    0.0    1      0 B   -20 proc-f-6            
+      7          0  I        0.0    0.0    1      0 B   -20 proc-g-7            
+      8          0  I        0.0    0.0    1      0 B   -20 proc-h-8            
+      9          0  I        0.0    0.0    1      0 B     0 proc-i-9            
+     10          0  I        0.0    0.0    1      0 B   -20 proc-j-10           
+     11          0  I        0.0    0.0    1      0 B     0 proc-k-11           
+     12          0  I        0.0    0.0    1      0 B     0 proc-l-12           
                                                                                 
                                                                                 
                                                                                 

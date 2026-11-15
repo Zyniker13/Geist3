@@ -246,6 +246,7 @@ mod linux {
         Source::Glob("/proc/[0-9]*/status"),
         Source::Glob("/proc/[0-9]*/cmdline"),
         Source::Glob("/proc/[0-9]*/io"),
+        Source::Glob("/proc/[0-9]*/statm"),
         Source::Glob("/proc/[0-9]*/comm"),
         Source::Glob("/sys/class/hwmon/*/name"),
         Source::Glob("/sys/class/hwmon/*/temp*_input"),
