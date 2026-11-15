@@ -13,7 +13,10 @@ use std::time::Duration;
 use ratatui::Frame;
 use ratatui::Terminal;
 use ratatui::backend::{CrosstermBackend, TestBackend};
-use ratatui::crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
+use ratatui::crossterm::event::{
+    self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent, KeyEventKind,
+    KeyModifiers, MouseButton, MouseEventKind,
+};
 use ratatui::crossterm::execute;
 use ratatui::crossterm::terminal::{
     EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
@@ -531,6 +534,27 @@ impl Ui {
         if self.descending { ord.reverse() } else { ord }
     }
 
+    /// Sort by one key directly (a mouse click on the header): clicking
+    /// the key already sorting flips the direction, otherwise the new key
+    /// starts descending like the default sort.
+    pub fn sort_by(&mut self, key: SortKey) {
+        if self.sort == key {
+            self.toggle_direction();
+        } else {
+            self.sort = key;
+            self.descending = true;
+        }
+    }
+
+    /// Select the process on visible row `index` (0 = the first visible
+    /// row); a click past the last row leaves the cursor where it is.
+    pub fn select_visible_row(&mut self, index: usize) {
+        let pid = self.ordered_rows().get(index).map(|row| row.process.pid);
+        if let Some(pid) = pid {
+            self.cursor = Some(pid);
+        }
+    }
+
     /// Switch between the flat list and the tree view.
     pub fn toggle_tree(&mut self) {
         self.tree = !self.tree;
@@ -760,17 +784,108 @@ pub fn run(collector: &mut dyn Collector, pids: &[u32], config: Config) -> io::R
 }
 
 fn run_inner(collector: &mut dyn Collector, pids: &[u32], config: Config) -> io::Result<()> {
-    execute!(io::stdout(), EnterAlternateScreen)?;
+    execute!(io::stdout(), EnterAlternateScreen, EnableMouseCapture)?;
     let mut terminal = Terminal::new(CrosstermBackend::new(io::stdout()))?;
     let result = event_loop(&mut terminal, collector, pids, config);
-    execute!(io::stdout(), LeaveAlternateScreen)?;
+    execute!(io::stdout(), LeaveAlternateScreen, DisableMouseCapture)?;
     result
 }
 
 fn restore() -> io::Result<()> {
     disable_raw_mode()?;
-    execute!(io::stdout(), LeaveAlternateScreen)?;
+    execute!(io::stdout(), LeaveAlternateScreen, DisableMouseCapture)?;
     Ok(())
+}
+
+/// Drive the state with one pressed key; true when the key quits.
+///
+/// Both the keyboard and the mouse feed this: a click on a function-bar
+/// hint is replayed as the key press its label names, so the two paths
+/// stay one code path.
+fn handle_key(ui: &mut Ui, key: KeyEvent) -> bool {
+    match key.code {
+        // Ctrl-C always quits, even while typing a filter.
+        KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => return true,
+        // While the setup screen (F2) is open the keys drive
+        // it: Esc/F2 close it (saving), j/k move, Space or
+        // Enter toggle the selected option; everything else
+        // — including the table keys — does nothing.
+        KeyCode::Esc if ui.screen == Screen::Setup => {
+            ui.finish_setup(ui.config.save());
+        }
+        KeyCode::F(2) if ui.screen == Screen::Setup => {
+            ui.finish_setup(ui.config.save());
+        }
+        KeyCode::Char('j') | KeyCode::Down if ui.screen == Screen::Setup => {
+            ui.setup_next();
+        }
+        KeyCode::Char('k') | KeyCode::Up if ui.screen == Screen::Setup => {
+            ui.setup_prev();
+        }
+        KeyCode::Enter | KeyCode::Char(' ') if ui.screen == Screen::Setup => {
+            ui.setup_toggle();
+        }
+        _ if ui.screen == Screen::Setup => {}
+        KeyCode::Tab => ui.cycle_sort(),
+        // While the filter prompt is open the keys edit it:
+        // Esc closes, Backspace erases, everything printable
+        // types — including `q` and `i`.
+        KeyCode::Esc if ui.filter.is_some() => ui.close_filter(),
+        KeyCode::Backspace if ui.filter.is_some() => ui.filter_pop(),
+        KeyCode::Char(c) if ui.filter.is_some() => ui.filter_push(c),
+        // While the search prompt is open the keys edit it:
+        // F3 repeats the search, Esc/Enter close, Backspace
+        // erases, everything printable types.
+        KeyCode::Esc if ui.search.is_some() => ui.close_search(),
+        KeyCode::Backspace if ui.search.is_some() => ui.search_pop(),
+        KeyCode::F(3) if ui.search.is_some() => ui.search_next(),
+        KeyCode::Enter if ui.search.is_some() => ui.close_search(),
+        KeyCode::Char(c) if ui.search.is_some() => ui.search_push(c),
+        // While the signal menu is open the keys drive it:
+        // Esc closes, j/k move, Enter sends to the targets.
+        KeyCode::Esc if ui.menu.is_some() => ui.close_menu(),
+        KeyCode::Char('j') | KeyCode::Down if ui.menu.is_some() => ui.menu_next(),
+        KeyCode::Char('k') | KeyCode::Up if ui.menu.is_some() => ui.menu_prev(),
+        KeyCode::Enter if ui.menu.is_some() => {
+            if let Some(plan) = ui.confirm_menu() {
+                run_plan(ui, &plan);
+            }
+        }
+        _ if ui.menu.is_some() => {}
+        KeyCode::Char('q') | KeyCode::Esc => return true,
+        // `a` flips between the process table and the Apple
+        // Silicon screen; on the silicon screen the table
+        // keys have no meaning, so they do nothing.
+        KeyCode::Char('a') => ui.toggle_screen(),
+        // F2 opens the setup screen from either table screen.
+        KeyCode::F(2) if ui.screen != Screen::Setup => ui.open_setup(),
+        _ if ui.screen == Screen::AppleSilicon => {}
+        KeyCode::Char('i') => ui.toggle_direction(),
+        KeyCode::F(3) => ui.toggle_search(),
+        KeyCode::F(4) => ui.toggle_filter(),
+        KeyCode::Char('u') => ui.cycle_user_filter(),
+        KeyCode::Char(' ') => ui.toggle_tag(),
+        KeyCode::Char('c') => ui.tag_children(),
+        KeyCode::Char('U') => ui.untag_all(),
+        KeyCode::F(9) | KeyCode::Char('K') => ui.open_menu(),
+        KeyCode::F(7) => {
+            if let Some(plan) = ui.renice_plan(-1) {
+                run_plan(ui, &plan);
+            }
+        }
+        KeyCode::F(8) => {
+            if let Some(plan) = ui.renice_plan(1) {
+                run_plan(ui, &plan);
+            }
+        }
+        KeyCode::Char('f') | KeyCode::Char('F') => ui.toggle_follow(),
+        KeyCode::F(5) => ui.toggle_tree(),
+        KeyCode::Enter => ui.toggle_collapse(),
+        KeyCode::Char('j') | KeyCode::Down => ui.select_next(),
+        KeyCode::Char('k') | KeyCode::Up => ui.select_prev(),
+        _ => {}
+    }
+    false
 }
 
 fn event_loop(
@@ -783,93 +898,18 @@ fn event_loop(
     ui.pid_filter = pids.iter().copied().collect();
     ui.apply(collector.sample());
     loop {
-        terminal.draw(|frame| draw(frame, &ui))?;
+        let area = terminal.draw(|frame| draw(frame, &ui))?.area;
         if event::poll(REFRESH)? {
-            if let Event::Key(key) = event::read()? {
-                if key.kind == KeyEventKind::Press {
-                    match key.code {
-                        // Ctrl-C always quits, even while typing a filter.
-                        KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                            return Ok(());
-                        }
-                        // While the setup screen (F2) is open the keys drive
-                        // it: Esc/F2 close it (saving), j/k move, Space or
-                        // Enter toggle the selected option; everything else
-                        // — including the table keys — does nothing.
-                        KeyCode::Esc if ui.screen == Screen::Setup => {
-                            ui.finish_setup(ui.config.save());
-                        }
-                        KeyCode::F(2) if ui.screen == Screen::Setup => {
-                            ui.finish_setup(ui.config.save());
-                        }
-                        KeyCode::Char('j') | KeyCode::Down if ui.screen == Screen::Setup => {
-                            ui.setup_next();
-                        }
-                        KeyCode::Char('k') | KeyCode::Up if ui.screen == Screen::Setup => {
-                            ui.setup_prev();
-                        }
-                        KeyCode::Enter | KeyCode::Char(' ') if ui.screen == Screen::Setup => {
-                            ui.setup_toggle();
-                        }
-                        _ if ui.screen == Screen::Setup => {}
-                        KeyCode::Tab => ui.cycle_sort(),
-                        // While the filter prompt is open the keys edit it:
-                        // Esc closes, Backspace erases, everything printable
-                        // types — including `q` and `i`.
-                        KeyCode::Esc if ui.filter.is_some() => ui.close_filter(),
-                        KeyCode::Backspace if ui.filter.is_some() => ui.filter_pop(),
-                        KeyCode::Char(c) if ui.filter.is_some() => ui.filter_push(c),
-                        // While the search prompt is open the keys edit it:
-                        // F3 repeats the search, Esc/Enter close, Backspace
-                        // erases, everything printable types.
-                        KeyCode::Esc if ui.search.is_some() => ui.close_search(),
-                        KeyCode::Backspace if ui.search.is_some() => ui.search_pop(),
-                        KeyCode::F(3) if ui.search.is_some() => ui.search_next(),
-                        KeyCode::Enter if ui.search.is_some() => ui.close_search(),
-                        KeyCode::Char(c) if ui.search.is_some() => ui.search_push(c),
-                        // While the signal menu is open the keys drive it:
-                        // Esc closes, j/k move, Enter sends to the targets.
-                        KeyCode::Esc if ui.menu.is_some() => ui.close_menu(),
-                        KeyCode::Char('j') | KeyCode::Down if ui.menu.is_some() => ui.menu_next(),
-                        KeyCode::Char('k') | KeyCode::Up if ui.menu.is_some() => ui.menu_prev(),
-                        KeyCode::Enter if ui.menu.is_some() => {
-                            if let Some(plan) = ui.confirm_menu() {
-                                run_plan(&mut ui, &plan);
-                            }
-                        }
-                        _ if ui.menu.is_some() => {}
-                        KeyCode::Char('q') | KeyCode::Esc => return Ok(()),
-                        // `a` flips between the process table and the Apple
-                        // Silicon screen; on the silicon screen the table
-                        // keys have no meaning, so they do nothing.
-                        KeyCode::Char('a') => ui.toggle_screen(),
-                        // F2 opens the setup screen from either table screen.
-                        KeyCode::F(2) if ui.screen != Screen::Setup => ui.open_setup(),
-                        _ if ui.screen == Screen::AppleSilicon => {}
-                        KeyCode::Char('i') => ui.toggle_direction(),
-                        KeyCode::F(3) => ui.toggle_search(),
-                        KeyCode::F(4) => ui.toggle_filter(),
-                        KeyCode::Char('u') => ui.cycle_user_filter(),
-                        KeyCode::Char(' ') => ui.toggle_tag(),
-                        KeyCode::Char('c') => ui.tag_children(),
-                        KeyCode::Char('U') => ui.untag_all(),
-                        KeyCode::F(9) | KeyCode::Char('K') => ui.open_menu(),
-                        KeyCode::F(7) => {
-                            if let Some(plan) = ui.renice_plan(-1) {
-                                run_plan(&mut ui, &plan);
-                            }
-                        }
-                        KeyCode::F(8) => {
-                            if let Some(plan) = ui.renice_plan(1) {
-                                run_plan(&mut ui, &plan);
-                            }
-                        }
-                        KeyCode::Char('f') | KeyCode::Char('F') => ui.toggle_follow(),
-                        KeyCode::F(5) => ui.toggle_tree(),
-                        KeyCode::Enter => ui.toggle_collapse(),
-                        KeyCode::Char('j') | KeyCode::Down => ui.select_next(),
-                        KeyCode::Char('k') | KeyCode::Up => ui.select_prev(),
-                        _ => {}
+            let event = event::read()?;
+            if let Event::Key(key) = event {
+                if key.kind == KeyEventKind::Press && handle_key(&mut ui, key) {
+                    return Ok(());
+                }
+            } else if let Event::Mouse(mouse) = event {
+                if let Some(key) = handle_mouse(&mut ui, mouse.kind, mouse.column, mouse.row, area)
+                {
+                    if handle_key(&mut ui, key) {
+                        return Ok(());
                     }
                 }
             }
@@ -940,10 +980,9 @@ pub fn draw(frame: &mut Frame, ui: &Ui) {
         }
         return;
     }
-    let header = Constraint::Length(4 + u16::from(sensors_present(ui)));
-    let areas = Layout::vertical([header, Constraint::Min(1)]).split(frame.area());
-    draw_header(frame, ui, areas[0]);
-    draw_processes(frame, ui, areas[1]);
+    let (header_area, table_area) = split_table_area(ui, frame.area());
+    draw_header(frame, ui, header_area);
+    draw_processes(frame, ui, table_area);
     if ui.menu.is_some() {
         draw_menu(frame, ui, frame.area());
     }
@@ -1411,49 +1450,121 @@ fn sensors_line(ui: &Ui) -> Line<'static> {
     Line::from(parts.join("  "))
 }
 
-fn status_line(ui: &Ui) -> Line<'static> {
+/// The status line's items, state first and the function-bar hints last;
+/// `status_line` renders it and `status_hint_at` maps click columns back
+/// to the hint labels, so the two agree on where each hint sits.
+fn status_parts(ui: &Ui) -> Vec<String> {
     if let Some(error) = &ui.error {
-        Line::from(Span::from(format!("error: {error} · q: quit")).red())
-    } else if ui.sample.is_some() {
-        let mut parts = Vec::new();
-        if let Some(pattern) = &ui.filter {
-            parts.push(format!("filter:/{pattern}"));
-        }
-        if let Some(user) = &ui.user_filter {
-            parts.push(format!("user:{user}"));
-        }
-        if !ui.pid_filter.is_empty() {
-            parts.push(format!("pids:{}", ui.pid_filter.len()));
-        }
-        if let Some(followed) = ui.follow {
-            let name = ui
-                .sample
-                .as_ref()
-                .and_then(|s| s.processes.iter().find(|p| p.pid == followed))
-                .map_or_else(|| format!("pid {followed}"), |p| p.name.clone());
-            parts.push(format!("follow:{name}"));
-        }
-        if ui.tree {
-            parts.push("tree".to_string());
-        }
-        if let Some(pattern) = &ui.search {
-            parts.push(format!("search:/{pattern}"));
-        }
-        let tagged = ui.tags.len();
-        if tagged > 0 {
-            parts.push(format!("tagged:{tagged}"));
-        }
-        if let Some(notice) = &ui.notice {
-            parts.push(notice.clone());
-        }
-        parts.push(format!(
-            "q: quit · tab: sort {} · i: reverse · f3: search · f4: filter · u: user · space: tag · j/k: select · f: follow · f5: tree · enter: fold · f9: signal · f7/f8: renice",
-            sort_label(ui.sort, ui.descending)
-        ));
-        Line::from(parts.join(" · "))
-    } else {
-        Line::from("waiting for the first sample · q: quit")
+        return vec![format!("error: {error} · q: quit")];
     }
+    if ui.sample.is_none() {
+        return vec!["waiting for the first sample · q: quit".to_string()];
+    }
+    let mut parts = Vec::new();
+    if let Some(pattern) = &ui.filter {
+        parts.push(format!("filter:/{pattern}"));
+    }
+    if let Some(user) = &ui.user_filter {
+        parts.push(format!("user:{user}"));
+    }
+    if !ui.pid_filter.is_empty() {
+        parts.push(format!("pids:{}", ui.pid_filter.len()));
+    }
+    if let Some(followed) = ui.follow {
+        let name = ui
+            .sample
+            .as_ref()
+            .and_then(|s| s.processes.iter().find(|p| p.pid == followed))
+            .map_or_else(|| format!("pid {followed}"), |p| p.name.clone());
+        parts.push(format!("follow:{name}"));
+    }
+    if ui.tree {
+        parts.push("tree".to_string());
+    }
+    if let Some(pattern) = &ui.search {
+        parts.push(format!("search:/{pattern}"));
+    }
+    let tagged = ui.tags.len();
+    if tagged > 0 {
+        parts.push(format!("tagged:{tagged}"));
+    }
+    if let Some(notice) = &ui.notice {
+        parts.push(notice.clone());
+    }
+    parts.push(format!(
+        "q: quit · tab: sort {} · i: reverse · f3: search · f4: filter · u: user · space: tag · j/k: select · f: follow · f5: tree · enter: fold · f9: signal · f7/f8: renice",
+        sort_label(ui.sort, ui.descending)
+    ));
+    parts
+}
+
+fn status_line(ui: &Ui) -> Line<'static> {
+    let joined = status_parts(ui).join(" · ");
+    if ui.error.is_some() {
+        Line::from(Span::from(joined).red())
+    } else {
+        Line::from(joined)
+    }
+}
+
+/// The key a click on the status line replays: the label the click lands
+/// on names its key ("tab: sort"), while state text (filter, search,
+/// tags, notices) replays nothing. The labels here and the hints in
+/// `status_parts` must stay in step.
+fn status_hint_at(ui: &Ui, column: u16) -> Option<KeyEvent> {
+    let line = status_parts(ui).join(" · ");
+    let len = line.chars().count() as u16;
+    let column = column.min(len);
+    let mut offset = 0;
+    for item in line.split(" · ") {
+        let width = item.chars().count() as u16;
+        if column < offset + width {
+            break;
+        }
+        if column < offset + width + 3 {
+            return None;
+        }
+        offset += width + 3;
+    }
+    // `offset` counts characters while slicing needs a byte index: the
+    // line holds multibyte characters (the sort arrow, the separators).
+    let byte_at = line
+        .char_indices()
+        .nth(offset as usize)
+        .map_or(line.len(), |(i, _)| i);
+    hint_key(line[byte_at..].split_once(": ")?.0)
+}
+
+fn hint_key(label: &str) -> Option<KeyEvent> {
+    let code = match label {
+        "q" => KeyCode::Char('q'),
+        "tab" => KeyCode::Tab,
+        "i" => KeyCode::Char('i'),
+        "f3" => KeyCode::F(3),
+        "f4" => KeyCode::F(4),
+        "u" => KeyCode::Char('u'),
+        "space" => KeyCode::Char(' '),
+        "j/k" => KeyCode::Char('j'),
+        "f" => KeyCode::Char('f'),
+        "f5" => KeyCode::F(5),
+        "enter" => KeyCode::Enter,
+        "f9" => KeyCode::F(9),
+        "f7/f8" => KeyCode::F(7),
+        _ => return None,
+    };
+    Some(KeyEvent::from(code))
+}
+
+/// The header meters' and the process table's areas: the table sits below
+/// the header. The draw path and mouse clicks share this split, so a click
+/// lands on what is on screen.
+fn split_table_area(
+    ui: &Ui,
+    total: ratatui::layout::Rect,
+) -> (ratatui::layout::Rect, ratatui::layout::Rect) {
+    let header = Constraint::Length(4 + u16::from(sensors_present(ui)));
+    let areas = Layout::vertical([header, Constraint::Min(1)]).split(total);
+    (areas[0], areas[1])
 }
 
 fn draw_processes(frame: &mut Frame, ui: &Ui, area: ratatui::layout::Rect) {
@@ -1472,10 +1583,7 @@ fn draw_processes(frame: &mut Frame, ui: &Ui, area: ratatui::layout::Rect) {
     // under the table header (the block's top border takes one line).
     let fold = area.height.saturating_sub(2) as usize;
     let cursor_index = procs.iter().position(|r| Some(r.process.pid) == ui.cursor);
-    let offset = match cursor_index {
-        Some(index) if fold > 0 => index.saturating_sub(fold - 1).min(index),
-        _ => 0,
-    };
+    let offset = table_scroll(cursor_index, fold);
     for row_view in procs.iter().skip(offset).take(fold) {
         let mut row = process_row(
             row_view,
@@ -1488,6 +1596,35 @@ fn draw_processes(frame: &mut Frame, ui: &Ui, area: ratatui::layout::Rect) {
         }
         rows.push(row);
     }
+    let widths = table_widths(show_io);
+    let table = Table::new(rows, widths)
+        .header(header)
+        .block(Block::new().borders(Borders::TOP));
+    frame.render_widget(table, area);
+}
+
+/// The first visible row index so the cursor stays in view: scroll only
+/// far enough. The draw path and mouse clicks share this, so they agree
+/// on which row sits where.
+fn table_scroll(cursor_index: Option<usize>, fold: usize) -> usize {
+    match cursor_index {
+        Some(index) if fold > 0 => index.saturating_sub(fold - 1).min(index),
+        _ => 0,
+    }
+}
+
+/// Whether the I/O rate columns are worth showing: at least one row in
+/// the visible set moves data in either direction.
+fn procs_io_visible<'a>(rows: impl IntoIterator<Item = &'a TreeRow<'a>>) -> bool {
+    rows.into_iter().any(|row| {
+        row.process.io.read_rate.unwrap_or(0.0) > 0.0
+            || row.process.io.write_rate.unwrap_or(0.0) > 0.0
+    })
+}
+
+/// The table's column widths, in order. The draw path and mouse clicks
+/// share this, so a click lands on the column it points at.
+fn table_widths(show_io: bool) -> Vec<Constraint> {
     let mut widths = vec![
         Constraint::Length(8),
         Constraint::Length(10),
@@ -1501,19 +1638,93 @@ fn draw_processes(frame: &mut Frame, ui: &Ui, area: ratatui::layout::Rect) {
         widths.extend([Constraint::Length(5), Constraint::Length(5)]);
     }
     widths.push(Constraint::Min(1));
-    let table = Table::new(rows, widths)
-        .header(header)
-        .block(Block::new().borders(Borders::TOP));
-    frame.render_widget(table, area);
+    widths
 }
 
-/// Whether the I/O rate columns are worth showing: at least one row in
-/// the visible set moves data in either direction.
-fn procs_io_visible<'a>(rows: impl IntoIterator<Item = &'a TreeRow<'a>>) -> bool {
-    rows.into_iter().any(|row| {
-        row.process.io.read_rate.unwrap_or(0.0) > 0.0
-            || row.process.io.write_rate.unwrap_or(0.0) > 0.0
-    })
+/// The sort key a click on table column `x` (relative to the table's left
+/// edge) lands on, or None for columns that do not sort (state, threads,
+/// the I/O rates). One cell of column spacing separates the columns,
+/// matching the draw path's table layout.
+fn sort_column_at(x: u16, show_io: bool) -> Option<SortKey> {
+    let widths = table_widths(show_io);
+    let keys: &[Option<SortKey>] = &[
+        Some(SortKey::Pid),
+        Some(SortKey::User),
+        None,
+        Some(SortKey::Cpu),
+        Some(SortKey::Mem),
+        None,
+        Some(SortKey::Resident),
+        None,
+        None,
+        Some(SortKey::Name),
+    ];
+    let mut left = 0u16;
+    for (index, width) in widths.iter().enumerate() {
+        let Constraint::Length(width) = width else {
+            // The name column takes the rest of the table.
+            return keys.get(index).copied().flatten();
+        };
+        if x >= left && x < left + width {
+            return keys.get(index).copied().flatten();
+        }
+        left += width + 1;
+    }
+    None
+}
+
+/// One mouse event on the process table: a left click selects the row it
+/// lands on or sorts by the header column it points at; the wheel moves
+/// the cursor. Clicks while a prompt or the menu is open are ignored, and
+/// the setup and Apple Silicon screens have no table to click.
+fn handle_mouse(
+    ui: &mut Ui,
+    kind: MouseEventKind,
+    column: u16,
+    row: u16,
+    total: ratatui::layout::Rect,
+) -> Option<KeyEvent> {
+    if ui.screen != Screen::ProcessTable
+        || ui.menu.is_some()
+        || ui.filter.is_some()
+        || ui.search.is_some()
+    {
+        return None;
+    }
+    let (header, table) = split_table_area(ui, total);
+    // The function bar is the header area's last row (the status line);
+    // a click there replays the hint's key, like pressing the label.
+    if header.y + 3 + u16::from(sensors_present(ui)) == row {
+        return match kind {
+            MouseEventKind::Down(MouseButton::Left) => status_hint_at(ui, column),
+            _ => None,
+        };
+    }
+    if row < table.y || row >= table.y + table.height {
+        return None;
+    }
+    let local = row - table.y;
+    match kind {
+        MouseEventKind::Down(MouseButton::Left) => {
+            if local == 1 {
+                let procs = ui.ordered_rows();
+                let show_io = procs_io_visible(&procs);
+                if let Some(key) = sort_column_at(column.saturating_sub(table.x), show_io) {
+                    ui.sort_by(key);
+                }
+            } else if local >= 2 {
+                let procs = ui.ordered_rows();
+                let fold = table.height.saturating_sub(2) as usize;
+                let cursor_index = procs.iter().position(|r| Some(r.process.pid) == ui.cursor);
+                let offset = table_scroll(cursor_index, fold);
+                ui.select_visible_row(local as usize - 2 + offset);
+            }
+        }
+        MouseEventKind::ScrollUp => ui.select_prev(),
+        MouseEventKind::ScrollDown => ui.select_next(),
+        _ => {}
+    }
+    None
 }
 
 /// One table row. Tagged processes carry a `*` before the name, htop-style.
@@ -2639,6 +2850,134 @@ mod tests {
             rows.iter()
                 .any(|row| row.contains("Theme") && row.contains("mono"))
         );
+    }
+
+    /// Mouse support (docs/parity.md: "click to select, sort and use the
+    /// function bar"): a left click on a process row moves the selection
+    /// to that row, and the wheel walks the selection.
+    #[test]
+    fn clicking_a_row_selects_it() {
+        let mut ui = ui_with(Some(sample()), None);
+        let screen = ratatui::layout::Rect::new(0, 0, 80, 24);
+        // Sensorless fixture: the table starts at y 4 — border, column
+        // header, then the rows — so the first row sits at y 6.
+        let first = ui.ordered_rows()[0].process.pid;
+        let second = ui.ordered_rows()[1].process.pid;
+        handle_mouse(
+            &mut ui,
+            MouseEventKind::Down(MouseButton::Left),
+            0,
+            6,
+            screen,
+        );
+        assert_eq!(ui.cursor, Some(first));
+        handle_mouse(&mut ui, MouseEventKind::ScrollDown, 0, 6, screen);
+        assert_eq!(ui.cursor, Some(second));
+    }
+
+    /// A click on a column header sorts by that column; clicking the
+    /// column that already sorts flips the direction.
+    #[test]
+    fn clicking_the_header_sorts_then_flips() {
+        let mut ui = ui_with(Some(sample()), None);
+        let screen = ratatui::layout::Rect::new(0, 0, 80, 24);
+        let pids: Vec<u32> = ui.ordered_rows().iter().map(|r| r.process.pid).collect();
+        // The PID column starts at x 0, so column 0 is its header cell.
+        handle_mouse(
+            &mut ui,
+            MouseEventKind::Down(MouseButton::Left),
+            0,
+            5,
+            screen,
+        );
+        assert_eq!(
+            ui.ordered_rows()[0].process.pid,
+            *pids.iter().max().unwrap()
+        );
+        handle_mouse(
+            &mut ui,
+            MouseEventKind::Down(MouseButton::Left),
+            0,
+            5,
+            screen,
+        );
+        assert_eq!(
+            ui.ordered_rows()[0].process.pid,
+            *pids.iter().min().unwrap()
+        );
+    }
+
+    /// A click on the function bar replays the key its label names: the
+    /// `i: reverse` hint flips the sort direction like pressing i.
+    #[test]
+    fn clicking_a_function_bar_hint_replays_the_key() {
+        let mut ui = ui_with(Some(sample()), None);
+        let screen = ratatui::layout::Rect::new(0, 0, 80, 24);
+        // The status row sits at y 3 on the sensorless fixture; find the
+        // hint's column in the same string the draw path renders.
+        let line = status_parts(&ui).join(" · ");
+        let x = line.split("i: reverse").next().unwrap().chars().count() as u16;
+        let procs = ui.ordered_rows();
+        let last = procs.last().unwrap().process.pid;
+        let key = handle_mouse(
+            &mut ui,
+            MouseEventKind::Down(MouseButton::Left),
+            x,
+            3,
+            screen,
+        )
+        .expect("the i hint replays i");
+        handle_key(&mut ui, key);
+        assert_eq!(ui.ordered_rows()[0].process.pid, last);
+    }
+
+    /// The `q: quit` hint replays q, which quits — the full click path
+    /// reaches the same handler the keyboard uses.
+    #[test]
+    fn clicking_quit_replays_the_quit_key() {
+        let mut ui = ui_with(Some(sample()), None);
+        let screen = ratatui::layout::Rect::new(0, 0, 80, 24);
+        // `q: quit` starts the function bar, so column 0 lands on it.
+        let key = handle_mouse(
+            &mut ui,
+            MouseEventKind::Down(MouseButton::Left),
+            0,
+            3,
+            screen,
+        )
+        .expect("the q hint replays q");
+        assert!(handle_key(&mut ui, key), "the replayed q quits");
+    }
+
+    /// While a prompt (filter, search, signal menu) is open the mouse
+    /// does nothing, matching the keyboard where the prompt eats keys.
+    #[test]
+    fn clicks_are_ignored_while_a_prompt_is_open() {
+        let mut ui = ui_with(Some(sample()), None);
+        let screen = ratatui::layout::Rect::new(0, 0, 80, 24);
+        ui.toggle_filter();
+        assert!(ui.filter.is_some());
+        assert_eq!(
+            handle_mouse(
+                &mut ui,
+                MouseEventKind::Down(MouseButton::Left),
+                0,
+                6,
+                screen
+            ),
+            None
+        );
+        assert_eq!(
+            handle_mouse(
+                &mut ui,
+                MouseEventKind::Down(MouseButton::Left),
+                0,
+                3,
+                screen
+            ),
+            None
+        );
+        assert_eq!(ui.cursor, None);
     }
 
     /// `gauge_style` passes colors through in color mode and drops them in
