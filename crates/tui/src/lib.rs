@@ -50,6 +50,8 @@ pub enum SortKey {
     Resident,
     Nice,
     TotalTime,
+    Start,
+    Processor,
     Name,
 }
 
@@ -72,6 +74,8 @@ fn sort_label(sort: SortKey, descending: bool) -> String {
         SortKey::Resident => "res",
         SortKey::Nice => "nice",
         SortKey::TotalTime => "time",
+        SortKey::Start => "start",
+        SortKey::Processor => "cpu-core",
         SortKey::Name => "name",
     };
     format!("{name}{}", if descending { " ↓" } else { " ↑" })
@@ -183,7 +187,9 @@ impl Ui {
             SortKey::Mem => SortKey::Resident,
             SortKey::Resident => SortKey::Nice,
             SortKey::Nice => SortKey::TotalTime,
-            SortKey::TotalTime => SortKey::Name,
+            SortKey::TotalTime => SortKey::Start,
+            SortKey::Start => SortKey::Processor,
+            SortKey::Processor => SortKey::Name,
             SortKey::Name => SortKey::Pid,
         };
     }
@@ -553,6 +559,8 @@ impl Ui {
             SortKey::Resident => a.resident_bytes.cmp(&b.resident_bytes),
             SortKey::Nice => a.nice.cmp(&b.nice),
             SortKey::TotalTime => a.total_time_ns.cmp(&b.total_time_ns),
+            SortKey::Start => a.start_time_secs.cmp(&b.start_time_secs),
+            SortKey::Processor => a.processor.cmp(&b.processor),
             SortKey::Name => a.name.cmp(&b.name),
         };
         if self.descending { ord.reverse() } else { ord }
@@ -1933,14 +1941,20 @@ fn split_table_area(
 fn draw_processes(frame: &mut Frame, ui: &Ui, area: ratatui::layout::Rect) {
     // I/O columns appear only when some visible process actually moves
     // data: otherwise they are two mostly blank columns at 80 columns.
+    // START and the last processor need a wider terminal still.
     let procs = ui.ordered_rows();
     let show_io = procs_io_visible(&procs);
+    let wide = area.width >= 100;
     let mut header_names = vec![
         "PID", "USER", "STATE", "CPU%", "MEM%", "THR", "RES", "NICE", "TIME+", "NAME",
     ];
+    if wide {
+        header_names.splice(9..9, ["START", "CPU"]);
+    }
     if show_io {
         // Inserted before NAME, which stays the flexible last column.
-        header_names.splice(9..9, ["RD/s", "WR/s"]);
+        let before_name = if wide { 11 } else { 9 };
+        header_names.splice(before_name..before_name, ["RD/s", "WR/s"]);
     }
     let header = Row::new(header_names).bold();
     let mut rows: Vec<Row<'static>> = Vec::new();
@@ -1955,13 +1969,14 @@ fn draw_processes(frame: &mut Frame, ui: &Ui, area: ratatui::layout::Rect) {
             ui.tree,
             ui.tags.contains(&row_view.process.pid),
             show_io,
+            wide,
         );
         if Some(row_view.process.pid) == ui.cursor {
             row = row.style(ratatui::style::Style::default().reversed());
         }
         rows.push(row);
     }
-    let widths = table_widths(show_io);
+    let widths = table_widths(show_io, wide);
     let table = Table::new(rows, widths)
         .header(header)
         .block(Block::new().borders(Borders::TOP));
@@ -1989,7 +2004,7 @@ fn procs_io_visible<'a>(rows: impl IntoIterator<Item = &'a TreeRow<'a>>) -> bool
 
 /// The table's column widths, in order. The draw path and mouse clicks
 /// share this, so a click lands on the column it points at.
-fn table_widths(show_io: bool) -> Vec<Constraint> {
+fn table_widths(show_io: bool, wide: bool) -> Vec<Constraint> {
     let mut widths = vec![
         Constraint::Length(7),
         Constraint::Length(7),
@@ -2001,6 +2016,11 @@ fn table_widths(show_io: bool) -> Vec<Constraint> {
         Constraint::Length(4),
         Constraint::Length(7),
     ];
+    if wide {
+        // START (MM/DD HH:MM) and the last processor join the table only
+        // where the terminal is wide enough to keep names legible.
+        widths.extend([Constraint::Length(11), Constraint::Length(3)]);
+    }
     if show_io {
         widths.extend([Constraint::Length(5), Constraint::Length(5)]);
     }
@@ -2012,9 +2032,9 @@ fn table_widths(show_io: bool) -> Vec<Constraint> {
 /// edge) lands on, or None for columns that do not sort (state, threads,
 /// the I/O rates). One cell of column spacing separates the columns,
 /// matching the draw path's table layout.
-fn sort_column_at(x: u16, show_io: bool) -> Option<SortKey> {
-    let widths = table_widths(show_io);
-    let keys: &[Option<SortKey>] = &[
+fn sort_column_at(x: u16, show_io: bool, wide: bool) -> Option<SortKey> {
+    let widths = table_widths(show_io, wide);
+    let mut keys: Vec<Option<SortKey>> = vec![
         Some(SortKey::Pid),
         Some(SortKey::User),
         None,
@@ -2024,10 +2044,14 @@ fn sort_column_at(x: u16, show_io: bool) -> Option<SortKey> {
         Some(SortKey::Resident),
         Some(SortKey::Nice),
         Some(SortKey::TotalTime),
-        None,
-        None,
-        Some(SortKey::Name),
     ];
+    if wide {
+        keys.extend([Some(SortKey::Start), Some(SortKey::Processor)]);
+    }
+    if show_io {
+        keys.extend([None, None]);
+    }
+    keys.push(Some(SortKey::Name));
     let mut left = 0u16;
     for (index, width) in widths.iter().enumerate() {
         let Constraint::Length(width) = width else {
@@ -2078,7 +2102,8 @@ fn handle_mouse(
             if local == 1 {
                 let procs = ui.ordered_rows();
                 let show_io = procs_io_visible(&procs);
-                if let Some(key) = sort_column_at(column.saturating_sub(table.x), show_io) {
+                let wide = table.width >= 100;
+                if let Some(key) = sort_column_at(column.saturating_sub(table.x), show_io, wide) {
                     ui.sort_by(key);
                 }
             } else if local >= 2 {
@@ -2097,7 +2122,13 @@ fn handle_mouse(
 }
 
 /// One table row. Tagged processes carry a `*` before the name, htop-style.
-fn process_row(row_view: &TreeRow<'_>, tree: bool, tagged: bool, show_io: bool) -> Row<'static> {
+fn process_row(
+    row_view: &TreeRow<'_>,
+    tree: bool,
+    tagged: bool,
+    show_io: bool,
+    wide: bool,
+) -> Row<'static> {
     let name = if tree {
         let indent = "  ".repeat(row_view.depth);
         let branch = if row_view.depth > 0 { "└─ " } else { "" };
@@ -2132,6 +2163,24 @@ fn process_row(row_view: &TreeRow<'_>, tree: bool, tagged: bool, show_io: bool) 
         "{:>7}",
         time_text(row_view.process.total_time_ns)
     )));
+    if wide {
+        // Start time in local MM/DD HH:MM and the last processor the
+        // process ran on; both blank when the collector could not tell.
+        cells.push(Cell::from(format!(
+            "{:>11}",
+            match row_view.process.start_time_secs {
+                Some(secs) => ztop_core::clock::local_start_text(secs),
+                None => String::new(),
+            }
+        )));
+        cells.push(Cell::from(format!(
+            "{:>3}",
+            match row_view.process.processor {
+                Some(cpu) => cpu.to_string(),
+                None => String::new(),
+            }
+        )));
+    }
     if show_io {
         cells.push(Cell::from(format!(
             "{:>5}",
@@ -2447,6 +2496,71 @@ mod tests {
         handle_key(&mut ui, KeyEvent::from(KeyCode::Char('T')));
         assert_eq!(ui.screen, Screen::Thermal);
         assert_eq!(ui.sort, SortKey::TotalTime);
+    }
+
+    #[test]
+    fn wide_terminals_gain_start_and_processor_columns() {
+        // Clicking the START header (x 60 at 100 columns) sorts by start
+        // time descending: worker-12 started last (1_700_000_012) and last
+        // ran on core 3, so it leads with an MM/DD HH:MM start cell and
+        // the processor id in the CPU column.
+        let mut ui = ui_with(Some(sample()), None);
+        let screen = ratatui::layout::Rect::new(0, 0, 100, 24);
+        handle_mouse(
+            &mut ui,
+            MouseEventKind::Down(MouseButton::Left),
+            60,
+            6,
+            screen,
+        );
+        assert_eq!(ui.sort, SortKey::Start);
+        let rows = render(&ui, 100, 24);
+        let header_row = rows
+            .iter()
+            .position(|row| row.contains("START") && row.contains("CPU"))
+            .expect("START and CPU headers at 100 columns");
+        let first = &rows[header_row + 1];
+        assert!(first.contains("worker-12"), "{first:?}");
+        // The exact MM/DD HH:MM shape is unit-tested in the clock module
+        // (zone-independent); here the date slash and the core id show.
+        assert!(first.contains('/'), "{first:?}");
+        let cells: Vec<&str> = first.split_whitespace().collect();
+        assert!(cells.contains(&"3"), "last processor cell: {first:?}");
+        // At 80 columns the extra columns stay hidden and a click at the
+        // old TIME+ offset still sorts time, not start.
+        let mut ui = ui_with(Some(sample()), None);
+        let screen = ratatui::layout::Rect::new(0, 0, 80, 24);
+        handle_mouse(
+            &mut ui,
+            MouseEventKind::Down(MouseButton::Left),
+            60,
+            6,
+            screen,
+        );
+        assert!(!render(&ui, 80, 24).iter().any(|row| row.contains("START")));
+        // Clicking the CPU column header (x 72) sorts by last processor;
+        // the core-3 ties (pids 4, 8, 12) keep their pid order, so
+        // worker-04 leads under a stable sort.
+        let mut ui = ui_with(Some(sample()), None);
+        let screen = ratatui::layout::Rect::new(0, 0, 100, 24);
+        handle_mouse(
+            &mut ui,
+            MouseEventKind::Down(MouseButton::Left),
+            72,
+            6,
+            screen,
+        );
+        assert_eq!(ui.sort, SortKey::Processor);
+        let rows = render(&ui, 100, 24);
+        let header_row = rows
+            .iter()
+            .position(|row| row.contains("START"))
+            .expect("table header");
+        assert!(
+            rows[header_row + 1].contains("worker-04"),
+            "{:?}",
+            rows[header_row + 1]
+        );
     }
 
     #[test]
@@ -3301,6 +3415,10 @@ mod tests {
         assert_eq!(ui.sort, SortKey::Nice);
         ui.cycle_sort();
         assert_eq!(ui.sort, SortKey::TotalTime);
+        ui.cycle_sort();
+        assert_eq!(ui.sort, SortKey::Start);
+        ui.cycle_sort();
+        assert_eq!(ui.sort, SortKey::Processor);
         ui.cycle_sort();
         assert_eq!(ui.sort, SortKey::Name);
         ui.cycle_sort();
