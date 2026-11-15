@@ -155,6 +155,9 @@ pub struct Ui {
     pub setup_select: usize,
     /// Where the setup screen (F2) returns to when it closes.
     pub setup_return: Screen,
+    /// Pids seen in the previous sample, so a just-arrived process can
+    /// be highlighted as new.
+    pub seen: std::collections::BTreeSet<u32>,
 }
 
 impl Default for Ui {
@@ -179,6 +182,7 @@ impl Default for Ui {
             config: Config::default(),
             setup_select: 0,
             setup_return: Screen::ProcessTable,
+            seen: std::collections::BTreeSet::new(),
         }
     }
 }
@@ -798,6 +802,9 @@ impl Ui {
                         self.cursor = None;
                     }
                 }
+                // Remember this sample's pids as the previous generation,
+                // so the next sample can tell which processes are new.
+                self.seen = sample.processes.iter().map(|p| p.pid).collect();
                 self.sample = Some(sample);
                 self.error = None;
                 // A control notice lives for exactly one refresh.
@@ -2185,6 +2192,8 @@ fn draw_processes(frame: &mut Frame, ui: &Ui, area: ratatui::layout::Rect) {
             ui.tree,
             ui.tags.contains(&row_view.process.pid),
             &columns,
+            row_highlight(ui, row_view.process),
+            ui.config.theme,
         );
         if Some(row_view.process.pid) == ui.cursor {
             row = row.style(ratatui::style::Style::default().reversed());
@@ -2412,6 +2421,30 @@ fn handle_mouse(
     None
 }
 
+/// What emphasis a process row carries this frame, htop-style.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum RowHighlight {
+    #[default]
+    None,
+    /// Appeared since the previous sample.
+    New,
+    /// A zombie: exited and waiting to be reaped.
+    Dying,
+}
+
+/// A process that arrived since the previous sample highlights as new,
+/// and a zombie highlights as dying. The first sample after startup
+/// highlights nothing — every process would look new.
+fn row_highlight(ui: &Ui, process: &Process) -> RowHighlight {
+    if process.state == "Z" {
+        return RowHighlight::Dying;
+    }
+    if !ui.seen.is_empty() && !ui.seen.contains(&process.pid) {
+        return RowHighlight::New;
+    }
+    RowHighlight::None
+}
+
 /// One table row: the cells follow the column plan, so a column exists in
 /// a row exactly when its header does. Tagged processes carry a `*`
 /// before the name, htop-style.
@@ -2420,6 +2453,8 @@ fn process_row(
     tree: bool,
     tagged: bool,
     columns: &Columns,
+    highlight: RowHighlight,
+    theme: Theme,
 ) -> Row<'static> {
     let base = row_view
         .process
@@ -2440,6 +2475,13 @@ fn process_row(
     };
     let name = if tagged { format!("* {shown}") } else { shown };
     let process = row_view.process;
+    // Large numbers get their own color (color theme only): a process
+    // using more than one full core, half the memory, or a gibibyte of
+    // resident memory stands out in the CPU%, MEM% and RES cells.
+    let large = |bytes_or_percent_hit: bool, style: Style| match theme {
+        Theme::Color if bytes_or_percent_hit => style,
+        _ => Style::new(),
+    };
     let cells: Vec<Cell<'static>> = columns
         .names
         .iter()
@@ -2447,10 +2489,14 @@ fn process_row(
             "PID" => Cell::from(format!("{:>7}", process.pid)),
             "USER" => Cell::from(format!("{:>7}", process.user)),
             "STATE" => Cell::from(process.state.clone()),
-            "CPU%" => Cell::from(format!("{:>5.1}", process.cpu_percent)),
-            "MEM%" => Cell::from(format!("{:>5.1}", process.mem_percent)),
+            "CPU%" => Cell::from(format!("{:>5.1}", process.cpu_percent))
+                .style(large(process.cpu_percent >= 100.0, Style::new().red())),
+            "MEM%" => Cell::from(format!("{:>5.1}", process.mem_percent))
+                .style(large(process.mem_percent >= 50.0, Style::new().red())),
             "THR" => Cell::from(format!("{:>3}", process.threads)),
-            "RES" => Cell::from(format!("{:>8}", bytes_text(process.resident_bytes as f64))),
+            "RES" => Cell::from(format!("{:>8}", bytes_text(process.resident_bytes as f64))).style(
+                large(process.resident_bytes >= GIB as u64, Style::new().yellow()),
+            ),
             "NICE" => match process.nice {
                 Some(nice) => Cell::from(format!("{:>4}", nice)),
                 None => Cell::from(""),
@@ -2497,7 +2543,13 @@ fn process_row(
             other => unreachable!("unknown process table column {other:?}"),
         })
         .collect();
-    Row::new(cells)
+    // A highlighted row tints every cell it owns; a cell with its own
+    // large-number color keeps that, which reads fine over the tint.
+    Row::new(cells).style(match (highlight, theme) {
+        (RowHighlight::New, Theme::Color) => Style::new().yellow(),
+        (RowHighlight::Dying, Theme::Color) => Style::new().red(),
+        _ => Style::new(),
+    })
 }
 
 #[cfg(test)]
@@ -3376,6 +3428,81 @@ mod tests {
         // sample() carries no pressure at all.
         let rows = render(&ui_with(Some(sample()), None), 80, 24);
         assert!(rows.iter().all(|row| !row.contains("psi  ")));
+    }
+
+    /// Renders and hands back the test backend's buffer, so style
+    /// assertions can look at colors and not only text.
+    fn render_buffer(ui: &Ui, width: u16, height: u16) -> ratatui::buffer::Buffer {
+        let mut terminal = Terminal::new(TestBackend::new(width, height)).expect("test backend");
+        terminal.draw(|frame| draw(frame, ui)).expect("draw");
+        terminal.backend().buffer().clone()
+    }
+
+    /// The foreground colors used on the text row that contains `text`.
+    fn row_colors(ui: &Ui, text: &str) -> Vec<Color> {
+        let lines = render(ui, 80, 24);
+        let buffer = render_buffer(ui, 80, 24);
+        let Some(y) = lines.iter().position(|line| line.contains(text)) else {
+            panic!("no row contains {text:?}");
+        };
+        (0..buffer.area.width)
+            .map(|x| buffer[(x, y as u16)].fg)
+            .collect()
+    }
+
+    /// A process that arrived since the previous sample carries the
+    /// new-process highlight in the color theme, and a plain process
+    /// carries none. The first sample after startup highlights nothing.
+    #[test]
+    fn a_process_new_since_the_last_sample_highlights() {
+        let mut ui = ui_with(Some(sample()), None);
+        ui.seen = sample().processes.iter().map(|p| p.pid).collect();
+        let mut s = sample();
+        let mut fresh = s.processes[0].clone();
+        fresh.pid = 13;
+        fresh.name = "worker-13".into();
+        s.processes.push(fresh);
+        ui.sample = Some(s);
+        let colors = row_colors(&ui, "worker-13");
+        assert!(colors.contains(&Color::Yellow), "{colors:?}");
+        let colors = row_colors(&ui, "worker-01");
+        assert!(!colors.contains(&Color::Yellow), "{colors:?}");
+        // The very first sample is not "all new".
+        let colors = row_colors(&ui_with(Some(sample()), None), "worker-01");
+        assert!(!colors.contains(&Color::Yellow), "{colors:?}");
+    }
+
+    /// A zombie highlights as dying; the mono theme keeps plain text.
+    #[test]
+    fn a_zombie_highlights_as_dying_and_mono_stays_plain() {
+        let mut s = sample();
+        s.processes[3].state = "Z".into();
+        let mut ui = ui_with(Some(s), None);
+        let colors = row_colors(&ui, "worker-04");
+        assert!(colors.contains(&Color::Red), "{colors:?}");
+        ui.config.theme = Theme::Mono;
+        let colors = row_colors(&ui, "worker-04");
+        assert!(!colors.contains(&Color::Red), "{colors:?}");
+    }
+
+    /// Large numbers carry their own colors: over one core of CPU, half
+    /// the memory, a gibibyte resident. Mono stays plain.
+    #[test]
+    fn large_numbers_color_their_cells() {
+        let mut s = sample();
+        s.processes[0].cpu_percent = 150.0;
+        s.processes[0].mem_percent = 60.0;
+        s.processes[0].resident_bytes = 2 * GIB as u64;
+        let mut ui = ui_with(Some(s), None);
+        let colors = row_colors(&ui, "worker-01");
+        assert!(
+            colors.iter().filter(|c| **c == Color::Red).count() >= 2,
+            "{colors:?}"
+        );
+        assert!(colors.contains(&Color::Yellow), "{colors:?}");
+        ui.config.theme = Theme::Mono;
+        let colors = row_colors(&ui, "worker-01");
+        assert!(colors.iter().all(|c| *c == Color::Reset), "{colors:?}");
     }
 
     /// The memory gauge label reports compressed memory when the sample

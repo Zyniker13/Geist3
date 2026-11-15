@@ -3,14 +3,15 @@
 Updated after every working session.
 
 - **Current milestone:** M3 (Full TUI Parity).
-- **Last done:** M3 batch 7p — pressure stall (PSI) meters (decision 0019): `Sample.pressure` carries per-resource some/full averages read from `/proc/pressure` by the live Linux collector (all three files or none), captured into future fixtures, and shown as one header line like the I/O line. Tests: 3 parser + 2 TUI. Earlier this session: 7o (disk/network I/O header line, decision 0018) shipped as `44b2744`; 7n (per-core state-split CPU meters, decision 0017) and 7m (PRI/COMMAND columns + sort cycle) shipped and CI-green.
-- **Next step:** the remaining open `docs/parity.md` items — meter styles, screen tabs, I/O priority and affinity, thread visibility, env/open-files/trace, highlight new/dying, pause/redraw, read-only mode, setup screens — then M4+. (7g macOS CPU frequency remains settled: decision 0011 and `docs/m2-power-checks.md`.)
+- **Last done:** M3 batch 7q — process highlighting (decision 0020): a pid not in the previous sample's set highlights as new (yellow row), a zombie (`Z`) highlights as dying (red row), and large numbers color their cells (CPU% >= 100 and MEM% >= 50 red, RES >= 1 GiB yellow) — color theme only, mono text unchanged, first sample and single-sample replays highlight nothing. Tests: 3 TUI via a new buffer-based `row_colors` helper. Earlier this session: 7p (PSI line, decision 0019) shipped as `02c95db`; 7o (I/O line, decision 0018) as `44b2744`.
+- **Next step:** the remaining open `docs/parity.md` items — meter styles, screen tabs, I/O priority and affinity, thread visibility, env/open-files/trace, pause/redraw, read-only mode, setup screens — then M4+. (7g macOS CPU frequency remains settled: decision 0011 and `docs/m2-power-checks.md`.)
 - **Blocked on:** nothing.
 
 ## Log
 
 Newest first. One or two lines per session: what changed, what is next.
 
+- 2026-11-15: M3 batch 7q — process highlighting (decision 0020): new (yellow) by pid set, dying (red) by state `Z`, large numbers (CPU%/MEM%/RES) colored in cells; mono stays plain so snapshots are byte-identical; proven by three buffer-based TUI tests. Next: meter styles or another open parity item.
 - 2026-11-15: M3 batch 7p — PSI header meter line (decision 0019); capture allowlist gains the three `/proc/pressure` files. Fixtures carry no pressure files yet, so snapshots unchanged; proven by five new tests. Next: meter styles or another open parity item.
 - 2026-11-15: M3 batch 7o — disk and network I/O header meter line (decision 0018); `header_height` unifies header row accounting. Fixtures carry no rates, so snapshots unchanged; proven by two new TUI tests. Next: PSI meters or another open parity item.
 

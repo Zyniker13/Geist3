@@ -33,7 +33,15 @@ Check an item only when it works and a test or a recorded check shows it. Add th
 - [x] User filter (u) — `u` cycles all users, then each user present in the sample in sorted order, then back to all; the status line shows the active user. Tests: `the_user_filter_cycles_through_the_sample_users`.
 - [ ] Show or hide userland and kernel threads (H, K), and program path (p)
 - [ ] Process environment (e), open files (l) and syscall trace (s) where the OS allows
-- [ ] Highlight new and dying processes, and large numbers
+- [x] Highlight new and dying processes, and large numbers
+      (new: yellow row, pid not in the previous sample's set; dying:
+      red row for state `Z`; large numbers: CPU% >= 100 and MEM% >= 50
+      red, RES >= 1 GiB yellow, color theme only, mono text unchanged;
+      first sample and single-sample replays highlight nothing;
+      docs/decisions/0020-highlight-new-dying-large.md; tests
+      `a_process_new_since_the_last_sample_highlights`,
+      `a_zombie_highlights_as_dying_and_mono_stays_plain`,
+      `large_numbers_color_their_cells`).
 - [ ] Pause updates (Z) and redraw (Ctrl-L)
 - [ ] Read-only mode (`--readonly`)
 
