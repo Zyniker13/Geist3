@@ -3,13 +3,15 @@
 Updated after every working session.
 
 - **Current milestone:** M3 (Full TUI Parity).
-- **Last done:** M3 batch 7b (`4492932`): the Apple Silicon screen — `a` flips between the process table and a screen showing chip name, P/E core counts (name-gated, decision 0013), per-core utilization, whole-system power with current/average/peak and a 60-point history chart, GPU power and memory/swap, with an explicit note for what the unprivileged collector cannot read. Gate plus both cross-target clippies green.
-- **Next step:** M3 batch 7c — setup screens and the config file.
+- **Last done:** M3 batch 7c (`887f558`): the setup screen and the config file — F2 opens a screen with theme (color/mono) and start-in-tree options, j/k move, Space/Enter toggles, Esc/F2 saves JSON to the user's config directory; the theme colors the gauges and `--no-color` forces mono for one run. Gate plus both cross-target clippies green.
+- **Next step:** M3 batch 7d — mouse support and the disk/network/thermal panels.
 - **Blocked on:** nothing.
 
 ## Log
 
 Newest first. One or two lines per session: what changed, what is next.
+
+- 2026-11-14: M3 batch 7c (`887f558`): the setup screen and the config file — F2 opens a two-option screen (theme, start in tree view) with wrap-around navigation, saving JSON to the user's config directory (Application Support on macOS, XDG elsewhere) when it closes; malformed files mean defaults and unknown fields are tolerated. The theme colors the CPU/memory/swap gauges and dims the status line; `--no-color` forces mono for one run. Ten tests (five config, four setup behavior, one display-path regression that caught a dropped slash); gate plus both cross-target clippies green. Next: mouse, disk/network/thermal panels.
 
 - 2026-11-14: M3 batch 7b (`4492932`): the Apple Silicon screen — `a` flips between the process table and a screen showing chip name, P/E core counts (name-gated per decision 0013), per-core utilization, whole-system power (PSTR) with current/average/peak and a 60-point history chart, GPU power and memory/swap; unreadable sources render as an explicit unavailability note. `chip_name` became `Option<String>` with serde defaults, the macOS collector parses the topology from sysctls and feeds power history through `MacOsPower`. Nine tests; gate plus both cross-target clippies green; parity ticks the chip-and-counts item. Next: setup screens, config file, mouse.
 
