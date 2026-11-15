@@ -1141,4 +1141,107 @@ mod tests {
         server.abort();
         let _ = std::fs::remove_dir_all(&dir);
     }
+
+    /// `ztop connect --tls` end to end: the protocol client speaks
+    /// pinned TLS to the enforced agent, trades a pairing code for a
+    /// token over the wire, and reads with it.
+    #[tokio::test]
+    async fn the_protocol_client_reads_a_tls_agent_and_pairs() {
+        use ztop_core::collector::Collector as _;
+        let dir = a_material_dir("client");
+        let material = tls::load_or_create(&dir).expect("material");
+        let pin = material.fingerprint.clone();
+
+        let inner = AgentState {
+            enforce_auth: true,
+            ..AgentState::default()
+        };
+        let state = Arc::new(inner);
+        state.push(a_sample());
+        // A token from an earlier pairing stands in for the saved one.
+        let saved_token = {
+            let mut auth = state.auth.lock().expect("auth");
+            let code = auth
+                .start_pairing("earlier pairing".into(), auth::now_ms())
+                .expect("code");
+            auth.pair(&code, auth::now_ms()).expect("pairs")
+        };
+
+        let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+            .await
+            .expect("bind");
+        let address = listener.local_addr().expect("address");
+        let server_state = state.clone();
+        let server =
+            tokio::spawn(async move { tls::serve_on_tls(state, listener, material.config).await });
+        let target = address.to_string();
+        let state = server_state;
+
+        // Without a token the reads come back as "pair first". The
+        // collector is synchronous, so every call below runs on the
+        // blocking pool: on the current-thread test runtime a blocking
+        // client would starve the server task it talks to.
+        let mut unpaired =
+            ztop_core::client::RemoteCollector::tls(target.clone(), &pin, None).expect("collector");
+        let error = tokio::task::spawn_blocking(move || unpaired.sample())
+            .await
+            .expect("join")
+            .expect_err("401 without a token");
+        assert!(
+            error.to_string().contains("pair"),
+            "the error says to pair: {error}"
+        );
+
+        // The pairing round trip runs over the same pinned TLS and
+        // yields a token the agent accepts.
+        let code = {
+            let mut auth = state.auth.lock().expect("auth");
+            auth.start_pairing("pairing over the wire".into(), auth::now_ms())
+                .expect("code")
+        };
+        let code_target = target.clone();
+        let code_pin = pin.clone();
+        let wire_token = tokio::task::spawn_blocking(move || {
+            ztop_core::client::pair_with(&code_target, &code_pin, &code)
+        })
+        .await
+        .expect("join")
+        .expect("pairs over TLS");
+        assert!(!wire_token.is_empty());
+
+        let mut with_saved =
+            ztop_core::client::RemoteCollector::tls(target.clone(), &pin, Some(saved_token))
+                .expect("collector");
+        let sample = tokio::task::spawn_blocking(move || with_saved.sample())
+            .await
+            .expect("join")
+            .expect("reads with the saved token");
+        assert!(!sample.hostname.is_empty());
+
+        let mut with_wire =
+            ztop_core::client::RemoteCollector::tls(target.clone(), &pin, Some(wire_token))
+                .expect("collector");
+        tokio::task::spawn_blocking(move || with_wire.sample())
+            .await
+            .expect("join")
+            .expect("reads with the wire token");
+
+        // A one-byte wrong pin: the collector reports the certificate,
+        // not the network.
+        let wrong_pin = format!("SHA256:{}00", &pin["SHA256:".len().."SHA256:".len() + 62]);
+        let mut impostor =
+            ztop_core::client::RemoteCollector::tls(target.clone(), &wrong_pin, None)
+                .expect("collector");
+        let error = tokio::task::spawn_blocking(move || impostor.sample())
+            .await
+            .expect("join")
+            .expect_err("a wrong pin is refused");
+        assert!(
+            error.to_string().contains("pin"),
+            "the error says the pin mismatched: {error}"
+        );
+
+        server.abort();
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

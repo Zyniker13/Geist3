@@ -250,6 +250,15 @@ Check an item only when it works and a test or a recorded check shows it. Add th
     connect is observation-only until control actions exist over the
     protocol (they would otherwise hit the local process table).
     Test: `connect_takes_a_target`.
+  - Over TLS: `connect --tls --pin ... --code ...` pairs through a
+    pinned TLS 1.3 session and saves `(pin, token)` per host in
+    `state_dir()/hosts/` (0600, name sanitized to `[A-Za-z0-9._-]`
+    with a verbatim-target guard); later connects reuse the saved
+    trust, and a 401 reads "pair with --code" (decision 0041).
+    Tests: `the_protocol_client_reads_a_tls_agent_and_pairs`
+    (unpaired 401, wire pairing, saved- and wire-token reads,
+    one-byte wrong pin refused), `saved_host_trust_round_trips_and_rejects_a_foreign_host`,
+    `a_pin_parses_when_well_formed_and_fails_otherwise`.
 
 ## Agent and Hub
 

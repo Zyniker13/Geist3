@@ -172,6 +172,24 @@ TLS and pairing arrive.
 Drive the TUI from a remote agent or hub instead of the local host.
 The same keys and screens work; the view is observation\-only until
 control actions exist over the protocol.
+.TP
+.B ztop connect \-\-tls \-\-pin \fIPIN\fP \-\-code \fICODE\fP 127.0.0.1:7100
+Talk to a TLS agent: the pin is the
+.B SHA256:\fIfingerprint\fP
+the agent printed at startup, and the code is the pairing code it
+printed with
+.BR \-\-pair .
+The first connect pairs and saves the token (and the pin) for that
+host under the user's state directory; later connects reuse it, so
+.B \-\-tls \-\-pin \fIPIN\fP
+(or just
+.B \-\-tls
+) is enough afterwards. A wrong pin fails the handshake rather than
+falling back, and a 401 asks to pair with
+.BR \-\-code .
+Without
+.BR \-\-tls ,
+connect stays plaintext, for loopback or an SSH tunnel.
 .SH SEE ALSO
 .BR top (1),
 .BR htop (1),

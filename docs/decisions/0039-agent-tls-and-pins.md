@@ -19,10 +19,14 @@ the transport: `ztop agent --tls`.
   connections with WebSocket upgrades intact. `rustls-pemfile` was
   considered and rejected: it is deprecated/unmaintained.
 - Cross-compilation note: `ring` ships C and assembly, so the
-  Linux-target clippy for the agent and `ztop` bins cannot run on
-  this Mac (no Linux C toolchain); those two crates' Linux checks
-  ride on CI, and the ring-free crates (`core`, `tui`, `hub`) keep
-  being clippy-checked for both Linux targets locally.
+  Linux-target clippy of `agent` and `ztop` rides on CI (local
+  machines lack a Linux gcc). Batch 8f moved `core` into the
+  ring set as well (its client needs rustls), and `tui`/`hub`
+  depend on `core`, so from 8f on **every** crate reaches ring:
+  all Linux-target clippies ride on CI, and the local gate is
+  `check.sh` (host) + `cargo deny` only. The aarch64 Linux target
+  is checked nowhere until a cross C toolchain (e.g. cargo-zigbuild
+  in CI) is added; tracked as a follow-up.
 - On the first `--tls` start the agent creates
   `agent-cert.pem`/`agent-key.pem` (key 0600) in `state_dir()` with
   CN `ztop-agent`, SANs `localhost` and `127.0.0.1`, TLS 1.3, and a

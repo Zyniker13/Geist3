@@ -79,6 +79,18 @@ enum Command {
     Connect {
         /// Target to connect to, e.g. `127.0.0.1:7100`.
         target: String,
+        /// Connect over TLS with the agent's self-signed certificate,
+        /// verified against `--pin`.
+        #[arg(long)]
+        tls: bool,
+        /// The agent's certificate fingerprint, exactly as the agent
+        /// printed it: `SHA256:<64 hex>`.
+        #[arg(long, requires = "tls")]
+        pin: Option<String>,
+        /// The agent's pairing code, traded once for a token and then
+        /// saved under the state directory for this host.
+        #[arg(long, requires = "tls")]
+        code: Option<String>,
     },
     /// Render one TUI frame from a recorded fixture and print it.
     Replay {
@@ -159,7 +171,12 @@ fn run() -> Result<(), Box<dyn Error>> {
                 .build()?;
             runtime.block_on(ztop_hub::serve(port))?;
         }
-        Some(Command::Connect { ref target }) => {
+        Some(Command::Connect {
+            ref target,
+            tls,
+            ref pin,
+            ref code,
+        }) => {
             // A remote view is observation-only for now: signals and
             // renice through the protocol come with the pairing work
             // (decision 0003), and until then acting on a row would
@@ -172,7 +189,38 @@ fn run() -> Result<(), Box<dyn Error>> {
                 config.start_in_tree = true;
             }
             let flags = flags_from(&cli, true)?;
-            let mut collector = ztop_core::client::RemoteCollector::new(target.clone());
+            let collector = if tls {
+                // The trust flow (decision 0041): pair with `--code`,
+                // otherwise reuse the saved token; a pin is always
+                // needed, given or saved.
+                let dir = ztop_core::paths::state_dir()
+                    .ok_or("connect: no home directory, so nowhere to save the host's trust")?;
+                let given_pin = pin.clone();
+                let saved = ztop_core::client::load_host_token(&dir, target);
+                let (pin_value, token) = match (&given_pin, code) {
+                    (Some(pin), Some(code)) => {
+                        let token = ztop_core::client::pair_with(target, pin, code)?;
+                        ztop_core::client::save_host_token(&dir, target, pin, &token)?;
+                        (pin.clone(), Some(token))
+                    }
+                    (Some(pin), None) => (pin.clone(), saved.map(|(_, token)| token)),
+                    (None, Some(_)) => {
+                        return Err(
+                            "connect: --code needs --pin: the agent prints it at startup".into(),
+                        );
+                    }
+                    (None, None) => {
+                        let (pin, token) = saved.ok_or(
+                            "connect: no saved trust for this host: connect once with --tls --pin ... --code ...",
+                        )?;
+                        (pin, Some(token))
+                    }
+                };
+                ztop_core::client::RemoteCollector::tls(target.clone(), &pin_value, token)?
+            } else {
+                ztop_core::client::RemoteCollector::new(target.clone())
+            };
+            let mut collector = collector;
             ztop_tui::run(&mut collector, &cli.pids, config, flags)?;
         }
         Some(Command::Replay { dir }) => {
