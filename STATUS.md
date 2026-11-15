@@ -4,7 +4,7 @@ Updated after every working session.
 
 - **Current milestone:** M3 (Full TUI Parity).
 - **Last done:** M3 batch 7h — the process table gained a NICE column (Linux from `stat` field 16, macOS from the extended 12-field `ps` capture shape, blank when unavailable), nice joined the sort cycle and header clicks, and the model now collects priority, shared bytes (Linux `statm`), total CPU time, start time and the last processor (Linux `stat`) for later columns. Column widths were rebalanced (STATE 5, CPU%/MEM% 6, THR 4, RES 8, NICE 5) so names and fold counts stay legible at 80 columns with and without the I/O columns. Fixture `stat` lines extended to the full 39-field kernel shape; the macOS 12-field parse shape now has test coverage; the three replay snapshots regenerated. Gate plus both cross-target clippies green.
-- **Next step:** 7g — macOS CPU frequency (via IOReport `cpu_ticks` idle-residency conversion), model fields on `Sample`, collector wiring, and the agent report.
+- **Next step:** 7i — sort shortcuts M/P/T plus a TIME+ column (the total CPU time 7h started collecting), advancing parity's "sort by any column" and "every common column" items. (The previously listed 7g macOS CPU frequency is settled: decision 0011 and `docs/m2-power-checks.md` record that no unprivileged source exists and MHz conversion is never attempted; the title's `f X.X GHz` shows it where reported, i.e. Linux.)
 - **Blocked on:** nothing.
 
 ## Log
