@@ -2002,7 +2002,7 @@ fn kv(label: &str, value: String) -> Line<'static> {
 /// plus a whole-system power-history chart.
 ///
 /// Sources the unprivileged collector cannot read (cluster utilization and
-/// frequency, CPU/ANE power, GPU busy) render as an explicit gap line
+/// frequency, CPU/ANE power, GPU frequency) render as an explicit gap line
 /// instead of fake zeros (decision 0013).
 fn draw_silicon(frame: &mut Frame, ui: &Ui, area: ratatui::layout::Rect) {
     use ratatui::symbols::Marker;
@@ -2037,6 +2037,13 @@ fn draw_silicon(frame: &mut Frame, ui: &Ui, area: ratatui::layout::Rect) {
     let watt = |metric: &Metric| {
         if metric.available {
             format!("{:.1} W", metric.value)
+        } else {
+            "-".to_string()
+        }
+    };
+    let percent = |metric: &Metric| {
+        if metric.available {
+            format!("{:.0}%", metric.value)
         } else {
             "-".to_string()
         }
@@ -2100,10 +2107,18 @@ fn draw_silicon(frame: &mut Frame, ui: &Ui, area: ratatui::layout::Rect) {
             ),
         ),
         kv("Power", power),
-        kv("GPU", watt(&sample.sensors.gpu_watts)),
+        kv(
+            "GPU",
+            format!(
+                "util {}  {}",
+                percent(&asil.gpu_busy_percent),
+                watt(&sample.sensors.gpu_watts)
+            ),
+        ),
+        kv("Thermal", pressure_text(&asil.thermal_pressure)),
         Line::from(""),
         Line::from("Unavailable unprivileged: CPU power, ANE power, cluster busy/frequency,"),
-        Line::from("GPU busy/frequency, thermal pressure (decision 0013)"),
+        Line::from("GPU frequency (decisions 0011, 0013, 0033)"),
         Line::from(""),
         Line::from("a process table · q quit"),
     ];
@@ -2137,6 +2152,22 @@ fn draw_silicon(frame: &mut Frame, ui: &Ui, area: ratatui::layout::Rect) {
     .x_axis(Axis::default().bounds([0.0, (points.len() - 1) as f64]))
     .y_axis(Axis::default().bounds([0.0, (peak * 1.2).max(1.0)]));
     frame.render_widget(chart, rows[1]);
+}
+
+/// The thermal pressure level as a word; `-` when unavailable (decision
+/// 0033: only the no-warning shape is verified, so unknown levels stay
+/// absent rather than guessed).
+fn pressure_text(metric: &Metric) -> String {
+    if !metric.available {
+        return "-".to_string();
+    }
+    match metric.value as u64 {
+        0 => "none".to_string(),
+        1 => "light".to_string(),
+        2 => "moderate".to_string(),
+        3 => "severe".to_string(),
+        _ => "unknown".to_string(),
+    }
 }
 
 /// The empty state for the data panels: an honest "nothing here" note for
@@ -6008,6 +6039,8 @@ mod tests {
             chip_name: Some("Apple M3 Pro".into()),
             e_core_count: Metric::available(2.0, Unit::Count),
             p_core_count: Metric::available(2.0, Unit::Count),
+            gpu_busy_percent: Metric::available(23.0, Unit::Percent),
+            thermal_pressure: Metric::available(0.0, Unit::Count),
             current_watts: Metric::available(12.34, Unit::Watts),
             average_watts: Metric::available(9.87, Unit::Watts),
             peak_watts: Metric::available(15.6, Unit::Watts),
@@ -6052,13 +6085,23 @@ mod tests {
             "power summary shows: {rows:?}"
         );
         assert!(
-            rows.iter().any(|row| row.contains("GPU       2.1 W")),
-            "{rows:?}"
+            rows.iter()
+                .any(|row| row.contains("GPU       util 23%  2.1 W")),
+            "GPU busy and watts show: {rows:?}"
+        );
+        assert!(
+            rows.iter().any(|row| row.contains("Thermal   none")),
+            "thermal pressure shows: {rows:?}"
         );
         assert!(
             rows.iter()
                 .any(|row| row.contains("Unavailable unprivileged")),
             "the gap line shows: {rows:?}"
+        );
+        assert!(
+            rows.iter()
+                .all(|row| !row.contains("GPU busy/frequency, thermal pressure")),
+            "the gap line no longer lists what now shows: {rows:?}"
         );
         assert!(
             rows.iter().any(|row| row.contains("Power history (W)")),
@@ -6084,6 +6127,20 @@ mod tests {
                 .any(|row| row.contains("collecting power history")),
             "the collecting note shows: {rows:?}"
         );
+    }
+
+    /// The thermal level renders as a word; unavailable stays a dash.
+    /// Only the no-warning shape has ever been observed, so higher levels
+    /// map through `pressure_text` directly (decision 0033).
+    #[test]
+    fn thermal_pressure_renders_as_words_or_a_dash() {
+        let count = |v: f64| Metric::available(v, Unit::Count);
+        assert_eq!(pressure_text(&count(0.0)), "none");
+        assert_eq!(pressure_text(&count(1.0)), "light");
+        assert_eq!(pressure_text(&count(2.0)), "moderate");
+        assert_eq!(pressure_text(&count(3.0)), "severe");
+        assert_eq!(pressure_text(&count(9.0)), "unknown");
+        assert_eq!(pressure_text(&Metric::unavailable(Unit::Count)), "-");
     }
 
     /// A machine without a chip name gets an explicit message, not a wall

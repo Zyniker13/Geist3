@@ -95,6 +95,19 @@ unsafe extern "C" {
     fn IOReportSimpleGetIntegerValue(channel: CFDictionaryRef, error: *mut i32) -> u64;
     fn CFArrayGetTypeID() -> CFTypeID;
 
+    // IORegistry (GPU busy, decision 0033)
+    fn IORegistryEntryCreateCFProperties(
+        entry: io_service_t,
+        properties: *mut CFMutableDictionaryRef,
+        allocator: CFAllocatorRef,
+        options: u32,
+    ) -> kern_return_t;
+    fn CFNumberGetValue(
+        number: CFTypeRef,
+        the_type: i32,
+        value_ptr: *mut std::os::raw::c_void,
+    ) -> bool;
+
     // mach_task_self() is the macro form of this global (mach/mach.h).
     static mach_task_self_: mach_port_t;
     fn IOObjectRelease(object: io_service_t) -> kern_return_t;
@@ -496,11 +509,130 @@ impl GpuEnergy {
     }
 }
 
+// ── GPU utilization from the IORegistry ──────────────────────────────
+// The IOGPU device's PerformanceStatistics dictionary carries
+// "Device Utilization %", the same unprivileged estimate the system's
+// own GPU-history graph reads. The IOReport "GPU Stats" histograms are
+// no alternative unprivileged: their channels answer the simple integer
+// reader with a 2^63 sentinel and the residency lives in a private
+// RawElements blob, so the registry number is the honest source
+// (decision 0033, verified live under a Metal load).
+#[derive(Debug)]
+struct GpuUtil {
+    service: io_service_t,
+}
+
+impl GpuUtil {
+    /// Find the GPU service. IOGPU is the graphics accelerator's class
+    /// on every supported macOS; AGXAccelerator is the older name kept
+    /// as a fallback, like the SMC connection's two service names.
+    fn new() -> Option<Self> {
+        let names: [&[u8]; 2] = [b"IOGPU\0", b"AGXAccelerator\0"];
+        let mut svc: io_service_t = 0;
+        for name in &names {
+            unsafe {
+                let dict = IOServiceMatching(name.as_ptr() as *const _);
+                if !dict.is_null() {
+                    // IOServiceGetMatchingService consumes the matching
+                    // dictionary, so there is nothing to release here.
+                    svc = IOServiceGetMatchingService(0, dict);
+                    if svc != 0 {
+                        break;
+                    }
+                }
+            }
+        }
+        if svc == 0 {
+            return None;
+        }
+        // The service handle stays alive for the collector's lifetime:
+        // every sample reads its registry properties through it.
+        Some(GpuUtil { service: svc })
+    }
+
+    /// The "Device Utilization %" reading, or None when the registry
+    /// does not carry it. Instantaneous, so it is available from the
+    /// first sample — no delta priming.
+    fn busy_percent(&self) -> Option<f64> {
+        unsafe {
+            let mut props: CFMutableDictionaryRef = std::ptr::null_mut();
+            let kr =
+                IORegistryEntryCreateCFProperties(self.service, &mut props, std::ptr::null(), 0);
+            if kr != KERN_SUCCESS || props.is_null() {
+                return None;
+            }
+            let perf_key = CFStringCreateWithCString(
+                std::ptr::null(),
+                c"PerformanceStatistics".as_ptr() as *const _,
+                KCFSTR_ENCODING_UTF8,
+            );
+            let perf = CFDictionaryGetValue(props, perf_key);
+            CFRelease(perf_key as CFTypeRef);
+            let read = if perf.is_null() {
+                None
+            } else {
+                let stat_key = CFStringCreateWithCString(
+                    std::ptr::null(),
+                    c"Device Utilization %".as_ptr() as *const _,
+                    KCFSTR_ENCODING_UTF8,
+                );
+                let stat = CFDictionaryGetValue(perf as CFDictionaryRef, stat_key);
+                CFRelease(stat_key as CFTypeRef);
+                if stat.is_null() {
+                    None
+                } else {
+                    let mut value: i64 = 0;
+                    // kCFNumberSInt64Type = 4; CF converts any number type.
+                    // Zero is a legitimate idle reading; reject only
+                    // negative junk and cap the top (a 2^63 sentinel
+                    // would clamp to 100 otherwise).
+                    if CFNumberGetValue(stat, 4, &mut value as *mut _ as *mut _) && value >= 0 {
+                        Some(value.min(100) as f64)
+                    } else {
+                        None
+                    }
+                }
+            };
+            // The properties dictionary is ours; the values referenced
+            // from it are not, so only it is released.
+            CFRelease(props as CFTypeRef);
+            read
+        }
+    }
+}
+
+// ── Thermal pressure via pmset ───────────────────────────────────────
+/// Map `pmset -g therm` output to a pressure level (0 = none).
+///
+/// Only the no-warning shape is verifiable on the development machine;
+/// any other output stays unavailable rather than guessed (decision
+/// 0033). Pure so the tests cover it without a live host.
+fn thermal_level(text: &str) -> Option<u8> {
+    if text.contains("No thermal warning level has been recorded") {
+        return Some(0);
+    }
+    None
+}
+
+/// Run `pmset -g therm` and map it to a pressure level.
+fn thermal_pressure_level() -> Option<u8> {
+    let out = std::process::Command::new("pmset")
+        .arg("-g")
+        .arg("therm")
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    thermal_level(&String::from_utf8_lossy(&out.stdout))
+}
+
 // ── Combined power collector ─────────────────────────────────────────
 #[derive(Debug)]
 pub struct MacOsPower {
     smc: Option<SmcConn>,
     gpu: Option<GpuEnergy>,
+    gpu_util: Option<GpuUtil>,
     history: PowerHistory,
 }
 
@@ -515,6 +647,7 @@ impl MacOsPower {
         Self {
             smc: SmcConn::new(),
             gpu: GpuEnergy::new(),
+            gpu_util: GpuUtil::new(),
             history: PowerHistory::new(),
         }
     }
@@ -534,6 +667,19 @@ impl MacOsPower {
             if let Some(watts) = gpu.sample() {
                 sensors.gpu_watts = Metric::available(watts, Unit::Watts);
             }
+        }
+
+        // GPU busy percent from the IORegistry (decision 0033): an
+        // instantaneous estimate, available from the first sample.
+        if let Some(ref gpu_util) = self.gpu_util {
+            if let Some(percent) = gpu_util.busy_percent() {
+                silicon.gpu_busy_percent = Metric::available(percent, Unit::Percent);
+            }
+        }
+
+        // Thermal pressure via `pmset -g therm` (decision 0033).
+        if let Some(level) = thermal_pressure_level() {
+            silicon.thermal_pressure = Metric::available(f64::from(level), Unit::Count);
         }
 
         // PSTR is the whole-system draw (CPU + GPU + ANE + other), so it
@@ -653,5 +799,21 @@ mod tests {
         assert_eq!(history.samples()[2].watts, 4.0);
         // Peak only covers what remains in the window.
         assert_eq!(history.peak_watts().value, 4.0);
+    }
+
+    #[test]
+    fn thermal_level_reads_the_no_warning_shape() {
+        assert_eq!(
+            thermal_level("Note: No thermal warning level has been recorded\n"),
+            Some(0)
+        );
+    }
+
+    #[test]
+    fn thermal_level_stays_unavailable_on_unknown_shapes() {
+        // The nonzero shapes were never observed on the development
+        // machine, so anything else is honest absence, not a guess.
+        assert_eq!(thermal_level("CPU_Speed_Limit = 50\n"), None);
+        assert_eq!(thermal_level(""), None);
     }
 }

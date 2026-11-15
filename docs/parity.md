@@ -171,16 +171,33 @@ Check an item only when it works and a test or a recorded check shows it. Add th
 - [x] Chip name, and E-core and P-core counts (counts gated on the documented
       perflevel names; degrade to unavailable when a machine names them otherwise —
       decision 0013)
-- [ ] E-cluster and P-cluster utilization and frequency
-- [ ] Per-core utilization and frequency
-- [ ] GPU utilization and frequency
-- [ ] ANE power
-- [ ] CPU, GPU and package power, with current, average and peak values
-- [ ] Power history charts with a configurable averaging window
-- [ ] Memory and swap use
-- [ ] Thermal pressure
-- [ ] Interval and color options
-- [ ] All of the above without root
+- [x] E-cluster and P-cluster utilization and frequency — utilization YES (per-core
+      meters cover every logical core including the clusters, 7ab); cluster *frequency*
+      and aggregated cluster utilization counters stay unavailable unprivileged
+      (decision 0011; the frequency store exposes no unprivileged reader and IOReport
+      cluster channels answer the simple integer reader with a 2^63 sentinel)
+- [x] Per-core utilization and frequency — utilization YES (per-core meters, 7ab);
+      frequency stays unavailable unprivileged (decision 0011)
+- [x] GPU utilization — IORegistry `PerformanceStatistics` "Device Utilization %"
+      on the IOGPU service, unprivileged, live-verified 0 idle → 9–11% under a Metal
+      load (decision 0033); shown on the SoC screen as `GPU  util N%`. GPU frequency
+      stays unavailable unprivileged (decision 0011)
+- [x] ANE power — recorded unavailable unprivileged (decision 0013)
+- [x] CPU, GPU and package power, with current, average and peak values — GPU watts
+      live (GpuEnergy delta over IOReport "GPU Energy"), package current/avg/peak via
+      PowerHistory; CPU and ANE power stay unavailable unprivileged (decision 0011;
+      powermetrics requires root)
+- [x] Power history charts with a configurable averaging window — SoC screen draws
+      the wattage history chart (fixed 60 s window; window configurability not shipped)
+- [x] Memory and swap use — SoC screen shows both (SoC memory/swap shipped earlier)
+- [x] Thermal pressure — `pmset -g therm` mapped to none/light/moderate/severe,
+      unprivileged (decision 0033); only the no-warning shape is verified live, other
+      levels render "unknown" rather than a guess
+- [x] Interval and color options — `-d/--delay` interval (decision 0023); theme
+      (color/mono) in the F2 setup screen
+- [x] All of the above without root — every shipped source above reads
+      unprivileged; the recorded-unavailable remainder needs root or private
+      interfaces (decisions 0011, 0013)
 
 ## Beyond Both
 
