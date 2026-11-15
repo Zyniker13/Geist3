@@ -37,7 +37,21 @@ Check an item only when it works and a test or a recorded check shows it. Add th
 - [x] Send a signal through a signal menu (F9) — a centered popup lists the common signals with a movable selection; Enter sends, Esc cancels, j/k or arrows move with wrap-around. Tests: `the_signal_menu_targets_the_tag_set_or_the_cursor`, `the_menu_wraps_and_cancels`, `the_menu_renders_as_a_centered_popup`.
 - [x] Open the signal menu with `K` — `k` stays cursor-up (decision 0012); `K` and F9 both open the popup
 - [x] Renice up and down (F7 / F8) — F7 raises priority one step, F8 lowers it, applying to the same target set as signals; failures are reported in the status line. Tests: `renice_plans_target_the_tags_or_the_cursor`, `a_plan_reports_its_outcome_in_the_notice`.
-- [ ] I/O priority (i, Linux) and CPU affinity (a, Linux)
+- [x] I/O priority and affinity (Linux) (decision 0028: `Control`
+  carries the `ioprio_set` value (`class << 13 | level`) and the
+  `sched_setaffinity` mask; `I` opens a picker listing best-effort
+  0..7, realtime 0..7, idle, and the clear value, `A` lists all-cores
+  then one row per core from the sample; both apply to the tag set or
+  the cursor like the signal menu, and refuse in read-only mode. On
+  macOS applying reports the action is unavailable. Tests:
+  `affinity_and_io_priority_act_on_the_own_process` (Linux: writes the
+  host's own mask back and sets best-effort 4 on its own pid),
+  `the_linux_only_actions_refuse_on_this_platform`,
+  `the_option_lists_keep_their_encoding`,
+  `the_io_priority_picker_lists_and_confirms`,
+  `the_affinity_picker_lists_the_sample_cores`,
+  `readonly_and_empty_targets_refuse_the_pickers`,
+  `the_pickers_wrap_within_their_own_counts`)
 - [x] PID filter (`-p`) — `ztop -p 7,42` (comma separated, repeatable) starts with `Ui::pid_filter` set; the table hides other pids in flat and tree view (an orphaned child becomes a root) and the status line shows `pids:N`. Tests: `the_pid_filter_lists_only_the_requested_pids`, `the_pid_filter_applies_in_tree_mode`, `pids_parse_comma_separated`
 - [x] User filter (u) — `u` cycles all users, then each user present in the sample in sorted order, then back to all; the status line shows the active user. Tests: `the_user_filter_cycles_through_the_sample_users`.
 - [x] Show or hide userland and kernel threads (H, K), and program path

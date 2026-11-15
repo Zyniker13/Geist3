@@ -102,6 +102,11 @@ send a signal to the tagged rows
 .BR F7 ", " F8
 renice \-1 / +1
 .TP
+.BR I ", " A
+set the I/O priority (best\-effort/realtime/idle classes and levels) or
+the CPU affinity (all cores, or one core) of the tagged rows; Linux
+only \- on macOS applying reports that the action is unavailable
+.TP
 .BR H
 cycle thread visibility: show userland threads, then hide kernel
 threads, then back (Linux reports thread rows; kernel threads are shown

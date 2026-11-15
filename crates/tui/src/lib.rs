@@ -139,6 +139,18 @@ pub enum Screen {
     Setup,
 }
 
+/// Which picker the shared menu popup shows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum MenuKind {
+    /// The signal menu (F9, K).
+    #[default]
+    Signals,
+    /// The Linux I/O priority picker (I).
+    IoPriority,
+    /// The Linux CPU affinity picker (A).
+    Affinity,
+}
+
 /// Everything the render needs: the last sample, the last error, the sort,
 /// and the active filters.
 ///
@@ -177,6 +189,9 @@ pub struct Ui {
     pub tags: std::collections::BTreeSet<u32>,
     /// The open signal menu's selected row index, when the menu is open.
     pub menu: Option<usize>,
+    /// Which picker the menu shows: the signal menu (F9/K) or the I/O
+    /// priority and CPU affinity pickers (I/A).
+    pub menu_kind: MenuKind,
     /// The F1 help overlay is open; every key closes it.
     pub help: bool,
     /// The last control action's outcome, shown in the status line until
@@ -240,6 +255,7 @@ impl Default for Ui {
             search: None,
             tags: std::collections::BTreeSet::new(),
             menu: None,
+            menu_kind: MenuKind::Signals,
             help: false,
             show_user_threads: false,
             show_kernel_threads: true,
@@ -544,6 +560,15 @@ impl Ui {
     /// when nothing is tagged. Any open prompt closes first; without a
     /// target the menu stays closed.
     pub fn open_menu(&mut self) {
+        self.open_picker(MenuKind::Signals);
+    }
+
+    /// Open one of the pickers (the signal menu, the I/O priority picker,
+    /// or the CPU affinity picker) over the tagged rows or the cursor.
+    ///
+    /// Read-only mode refuses; a screen with no target leaves the menu
+    /// closed.
+    pub fn open_picker(&mut self, kind: MenuKind) {
         self.filter = None;
         self.search = None;
         if self.readonly {
@@ -551,6 +576,7 @@ impl Ui {
             return;
         }
         if !self.targets().is_empty() {
+            self.menu_kind = kind;
             self.menu = Some(0);
         }
     }
@@ -560,33 +586,59 @@ impl Ui {
         self.menu = None;
     }
 
+    /// The picker's row count: the signals, the I/O priority classes and
+    /// levels, or one row per core plus all-cores. Zero when the affinity
+    /// picker has no sample to count cores from.
+    fn menu_len(&self) -> usize {
+        match self.menu_kind {
+            MenuKind::Signals => control::common_signals().len(),
+            MenuKind::IoPriority => control::io_priority_options().len(),
+            MenuKind::Affinity => self.sample.as_ref().map_or(0, |s| {
+                control::affinity_options(s.cpu.busy_percent.len()).len()
+            }),
+        }
+    }
+
     /// Move the menu selection down, wrapping at the end.
     pub fn menu_next(&mut self) {
         if let Some(selected) = self.menu {
-            let count = control::common_signals().len();
-            self.menu = Some((selected + 1) % count);
+            let count = self.menu_len();
+            if count > 0 {
+                self.menu = Some((selected + 1) % count);
+            }
         }
     }
 
     /// Move the menu selection up, wrapping at the top.
     pub fn menu_prev(&mut self) {
         if let Some(selected) = self.menu {
-            let count = control::common_signals().len();
-            self.menu = Some((selected + count - 1) % count);
+            let count = self.menu_len();
+            if count > 0 {
+                self.menu = Some((selected + count - 1) % count);
+            }
         }
     }
 
-    /// Turn the menu's selection into a signal plan over the targets and
-    /// close the menu; `None` when the menu is closed or the targets
-    /// vanished while it was open.
+    /// Turn the menu's selection into a plan over the targets and close
+    /// the menu; `None` when the menu is closed, the targets vanished
+    /// while it was open, or the affinity picker has no sample to list
+    /// cores from.
     pub fn confirm_menu(&mut self) -> Option<Plan> {
         let selected = self.menu.take()?;
-        let (_, sig) = control::common_signals()[selected];
+        let action = match self.menu_kind {
+            MenuKind::Signals => Control::Signal(control::common_signals()[selected].1),
+            MenuKind::IoPriority => Control::IoPriority(control::io_priority_options()[selected].1),
+            MenuKind::Affinity => {
+                let cores = self.sample.as_ref().map_or(0, |s| s.cpu.busy_percent.len());
+                let options = control::affinity_options(cores);
+                if selected >= options.len() {
+                    return None;
+                }
+                Control::Affinity(options[selected].1)
+            }
+        };
         let pids = self.targets();
-        (!pids.is_empty()).then_some(Plan {
-            pids,
-            action: Control::Signal(sig),
-        })
+        (!pids.is_empty()).then_some(Plan { pids, action })
     }
 
     /// A plan to shift every target's nice value by `delta` (F7 raises
@@ -1134,6 +1186,8 @@ fn handle_key(ui: &mut Ui, key: KeyEvent) -> bool {
         KeyCode::Char('c') => ui.tag_children(),
         KeyCode::Char('U') => ui.untag_all(),
         KeyCode::F(9) | KeyCode::Char('K') => ui.open_menu(),
+        KeyCode::Char('I') => ui.open_picker(MenuKind::IoPriority),
+        KeyCode::Char('A') => ui.open_picker(MenuKind::Affinity),
         KeyCode::F(7) => {
             if let Some(plan) = ui.renice_plan(-1) {
                 run_plan(ui, &plan);
@@ -1223,6 +1277,8 @@ fn run_plan(ui: &mut Ui, plan: &Plan) {
     let label = match plan.action {
         Control::Signal(sig) => format!("signal {}", control::signal_name(sig)),
         Control::Renice(delta) => format!("renice {delta:+}"),
+        Control::IoPriority(value) => format!("io priority {value:#05x}"),
+        Control::Affinity(mask) => format!("affinity {mask:#x}"),
     };
     ui.notice = Some(if failed == 0 {
         format!("{label}: {ok} pid(s)")
@@ -1753,12 +1809,37 @@ fn draw_thermal(frame: &mut Frame, ui: &Ui, area: ratatui::layout::Rect) {
     frame.render_widget(Paragraph::new(lines).block(titled("Sensors")), area);
 }
 
-/// The signal menu: a bordered popup centered over the screen, one row per
-/// signal with `>` marking the selection. Enter sends, Esc cancels.
+/// A picker: a bordered popup centered over the screen, one row per
+/// option (signals, I/O priority classes, or cores) with `>` marking the
+/// selection. Enter applies, Esc cancels.
 fn draw_menu(frame: &mut Frame, ui: &Ui, area: ratatui::layout::Rect) {
-    let signals = control::common_signals();
+    let (title, rows): (&str, Vec<String>) = match ui.menu_kind {
+        MenuKind::Signals => (
+            "Send signal (Enter sends, Esc cancels)",
+            control::common_signals()
+                .iter()
+                .map(|(name, number)| format!("{name} ({number})"))
+                .collect(),
+        ),
+        MenuKind::IoPriority => (
+            "Set I/O priority (Enter sets, Esc cancels)",
+            control::io_priority_options()
+                .iter()
+                .map(|(name, _)| (*name).to_string())
+                .collect(),
+        ),
+        MenuKind::Affinity => (
+            "Set CPU affinity (Enter sets, Esc cancels)",
+            ui.sample.as_ref().map_or_else(Vec::new, |s| {
+                control::affinity_options(s.cpu.busy_percent.len())
+                    .into_iter()
+                    .map(|(name, _)| name)
+                    .collect()
+            }),
+        ),
+    };
     let width = 44.min(area.width);
-    let height = (signals.len() as u16 + 3).min(area.height);
+    let height = (rows.len() as u16 + 3).min(area.height);
     let x = area.x + area.width.saturating_sub(width) / 2;
     let y = area.y + area.height.saturating_sub(height) / 2;
     let rect = ratatui::layout::Rect {
@@ -1769,10 +1850,10 @@ fn draw_menu(frame: &mut Frame, ui: &Ui, area: ratatui::layout::Rect) {
     };
     frame.render_widget(ratatui::widgets::Clear, rect);
     let selected = ui.menu.unwrap_or(0);
-    let mut lines = vec![Line::from("Send signal (Enter sends, Esc cancels)").bold()];
-    for (index, (name, number)) in signals.iter().enumerate() {
+    let mut lines = vec![Line::from(title).bold()];
+    for (index, row) in rows.iter().enumerate() {
         let marker = if index == selected { "> " } else { "  " };
-        lines.push(Line::from(format!("{marker}{name} ({number})")));
+        lines.push(Line::from(format!("{marker}{row}")));
     }
     let menu = Paragraph::new(lines).block(Block::new().borders(Borders::ALL));
     frame.render_widget(menu, rect);
@@ -1800,6 +1881,7 @@ fn help_lines() -> Vec<Line<'static>> {
         ("Space, c, U", "tag row, tag children, untag all"),
         ("F9, K", "send a signal to the tagged rows"),
         ("F7, F8", "renice -1 / +1"),
+        ("I, A", "io priority, cpu affinity (Linux)"),
         ("H, p", "threads cycle, program path"),
         ("a, d, n, o, t", "silicon, disks, network, io, thermal"),
     ];
@@ -2581,7 +2663,7 @@ fn status_parts(ui: &Ui) -> Vec<String> {
         parts.push(notice.clone());
     }
     parts.push(format!(
-        "q: quit · tab: sort {} · i: reverse · f3: search · f4: filter · u: user · space: tag · j/k: select · f: follow · f5: tree · enter: fold · f9: signal · f7/f8: renice · H: threads · p: path · a: silicon · d: disks · n: net · o: io · t: temps",
+        "q: quit · tab: sort {} · i: reverse · f3: search · f4: filter · u: user · space: tag · j/k: select · f: follow · f5: tree · enter: fold · f9: signal · f7/f8: renice · I: ionice · A: affinity · H: threads · p: path · a: silicon · d: disks · n: net · o: io · t: temps",
         sort_label(ui.sort, ui.descending)
     ));
     parts
@@ -2646,6 +2728,8 @@ fn hint_key(label: &str) -> Option<KeyEvent> {
         "t" => KeyCode::Char('t'),
         "H" => KeyCode::Char('H'),
         "p" => KeyCode::Char('p'),
+        "I" => KeyCode::Char('I'),
+        "A" => KeyCode::Char('A'),
         _ => return None,
     };
     Some(KeyEvent::from(code))
@@ -4759,6 +4843,128 @@ mod tests {
                 .any(|row| row.contains(&format!("  {kill} ({kill_number})"))),
             "unselected rows keep the two-space indent: {rows:?}"
         );
+    }
+
+    /// The I/O priority picker (I) lists the classes and levels, moves
+    /// with wrap-around, and Enter builds the plan with the chosen
+    /// value; Esc closes it. The Linux actions still open on any
+    /// platform — applying reports the platform's refusal.
+    #[test]
+    fn the_io_priority_picker_lists_and_confirms() {
+        let mut ui = ui_with(Some(sample()), None);
+        ui.cursor = Some(1);
+        handle_key(&mut ui, KeyEvent::from(KeyCode::Char('I')));
+        assert_eq!(ui.menu_kind, MenuKind::IoPriority);
+        assert_eq!(ui.menu, Some(0));
+        let rows = render(&ui, 80, 24);
+        assert!(
+            rows.iter().any(|row| row.contains("Set I/O priority")),
+            "the picker opens: {rows:?}"
+        );
+        assert!(rows.iter().any(|row| row.contains("> Best-effort 0")));
+        // j moves down nine rows: Realtime 1.
+        for _ in 0..9 {
+            handle_key(&mut ui, KeyEvent::from(KeyCode::Char('j')));
+        }
+        let rows = render(&ui, 80, 24);
+        assert!(rows.iter().any(|row| row.contains("> Realtime 1")));
+        let plan = ui.confirm_menu().expect("plan");
+        assert_eq!(plan.action, Control::IoPriority(1 << 13 | 1));
+        assert_eq!(plan.pids, vec![sample().processes[0].pid]);
+        assert!(ui.menu.is_none());
+    }
+
+    /// The CPU affinity picker (A) lists all-cores first, then one row
+    /// per core from the sample, and Enter builds the plan with the
+    /// chosen mask.
+    #[test]
+    fn the_affinity_picker_lists_the_sample_cores() {
+        let mut ui = ui_with(Some(sample()), None);
+        ui.cursor = Some(1);
+        handle_key(&mut ui, KeyEvent::from(KeyCode::Char('A')));
+        assert_eq!(ui.menu_kind, MenuKind::Affinity);
+        let rows = render(&ui, 80, 24);
+        assert!(
+            rows.iter().any(|row| row.contains("Set CPU affinity")),
+            "the picker opens: {rows:?}"
+        );
+        // The sample's core count drives the list: all-cores plus one
+        // row per core.
+        let cores = sample().cpu.busy_percent.len();
+        assert!(rows.iter().any(|row| row.contains("> All cores")));
+        assert!(rows.iter().any(|row| row.contains("Core 0")));
+        assert!(
+            rows.iter()
+                .any(|row| row.contains(&format!("Core {}", cores - 1)))
+        );
+        assert!(
+            !rows
+                .iter()
+                .any(|row| row.contains(&format!("Core {cores}")))
+        );
+        // Down once, then Enter: Core 0's mask.
+        handle_key(&mut ui, KeyEvent::from(KeyCode::Char('j')));
+        let plan = ui.confirm_menu().expect("plan");
+        assert_eq!(plan.action, Control::Affinity(1));
+        assert!(ui.menu.is_none());
+    }
+
+    /// The pickers share the signal menu's rules: read-only mode
+    /// refuses, and a screen with no target keeps them closed.
+    #[test]
+    fn readonly_and_empty_targets_refuse_the_pickers() {
+        let mut ui = ui_with(Some(sample()), None);
+        ui.readonly = true;
+        handle_key(&mut ui, KeyEvent::from(KeyCode::Char('I')));
+        assert!(ui.menu.is_none());
+        assert!(ui.notice.is_some());
+        handle_key(&mut ui, KeyEvent::from(KeyCode::Char('A')));
+        assert!(ui.menu.is_none());
+        // No tags and no cursor: nothing to act on, the picker stays
+        // closed with no notice.
+        let mut empty = ui_with(Some(sample()), None);
+        empty.cursor = None;
+        handle_key(&mut empty, KeyEvent::from(KeyCode::Char('I')));
+        assert!(empty.menu.is_none());
+        assert!(empty.notice.is_none());
+    }
+
+    /// The pickers' selections wrap within their own row counts.
+    #[test]
+    fn the_pickers_wrap_within_their_own_counts() {
+        let mut ui = ui_with(Some(sample()), None);
+        ui.cursor = Some(1);
+        handle_key(&mut ui, KeyEvent::from(KeyCode::Char('I')));
+        // One up from the first row wraps to the last option.
+        handle_key(&mut ui, KeyEvent::from(KeyCode::Char('k')));
+        assert_eq!(ui.menu, Some(control::io_priority_options().len() - 1));
+        // One more down returns to the top.
+        ui.menu_next();
+        assert_eq!(ui.menu, Some(0));
+        // With the picker still open, keys other than its own do nothing:
+        // close it first, then the affinity list is one longer than the
+        // core count.
+        handle_key(&mut ui, KeyEvent::from(KeyCode::Esc));
+        assert!(ui.menu.is_none());
+        handle_key(&mut ui, KeyEvent::from(KeyCode::Char('A')));
+        assert_eq!(ui.menu_kind, MenuKind::Affinity);
+        assert_eq!(ui.menu, Some(0));
+        let cores = sample().cpu.busy_percent.len();
+        handle_key(&mut ui, KeyEvent::from(KeyCode::Char('k')));
+        assert_eq!(ui.menu, Some(cores));
+    }
+
+    /// Clicking the `I: ionice` and `A: affinity` hints replays the
+    /// picker keys, like every other hint.
+    #[test]
+    fn the_status_hints_replay_the_picker_keys() {
+        let line = status_parts(&ui_with(Some(sample()), None)).join(" · ");
+        assert!(line.contains("I: ionice"), "{line}");
+        assert!(line.contains("A: affinity"), "{line}");
+        let key = hint_key("I").expect("I hint");
+        assert_eq!(key.code, KeyCode::Char('I'));
+        let key = hint_key("A").expect("A hint");
+        assert_eq!(key.code, KeyCode::Char('A'));
     }
 
     #[test]
