@@ -3,13 +3,15 @@
 Updated after every working session.
 
 - **Current milestone:** M3 (Full TUI Parity).
-- **Last done:** M3 batch 7c (`887f558`): the setup screen and the config file — F2 opens a screen with theme (color/mono) and start-in-tree options, j/k move, Space/Enter toggles, Esc/F2 saves JSON to the user's config directory; the theme colors the gauges and `--no-color` forces mono for one run. Gate plus both cross-target clippies green.
-- **Next step:** M3 batch 7d — mouse support and the disk/network/thermal panels.
+- **Last done:** M3 batch 7d part 1 — mouse support: left-click selects a process row, clicking a column header sorts (again flips direction), the wheel walks the selection, and a click on a function-bar hint replays that key through the same handler as the keyboard; mouse capture is enabled while the TUI runs and the status line was split so the draw path and the click map share one string.
+- **Next step:** M3 batch 7d part 2 — the disk/network/thermal panels, then the final parity sweep and the 0.1.0 tag.
 - **Blocked on:** nothing.
 
 ## Log
 
 Newest first. One or two lines per session: what changed, what is next.
+
+- 2026-11-14: M3 batch 7d part 1 — mouse support: left-click selects a row, a header click sorts (clicking the sorted column flips direction), the wheel walks the selection, and a function-bar click replays the key its label names through the same handler the keyboard uses (`handle_key`), with capture enabled while the TUI runs and nothing acting while a prompt is open. The status line splits into `status_parts` (shared by draw and the click map, so a click lands on what is on screen). Five tests; gate plus both cross-target clippies green.
 
 - 2026-11-14: M3 batch 7c (`887f558`): the setup screen and the config file — F2 opens a two-option screen (theme, start in tree view) with wrap-around navigation, saving JSON to the user's config directory (Application Support on macOS, XDG elsewhere) when it closes; malformed files mean defaults and unknown fields are tolerated. The theme colors the CPU/memory/swap gauges and dims the status line; `--no-color` forces mono for one run. Ten tests (five config, four setup behavior, one display-path regression that caught a dropped slash); gate plus both cross-target clippies green. Next: mouse, disk/network/thermal panels.
 
