@@ -144,6 +144,10 @@ pub struct Sample {
     pub sensors: Sensors,
     /// Apple Silicon–specific metrics (clusters, GPU, power, thermal
     /// pressure).  Unavailable on non-Apple Silicon and on Linux.
+    ///
+    /// Defaults so samples recorded before this field existed still
+    /// deserialize.
+    #[serde(default)]
     pub apple_silicon: AppleSilicon,
 }
 
@@ -309,7 +313,7 @@ pub struct PowerSample {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct AppleSilicon {
     /// Chip name, e.g. "Apple M3 Pro".  Unavailable on non-Apple Silicon.
-    pub chip_name: Metric,
+    pub chip_name: Option<String>,
     /// Number of E-cores.  Unavailable on non-Apple Silicon.
     pub e_core_count: Metric,
     /// Number of P-cores.  Unavailable on non-Apple Silicon.
@@ -427,7 +431,7 @@ mod tests {
                 system_watts: Metric::unavailable(Unit::Watts),
             },
             apple_silicon: AppleSilicon {
-                chip_name: Metric::available(0.0, Unit::Count),
+                chip_name: Some("Apple M3 Pro".into()),
                 e_core_count: Metric::available(4.0, Unit::Count),
                 p_core_count: Metric::available(2.0, Unit::Count),
                 e_cluster_busy_percent: Metric::available(25.0, Unit::Percent),
@@ -480,7 +484,7 @@ mod tests {
     #[test]
     fn apple_silicon_defaults_are_unavailable() {
         let asil = AppleSilicon::default();
-        assert!(!asil.chip_name.available);
+        assert!(asil.chip_name.is_none());
         assert!(!asil.e_core_count.available);
         assert!(!asil.p_core_count.available);
         assert!(!asil.e_cluster_busy_percent.available);

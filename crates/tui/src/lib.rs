@@ -67,6 +67,15 @@ fn sort_label(sort: SortKey, descending: bool) -> String {
     format!("{name}{}", if descending { " ↓" } else { " ↑" })
 }
 
+/// Which screen the UI shows. The process table is the default; the
+/// Apple Silicon screen (`a`) shows chip, power and cluster metrics that
+/// only make sense on Apple Silicon Macs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Screen {
+    ProcessTable,
+    AppleSilicon,
+}
+
 /// Everything the render needs: the last sample, the last error, the sort,
 /// and the active filters.
 ///
@@ -108,6 +117,8 @@ pub struct Ui {
     /// The last control action's outcome, shown in the status line until
     /// the next sample arrives.
     pub notice: Option<String>,
+    /// Which screen is showing (process table or Apple Silicon).
+    pub screen: Screen,
 }
 
 impl Default for Ui {
@@ -128,6 +139,7 @@ impl Default for Ui {
             tags: std::collections::BTreeSet::new(),
             menu: None,
             notice: None,
+            screen: Screen::ProcessTable,
         }
     }
 }
@@ -152,6 +164,15 @@ impl Ui {
     /// Flip between ascending and descending order.
     pub fn toggle_direction(&mut self) {
         self.descending = !self.descending;
+    }
+
+    /// Switch between the process table and the Apple Silicon screen.
+    /// The screen state is per-view, so each keeps its own settings.
+    pub fn toggle_screen(&mut self) {
+        self.screen = match self.screen {
+            Screen::ProcessTable => Screen::AppleSilicon,
+            Screen::AppleSilicon => Screen::ProcessTable,
+        };
     }
 
     /// Open or close the name-filter prompt. Closing discards the pattern;
@@ -722,6 +743,11 @@ fn event_loop(terminal: &mut Tui, collector: &mut dyn Collector, pids: &[u32]) -
                         }
                         _ if ui.menu.is_some() => {}
                         KeyCode::Char('q') | KeyCode::Esc => return Ok(()),
+                        // `a` flips between the process table and the Apple
+                        // Silicon screen; on the silicon screen the table
+                        // keys have no meaning, so they do nothing.
+                        KeyCode::Char('a') => ui.toggle_screen(),
+                        _ if ui.screen == Screen::AppleSilicon => {}
                         KeyCode::Char('i') => ui.toggle_direction(),
                         KeyCode::F(3) => ui.toggle_search(),
                         KeyCode::F(4) => ui.toggle_filter(),
@@ -805,6 +831,13 @@ pub fn draw_lines(ui: &Ui, width: u16, height: u16) -> Vec<String> {
 ///
 /// Pure with respect to `ui`, so tests can drive it through a `TestBackend`.
 pub fn draw(frame: &mut Frame, ui: &Ui) {
+    if ui.screen == Screen::AppleSilicon {
+        draw_silicon(frame, ui, frame.area());
+        if ui.menu.is_some() {
+            draw_menu(frame, ui, frame.area());
+        }
+        return;
+    }
     let header = Constraint::Length(4 + u16::from(sensors_present(ui)));
     let areas = Layout::vertical([header, Constraint::Min(1)]).split(frame.area());
     draw_header(frame, ui, areas[0]);
@@ -812,6 +845,155 @@ pub fn draw(frame: &mut Frame, ui: &Ui) {
     if ui.menu.is_some() {
         draw_menu(frame, ui, frame.area());
     }
+}
+
+/// One `label     value` row for the Apple Silicon screen.
+fn kv(label: &str, value: String) -> Line<'static> {
+    Line::from(vec![
+        Span::from(format!("{label:<10}")).bold(),
+        Span::raw(value),
+    ])
+}
+
+/// The Apple Silicon screen: chip identity, core counts, memory and power,
+/// plus a whole-system power-history chart.
+///
+/// Sources the unprivileged collector cannot read (cluster utilization and
+/// frequency, CPU/ANE power, GPU busy) render as an explicit gap line
+/// instead of fake zeros (decision 0013).
+fn draw_silicon(frame: &mut Frame, ui: &Ui, area: ratatui::layout::Rect) {
+    use ratatui::symbols::Marker;
+    use ratatui::widgets::{Axis, Block, Chart, Dataset, GraphType, Paragraph};
+    let titled = |title: &'static str| Block::default().borders(Borders::ALL).title(title);
+    let Some(sample) = ui.sample.as_ref() else {
+        frame.render_widget(
+            Paragraph::new(vec![Line::from("no sample yet")]).block(titled("Apple Silicon")),
+            area,
+        );
+        return;
+    };
+    let asil = &sample.apple_silicon;
+    let Some(chip) = asil.chip_name.as_deref() else {
+        let text = vec![
+            Line::from("This machine is not Apple Silicon (chip name unknown)."),
+            Line::from("Press a to return to the process table."),
+        ];
+        frame.render_widget(Paragraph::new(text).block(titled("Apple Silicon")), area);
+        return;
+    };
+
+    let rows = Layout::vertical([Constraint::Length(12), Constraint::Min(1)]).split(area);
+
+    let count = |metric: &Metric| {
+        if metric.available {
+            format!("{}", metric.value as u64)
+        } else {
+            "-".to_string()
+        }
+    };
+    let watt = |metric: &Metric| {
+        if metric.available {
+            format!("{:.1} W", metric.value)
+        } else {
+            "-".to_string()
+        }
+    };
+    let bytes = |used: &Metric, total: &Metric, fallback: &str| match (
+        metric_bytes(used),
+        metric_bytes(total),
+    ) {
+        (Some(used), Some(total)) if total > 0.0 => {
+            format!("{} / {}", bytes_text(used), bytes_text(total))
+        }
+        _ => fallback.to_string(),
+    };
+    let logical = sample.cpu.busy_percent.len();
+    let busy_mean = if logical > 0 {
+        sample.cpu.busy_percent.iter().sum::<f64>() / logical as f64
+    } else {
+        0.0
+    };
+    let per_core = sample
+        .cpu
+        .busy_percent
+        .iter()
+        .map(|percent| format!("{percent:.0}%"))
+        .collect::<Vec<_>>()
+        .join(" ");
+    let power = format!(
+        "now {}  avg {}  peak {}",
+        watt(&asil.current_watts),
+        watt(&asil.average_watts),
+        watt(&asil.peak_watts)
+    );
+    let info = vec![
+        kv("Chip", chip.to_string()),
+        kv(
+            "Cores",
+            format!(
+                "{}P + {}E ({logical} logical, busy {busy_mean:.0}%)",
+                count(&asil.p_core_count),
+                count(&asil.e_core_count)
+            ),
+        ),
+        kv(
+            "Per-core",
+            if per_core.is_empty() {
+                "-".to_string()
+            } else {
+                per_core
+            },
+        ),
+        kv(
+            "Memory",
+            bytes(&sample.memory.used, &sample.memory.total, "n/a"),
+        ),
+        kv(
+            "Swap",
+            bytes(
+                &sample.memory.swap_used,
+                &sample.memory.swap_total,
+                "no swap",
+            ),
+        ),
+        kv("Power", power),
+        kv("GPU", watt(&sample.sensors.gpu_watts)),
+        Line::from(""),
+        Line::from("Unavailable unprivileged: CPU power, ANE power, cluster busy/frequency,"),
+        Line::from("GPU busy/frequency, thermal pressure (decision 0013)"),
+        Line::from(""),
+        Line::from("a process table · q quit"),
+    ];
+    frame.render_widget(Paragraph::new(info).block(titled("Apple Silicon")), rows[0]);
+
+    let points: Vec<(f64, f64)> = asil
+        .power_history
+        .iter()
+        .enumerate()
+        .map(|(index, point)| (index as f64, point.watts))
+        .collect();
+    if points.len() < 2 {
+        frame.render_widget(
+            Paragraph::new(vec![Line::from("collecting power history…")])
+                .block(titled("Power history (W)")),
+            rows[1],
+        );
+        return;
+    }
+    let peak = points
+        .iter()
+        .map(|(_, watts)| *watts)
+        .fold(0.0_f64, f64::max);
+    let chart = Chart::new(vec![
+        Dataset::default()
+            .marker(Marker::Braille)
+            .graph_type(GraphType::Line)
+            .data(&points),
+    ])
+    .block(titled("Power history (W)"))
+    .x_axis(Axis::default().bounds([0.0, (points.len() - 1) as f64]))
+    .y_axis(Axis::default().bounds([0.0, (peak * 1.2).max(1.0)]));
+    frame.render_widget(chart, rows[1]);
 }
 
 /// The signal menu: a bordered popup centered over the screen, one row per
@@ -2081,6 +2263,133 @@ mod tests {
         assert!(!ui.descending);
     }
 
+    /// A sample for the Apple Silicon screen: named chip, cluster counts,
+    /// power readings and a two-point history so the chart draws.
+    fn sample_with_silicon() -> Sample {
+        let mut s = sample();
+        s.sensors.gpu_watts = Metric::available(2.1, Unit::Watts);
+        s.apple_silicon = ztop_core::model::AppleSilicon {
+            chip_name: Some("Apple M3 Pro".into()),
+            e_core_count: Metric::available(2.0, Unit::Count),
+            p_core_count: Metric::available(2.0, Unit::Count),
+            current_watts: Metric::available(12.34, Unit::Watts),
+            average_watts: Metric::available(9.87, Unit::Watts),
+            peak_watts: Metric::available(15.6, Unit::Watts),
+            power_history: vec![
+                ztop_core::model::PowerSample {
+                    timestamp_ms: 1_700_000_000_000,
+                    watts: 10.0,
+                },
+                ztop_core::model::PowerSample {
+                    timestamp_ms: 1_700_000_002_000,
+                    watts: 12.34,
+                },
+            ],
+            ..ztop_core::model::AppleSilicon::default()
+        };
+        s
+    }
+
+    /// The Apple Silicon screen renders chip, cluster counts, power and the
+    /// history chart — and none of the process table behind it.
+    #[test]
+    fn the_silicon_screen_shows_chip_cores_and_power() {
+        let mut ui = ui_with(Some(sample_with_silicon()), None);
+        ui.screen = Screen::AppleSilicon;
+        let rows = render(&ui, 80, 24);
+        assert!(
+            rows.iter().any(|row| row.contains("Apple M3 Pro")),
+            "chip name shows: {rows:?}"
+        );
+        assert!(
+            rows.iter()
+                .any(|row| row.contains("2P + 2E (4 logical, busy 46%)")),
+            "cluster counts and aggregate busy show: {rows:?}"
+        );
+        assert!(
+            rows.iter().any(|row| row.contains("10% 25% 50% 100%")),
+            "per-core busy shows: {rows:?}"
+        );
+        assert!(
+            rows.iter()
+                .any(|row| row.contains("now 12.3 W  avg 9.9 W  peak 15.6 W")),
+            "power summary shows: {rows:?}"
+        );
+        assert!(
+            rows.iter().any(|row| row.contains("GPU       2.1 W")),
+            "{rows:?}"
+        );
+        assert!(
+            rows.iter()
+                .any(|row| row.contains("Unavailable unprivileged")),
+            "the gap line shows: {rows:?}"
+        );
+        assert!(
+            rows.iter().any(|row| row.contains("Power history (W)")),
+            "the chart block shows: {rows:?}"
+        );
+        assert!(
+            !rows.iter().any(|row| row.contains("worker-01")),
+            "the process table stays hidden: {rows:?}"
+        );
+    }
+
+    /// With fewer than two power points the chart area says it is still
+    /// collecting instead of drawing an empty graph.
+    #[test]
+    fn the_silicon_chart_waits_for_two_points() {
+        let mut s = sample_with_silicon();
+        s.apple_silicon.power_history.pop();
+        let mut ui = ui_with(Some(s), None);
+        ui.screen = Screen::AppleSilicon;
+        let rows = render(&ui, 80, 24);
+        assert!(
+            rows.iter()
+                .any(|row| row.contains("collecting power history")),
+            "the collecting note shows: {rows:?}"
+        );
+    }
+
+    /// A machine without a chip name gets an explicit message, not a wall
+    /// of dashes.
+    #[test]
+    fn the_silicon_screen_says_so_on_non_apple_machines() {
+        let mut ui = ui_with(Some(sample()), None);
+        ui.screen = Screen::AppleSilicon;
+        let rows = render(&ui, 80, 24);
+        assert!(
+            rows.iter().any(|row| row.contains("not Apple Silicon")),
+            "the explanation shows: {rows:?}"
+        );
+        assert!(
+            !rows.iter().any(|row| row.contains("worker-01")),
+            "the process table stays hidden: {rows:?}"
+        );
+    }
+
+    /// `toggle_screen` flips between the table and the Apple Silicon screen
+    /// and back; the draw dispatch follows it in both directions.
+    #[test]
+    fn toggle_screen_flips_between_table_and_silicon() {
+        let mut ui = Ui::new();
+        assert_eq!(ui.screen, Screen::ProcessTable);
+        ui.toggle_screen();
+        assert_eq!(ui.screen, Screen::AppleSilicon);
+        ui.sample = Some(sample_with_silicon());
+        let rows = render(&ui, 80, 24);
+        assert!(
+            rows.iter().any(|row| row.contains("Apple M3 Pro")),
+            "{rows:?}"
+        );
+        ui.toggle_screen();
+        assert_eq!(ui.screen, Screen::ProcessTable);
+        let rows = render(&ui, 80, 24);
+        assert!(
+            rows.iter().any(|row| row.contains("worker-01")),
+            "back on the table: {rows:?}"
+        );
+    }
+
     /// Dump the 80x24 frame for a human eye:
     /// `cargo test -p ztop-tui --lib dump_screen_snapshot -- --ignored --nocapture`
     #[test]
@@ -2113,6 +2422,25 @@ mod tests {
             ui.menu_next();
         }
         println!("---- tags on 4+5, signal menu open, KILL selected ----");
+        for (index, row) in render(&ui, 80, 24).iter().enumerate() {
+            println!("{index:2}|{row}");
+        }
+    }
+
+    /// Dump the 80x24 Apple Silicon frame for a human eye:
+    /// `cargo test -p ztop-tui --lib dump_silicon_snapshot -- --ignored --nocapture`
+    #[test]
+    #[ignore = "manual inspection helper"]
+    fn dump_silicon_snapshot() {
+        let mut ui = ui_with(Some(sample_with_silicon()), None);
+        ui.screen = Screen::AppleSilicon;
+        for (index, row) in render(&ui, 80, 24).iter().enumerate() {
+            println!("{index:2}|{row}");
+        }
+        // A machine without a chip name shows the explanation instead.
+        let mut ui = ui_with(Some(sample()), None);
+        ui.screen = Screen::AppleSilicon;
+        println!("---- sample without Apple Silicon data ----");
         for (index, row) in render(&ui, 80, 24).iter().enumerate() {
             println!("{index:2}|{row}");
         }

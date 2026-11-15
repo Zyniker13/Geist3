@@ -102,7 +102,13 @@ impl Collector for MacOsCollector {
                 origin: source.origin,
                 what: source.what,
             })?;
-        self.power.sample(&mut sample.sensors);
+        // Chip identity and core-type counts come straight from sysctls;
+        // the power collector fills current/average/peak power and the
+        // history window on top.
+        let mut silicon = crate::macos::apple_silicon_topology();
+        self.power
+            .sample(&mut sample.sensors, &mut silicon, timestamp_ms);
+        sample.apple_silicon = silicon;
         for process in &mut sample.processes {
             if let Some(cpu) = cpu_by_pid.get(&process.pid) {
                 process.cpu_percent = *cpu;

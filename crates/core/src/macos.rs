@@ -459,6 +459,125 @@ pub(crate) fn sample_from_parts(
     })
 }
 
+// ── Apple Silicon topology ───────────────────────────────────────────
+
+/// Chip identity and core-type counts parsed from perflevel sysctls.
+///
+/// Pure so tests cover the parsing without a live machine; the live
+/// reader (`apple_silicon_topology`) only feeds it sysctl values.
+/// Compiled on macOS and in tests: elsewhere there is no caller, and
+/// dead code fails the clippy gate.
+#[cfg(any(target_os = "macos", test))]
+pub(crate) struct ChipTopology {
+    pub(crate) chip_name: Option<String>,
+    pub(crate) e_cores: Option<u64>,
+    pub(crate) p_cores: Option<u64>,
+}
+
+/// Classify perflevel sysctl values into chip name and core-type counts.
+///
+/// Real Apple Silicon reports `hw.perflevel0.name` = "Performance" and
+/// `hw.perflevel1.name` = "Efficiency"; a level is only counted when its
+/// name says so, so a VM advertising other names ("Super") contributes
+/// nothing instead of a wrong count. A non-Apple brand leaves the chip
+/// name unset — Intel Macs get no Apple Silicon data at all.
+#[cfg(any(target_os = "macos", test))]
+pub(crate) fn parse_chip_topology(brand: Option<&str>, levels: &[(&str, u64)]) -> ChipTopology {
+    let chip_name = brand
+        .filter(|name| name.starts_with("Apple"))
+        .map(|name| name.to_string());
+    let mut e_cores = None;
+    let mut p_cores = None;
+    for (name, count) in levels {
+        if name.contains("Performance") {
+            p_cores = Some(*count);
+        } else if name.contains("Efficiency") {
+            e_cores = Some(*count);
+        }
+    }
+    ChipTopology {
+        chip_name,
+        e_cores,
+        p_cores,
+    }
+}
+
+/// Read the chip topology live from sysctls. macOS only; the pure
+/// parser above carries the logic and the tests.
+#[cfg(target_os = "macos")]
+pub(crate) fn apple_silicon_topology() -> AppleSilicon {
+    let brand = crate::capture_macos::sysctl_text("machdep.cpu.brand_string");
+    let mut levels: Vec<(String, u64)> = Vec::new();
+    for level in 0..4u64 {
+        let name = crate::capture_macos::sysctl_text(&format!("hw.perflevel{level}.name"));
+        let count = crate::capture_macos::sysctl_u64(&format!("hw.perflevel{level}.logicalcpu"));
+        match (name, count) {
+            (Some(name), Some(count)) => levels.push((name, count)),
+            _ => break,
+        }
+    }
+    let borrowed: Vec<(&str, u64)> = levels
+        .iter()
+        .map(|(name, count)| (name.as_str(), *count))
+        .collect();
+    let topology = parse_chip_topology(brand.as_deref(), &borrowed);
+    AppleSilicon {
+        chip_name: topology.chip_name,
+        e_core_count: topology.e_cores.map_or_else(
+            || Metric::unavailable(Unit::Count),
+            |count| Metric::available(count as f64, Unit::Count),
+        ),
+        p_core_count: topology.p_cores.map_or_else(
+            || Metric::unavailable(Unit::Count),
+            |count| Metric::available(count as f64, Unit::Count),
+        ),
+        ..AppleSilicon::default()
+    }
+}
+
+#[cfg(test)]
+mod chip_topology_tests {
+    use super::*;
+
+    #[test]
+    fn standard_levels_map_to_p_and_e_counts() {
+        let topology = parse_chip_topology(
+            Some("Apple M3 Pro"),
+            &[("Performance", 6), ("Efficiency", 6)],
+        );
+        assert_eq!(topology.chip_name.as_deref(), Some("Apple M3 Pro"));
+        assert_eq!(topology.p_cores, Some(6));
+        assert_eq!(topology.e_cores, Some(6));
+    }
+
+    #[test]
+    fn unknown_level_names_contribute_nothing() {
+        // A VM may advertise names that are neither Performance nor
+        // Efficiency; counting them would be a lie.
+        let topology = parse_chip_topology(Some("Apple M6"), &[("Super", 2), ("Performance", 4)]);
+        assert_eq!(topology.chip_name.as_deref(), Some("Apple M6"));
+        assert_eq!(topology.p_cores, Some(4));
+        assert_eq!(topology.e_cores, None);
+    }
+
+    #[test]
+    fn a_non_apple_brand_gets_no_silicon_data() {
+        let topology = parse_chip_topology(Some("Intel Core i9"), &[("Performance", 8)]);
+        assert_eq!(topology.chip_name, None);
+        // Core counts stay set — they are still perflevel counts — but
+        // the screen is hidden without a chip name.
+        assert_eq!(topology.p_cores, Some(8));
+    }
+
+    #[test]
+    fn a_missing_brand_leaves_everything_unset() {
+        let topology = parse_chip_topology(None, &[("Performance", 8), ("Efficiency", 4)]);
+        assert_eq!(topology.chip_name, None);
+        assert_eq!(topology.p_cores, Some(8));
+        assert_eq!(topology.e_cores, Some(4));
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

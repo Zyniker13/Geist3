@@ -47,7 +47,9 @@ Check an item only when it works and a test or a recorded check shows it. Add th
 
 ## asitop: Apple Silicon (macOS)
 
-- [ ] Chip name, and E-core and P-core counts
+- [x] Chip name, and E-core and P-core counts (counts gated on the documented
+      perflevel names; degrade to unavailable when a machine names them otherwise —
+      decision 0013)
 - [ ] E-cluster and P-cluster utilization and frequency
 - [ ] Per-core utilization and frequency
 - [ ] GPU utilization and frequency

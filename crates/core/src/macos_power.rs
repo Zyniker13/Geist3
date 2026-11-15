@@ -501,6 +501,7 @@ impl GpuEnergy {
 pub struct MacOsPower {
     smc: Option<SmcConn>,
     gpu: Option<GpuEnergy>,
+    history: PowerHistory,
 }
 
 impl Default for MacOsPower {
@@ -514,12 +515,15 @@ impl MacOsPower {
         Self {
             smc: SmcConn::new(),
             gpu: GpuEnergy::new(),
+            history: PowerHistory::new(),
         }
     }
 
-    /// Read all power-related sensors. Fills Sensors fields in-place.
-    /// Never fails the whole sample — missing sources stay unavailable.
-    pub fn sample(&mut self, sensors: &mut Sensors) {
+    /// Read all power-related sensors. Fills Sensors fields in-place,
+    /// plus the Apple Silicon power metrics (current/average/peak and
+    /// the history window). Never fails the whole sample — missing
+    /// sources stay unavailable.
+    pub fn sample(&mut self, sensors: &mut Sensors, silicon: &mut AppleSilicon, timestamp_ms: u64) {
         // SMC sensors (temps, fans, system power)
         if let Some(ref smc) = self.smc {
             smc.read_sensors(sensors);
@@ -531,5 +535,123 @@ impl MacOsPower {
                 sensors.gpu_watts = Metric::available(watts, Unit::Watts);
             }
         }
+
+        // PSTR is the whole-system draw (CPU + GPU + ANE + other), so it
+        // is the honest "current power" for the Apple Silicon screen.
+        // Package-only power needs IOReport CPU energy, which stays
+        // unavailable unprivileged (decision 0013).
+        silicon.current_watts = sensors.system_watts;
+        if sensors.system_watts.available {
+            self.history.push(timestamp_ms, sensors.system_watts.value);
+        }
+        silicon.average_watts = self.history.average_watts();
+        silicon.peak_watts = self.history.peak_watts();
+        silicon.power_history = self.history.samples().to_vec();
+    }
+}
+
+// ── Whole-system power history ───────────────────────────────────────
+
+/// How many power samples the Apple Silicon screen keeps. At the usual
+/// 2 s refresh that is a 4-minute window.
+pub(crate) const POWER_HISTORY_CAP: usize = 120;
+
+/// Ring of recent whole-system power readings, for the average/peak
+/// lines and the history chart. Pure data — unit-tested without any
+/// FFI connection.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct PowerHistory {
+    cap: usize,
+    ring: Vec<PowerSample>,
+}
+
+impl PowerHistory {
+    pub(crate) fn new() -> Self {
+        Self::with_cap(POWER_HISTORY_CAP)
+    }
+
+    fn with_cap(cap: usize) -> Self {
+        Self {
+            cap,
+            ring: Vec::new(),
+        }
+    }
+
+    /// Append one reading, dropping the oldest past the cap.
+    fn push(&mut self, timestamp_ms: u64, watts: f64) {
+        self.ring.push(PowerSample {
+            timestamp_ms,
+            watts,
+        });
+        if self.ring.len() > self.cap {
+            self.ring.remove(0);
+        }
+    }
+
+    /// Mean over the window; unavailable until the first reading lands.
+    fn average_watts(&self) -> Metric {
+        if self.ring.is_empty() {
+            return Metric::unavailable(Unit::Watts);
+        }
+        let sum: f64 = self.ring.iter().map(|sample| sample.watts).sum();
+        Metric::available(sum / self.ring.len() as f64, Unit::Watts)
+    }
+
+    /// Highest reading in the window; unavailable until the first
+    /// reading lands.
+    fn peak_watts(&self) -> Metric {
+        self.ring
+            .iter()
+            .map(|sample| sample.watts)
+            .reduce(f64::max)
+            .map(|watts| Metric::available(watts, Unit::Watts))
+            .unwrap_or_else(|| Metric::unavailable(Unit::Watts))
+    }
+
+    fn samples(&self) -> &[PowerSample] {
+        &self.ring
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn power_history_starts_unavailable() {
+        let history = PowerHistory::new();
+        assert!(!history.average_watts().available);
+        assert!(!history.peak_watts().available);
+        assert!(history.samples().is_empty());
+    }
+
+    #[test]
+    fn power_history_averages_and_peaks() {
+        let mut history = PowerHistory::with_cap(4);
+        history.push(1, 5.0);
+        history.push(2, 9.0);
+        history.push(3, 7.0);
+        assert!(history.average_watts().available);
+        assert_eq!(history.average_watts().value, 7.0);
+        assert!(history.peak_watts().available);
+        assert_eq!(history.peak_watts().value, 9.0);
+        let samples = history.samples();
+        assert_eq!(samples.len(), 3);
+        assert_eq!(samples[0].watts, 5.0);
+        assert_eq!(samples[2].timestamp_ms, 3);
+    }
+
+    #[test]
+    fn power_history_caps_at_the_window() {
+        let mut history = PowerHistory::with_cap(3);
+        for i in 0..5 {
+            history.push(i, i as f64);
+        }
+        assert_eq!(history.samples().len(), 3);
+        // The two oldest samples (0 and 1) were dropped.
+        assert_eq!(history.samples()[0].watts, 2.0);
+        assert_eq!(history.samples()[2].watts, 4.0);
+        // Peak only covers what remains in the window.
+        assert_eq!(history.peak_watts().value, 4.0);
     }
 }
