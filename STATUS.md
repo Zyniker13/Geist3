@@ -3,15 +3,15 @@
 Updated after every working session.
 
 - **Current milestone:** M3 (Full TUI Parity).
-- **Last done:** M3 batch 7n — per-core CPU meters split by state (decision 0017): `Cpu.state_percent` (per-state shares of the interval, serde-defaulted for old captures) computed by a shared `core_state_percents` next to `core_percents` in both live collectors, and the per-core meters redrawn as cumulative state bands (`█` user, `▓` nice, `▒` system, `░` io-wait, `·` rare states) that stay legible in mono. Tests: `core_state_percents_split_the_interval`, `the_core_bars_split_the_states`, `a_core_bar_without_state_shares_fills_plainly`. Replay snapshots regenerated (meter labels anchor left now). Also this session: 7m shipped (`19d5271` + snapshot refresh `a90a64d`, CI green) — PRI and COMMAND columns at 160+, a 15-key sort cycle.
-- **Next step:** the next open `docs/parity.md` item — likely the PSI/disk/network meters or the meter styles item — or the next milestone step toward M8/0.1.0. (7g macOS CPU frequency remains settled: decision 0011 and `docs/m2-power-checks.md`.)
+- **Last done:** M3 batch 7o — disk and network I/O meters (decision 0018): one header line with per-disk `r/w` and per-interface `r/t` rates when the live Linux collector has measured any, absent otherwise (replays unchanged); one `header_height` helper now drives header layout, table split and hint-click row. Tests: `the_io_line_reports_disk_and_net_rates`, `the_io_line_stays_hidden_without_rates`. Earlier this session: 7n (per-core state-split CPU meters, decision 0017) and 7m (PRI/COMMAND columns + 15-key sort cycle), both shipped and CI-green.
+- **Next step:** the remaining open `docs/parity.md` items — PSI meters (Linux), meter styles, screen tabs, I/O priority and affinity, thread visibility, env/open-files/trace, highlight new/dying, pause/redraw, read-only mode, setup screens — then M4+. (7g macOS CPU frequency remains settled: decision 0011 and `docs/m2-power-checks.md`.)
 - **Blocked on:** nothing.
 
 ## Log
 
 Newest first. One or two lines per session: what changed, what is next.
 
-- 2026-11-15: M3 batch 7n — per-core meters split by state (decision 0017): `Cpu.state_percent` + shared `core_state_percents`, both collectors wired, TUI band rendering with mono/color duality. Three new tests; snapshots regenerated. Next: PSI/disk/network meters or the next milestone step.
+- 2026-11-15: M3 batch 7o — disk and network I/O header meter line (decision 0018); `header_height` unifies header row accounting. Fixtures carry no rates, so snapshots unchanged; proven by two new TUI tests. Next: PSI meters or another open parity item.
 
 - 2026-11-15: M3 batch 7k — VIRT/SHR/PPID columns tiering by width (120+/140+), `Columns` plan as the single source for header, cells and click map, SortKey::Virtual/Shared/Parent in the cycle, decision records 0014 (statm 4 KiB page) and 0015 (tier ladder). 80-column snapshots unchanged by construction. Next: 7l — the full command line, then remaining M3 items.
 

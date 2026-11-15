@@ -1440,34 +1440,100 @@ fn sensors_present(ui: &Ui) -> bool {
     })
 }
 
+/// The header's row count: title, cpu, memory, info and the status
+/// bar, plus the disk/network I/O line when the sample carries
+/// rates, plus the sensors line when it carries sensors.
+fn header_height(ui: &Ui) -> u16 {
+    5 + u16::from(io_line(ui).is_some()) + u16::from(sensors_present(ui))
+}
+
 fn draw_header(frame: &mut Frame, ui: &Ui, area: ratatui::layout::Rect) {
     let with_sensors = sensors_present(ui);
-    let rows = Layout::vertical([
-        Constraint::Length(1),
-        Constraint::Length(1),
-        Constraint::Length(1),
-        Constraint::Length(1),
-        if with_sensors {
-            Constraint::Length(1)
-        } else {
-            Constraint::Length(0)
-        },
-        Constraint::Length(1),
-    ])
-    .split(area);
+    let io = io_line(ui);
+    let mut constraints = vec![
+        Constraint::Length(1), // title
+        Constraint::Length(1), // cpu
+        Constraint::Length(1), // memory
+    ];
+    if io.is_some() {
+        constraints.push(Constraint::Length(1)); // io rates
+    }
+    constraints.push(Constraint::Length(1)); // info
+    if with_sensors {
+        constraints.push(Constraint::Length(1));
+    }
+    constraints.push(Constraint::Length(1)); // status
+    let rows = Layout::vertical(constraints).split(area);
     frame.render_widget(Paragraph::new(title_line(ui)), rows[0]);
     draw_cpu_row(frame, ui, rows[1]);
     draw_memory_row(frame, ui, rows[2]);
-    frame.render_widget(Paragraph::new(info_line(ui)), rows[3]);
+    let mut next = 3;
+    if let Some(io) = io {
+        frame.render_widget(Paragraph::new(io), rows[next]);
+        next += 1;
+    }
+    frame.render_widget(Paragraph::new(info_line(ui)), rows[next]);
+    next += 1;
     if with_sensors {
-        frame.render_widget(Paragraph::new(sensors_line(ui)), rows[4]);
+        frame.render_widget(Paragraph::new(sensors_line(ui)), rows[next]);
+        next += 1;
     }
     let status = Paragraph::new(status_line(ui));
     let status = match ui.config.theme {
         Theme::Color => status.style(Style::new().dim()),
         Theme::Mono => status,
     };
-    frame.render_widget(status, rows[5]);
+    frame.render_widget(status, rows[next]);
+}
+
+/// Readable per-second rate for the I/O meter line: `1.2 MiB/s`-style,
+/// the same units as the memory labels but per second.
+fn per_second_text(rate: f64) -> String {
+    if rate >= GIB {
+        format!("{:.1} GiB/s", rate / GIB)
+    } else if rate >= MIB {
+        format!("{:.1} MiB/s", rate / MIB)
+    } else if rate >= KIB {
+        format!("{:.0} KiB/s", rate / KIB)
+    } else {
+        format!("{rate:.0} B/s")
+    }
+}
+
+/// The disk and network I/O meter line: rates the live Linux collector
+/// measured between samples (`r` read, `w` written, `r` received,
+/// `t` transmitted). An entry without a rate — a fixture replay or a
+/// collector's first sample — shows nothing for that device, and the
+/// line is absent entirely while nothing has a rate yet.
+fn io_line(ui: &Ui) -> Option<Line<'static>> {
+    let sample = ui.sample.as_ref()?;
+    let mut parts: Vec<String> = Vec::new();
+    for disk in &sample.disks {
+        let (Some(read), Some(write)) = (disk.read_rate, disk.write_rate) else {
+            continue;
+        };
+        parts.push(format!(
+            "{} r {} w {}",
+            disk.name,
+            per_second_text(read),
+            per_second_text(write)
+        ));
+    }
+    for iface in &sample.net {
+        let (Some(rx), Some(tx)) = (iface.rx_rate, iface.tx_rate) else {
+            continue;
+        };
+        parts.push(format!(
+            "{} r {} t {}",
+            iface.name,
+            per_second_text(rx),
+            per_second_text(tx)
+        ));
+    }
+    if parts.is_empty() {
+        return None;
+    }
+    Some(Line::from(format!("io  {}", parts.join("  ·  "))))
 }
 
 /// The setup screen (F2): the saved options, edited in place and saved to
@@ -2060,7 +2126,7 @@ fn split_table_area(
     ui: &Ui,
     total: ratatui::layout::Rect,
 ) -> (ratatui::layout::Rect, ratatui::layout::Rect) {
-    let header = Constraint::Length(5 + u16::from(sensors_present(ui)));
+    let header = Constraint::Length(header_height(ui));
     let areas = Layout::vertical([header, Constraint::Min(1)]).split(total);
     (areas[0], areas[1])
 }
@@ -2277,7 +2343,7 @@ fn handle_mouse(
     let (header, table) = split_table_area(ui, total);
     // The function bar is the header area's last row (the status line);
     // a click there replays the hint's key, like pressing the label.
-    if header.y + 4 + u16::from(sensors_present(ui)) == row {
+    if header.y + header_height(ui) - 1 == row {
         return match kind {
             MouseEventKind::Down(MouseButton::Left) => status_hint_at(ui, column),
             _ => None,
@@ -3176,6 +3242,48 @@ mod tests {
         let filled = row.split("3 100%").nth(1).unwrap_or("");
         let solid = filled.chars().take_while(|c| *c == '█').count();
         assert!(solid >= 5, "plain fill after the label: {row:?}");
+    }
+
+    /// The header's disk and network I/O meter line shows the rates the
+    /// collector measured between samples, and disappears entirely while
+    /// nothing has a rate (fixtures, first samples).
+    #[test]
+    fn the_io_line_reports_disk_and_net_rates() {
+        let mut s = sample();
+        s.disks.push(Disk {
+            name: "sda".into(),
+            read_bytes: 0,
+            write_bytes: 0,
+            mount: "/".into(),
+            total_bytes: 0,
+            used_bytes: 0,
+            usage_pct: 0.0,
+            read_rate: Some(1.25 * MIB),
+            write_rate: Some(512.0 * 1024.0),
+        });
+        s.net.push(NetIf {
+            name: "eth0".into(),
+            rx_bytes: 0,
+            rx_packets: 0,
+            tx_bytes: 0,
+            tx_packets: 0,
+            rx_rate: Some(5.0 * MIB),
+            tx_rate: Some(120.0 * 1024.0),
+        });
+        let rows = render(&ui_with(Some(s), None), 80, 24);
+        let io = rows
+            .iter()
+            .find(|row| row.contains("io  "))
+            .expect("io meter line");
+        assert!(io.contains("sda r 1.2 MiB/s w 512 KiB/s"), "{io:?}");
+        assert!(io.contains("eth0 r 5.0 MiB/s t 120 KiB/s"), "{io:?}");
+    }
+
+    #[test]
+    fn the_io_line_stays_hidden_without_rates() {
+        // sample() carries no disk or net rates at all.
+        let rows = render(&ui_with(Some(sample()), None), 80, 24);
+        assert!(rows.iter().all(|row| !row.contains("io  ")));
     }
 
     /// The memory gauge label reports compressed memory when the sample
