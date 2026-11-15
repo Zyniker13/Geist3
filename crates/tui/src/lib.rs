@@ -8,6 +8,7 @@
 //! redrawing.
 
 use std::io::{self, Stdout};
+use std::str::FromStr;
 use std::time::Duration;
 
 use ratatui::Frame;
@@ -33,9 +34,6 @@ use ztop_core::model::{CpuTimes, Memory, Metric, Process, Psi, Sample, Unit};
 mod config;
 pub use config::{Config, Theme};
 
-/// How often the event loop samples and redraws when no key is pressed.
-const REFRESH: Duration = Duration::from_secs(1);
-
 const KIB: f64 = 1024.0;
 const MIB: f64 = KIB * 1024.0;
 const GIB: f64 = MIB * 1024.0;
@@ -58,6 +56,40 @@ pub enum SortKey {
     Parent,
     Name,
     Command,
+}
+
+/// Parse a `ztop -s` sort-key name: one of `pid user cpu mem res virt shr
+/// pri nice time start core ppid name command`. Unknown names are an
+/// error so a typo never silently sorts differently than expected.
+impl FromStr for SortKey {
+    type Err = String;
+
+    fn from_str(text: &str) -> Result<Self, Self::Err> {
+        let key = match text {
+            "pid" => Self::Pid,
+            "user" => Self::User,
+            "cpu" => Self::Cpu,
+            "mem" => Self::Mem,
+            "res" => Self::Resident,
+            "virt" => Self::Virtual,
+            "shr" => Self::Shared,
+            "pri" => Self::Priority,
+            "nice" => Self::Nice,
+            "time" => Self::TotalTime,
+            "start" => Self::Start,
+            "core" => Self::Processor,
+            "ppid" => Self::Parent,
+            "name" => Self::Name,
+            "command" => Self::Command,
+            _ => {
+                return Err(format!(
+                    "unknown sort key {text:?} (expected one of pid, user, cpu, mem, res, \
+                     virt, shr, pri, nice, time, start, core, ppid, name, command)"
+                ));
+            }
+        };
+        Ok(key)
+    }
 }
 
 /// One row of the process table: a process plus its tree depth (always 0
@@ -855,8 +887,8 @@ type Tui = Terminal<CrosstermBackend<Stdout>>;
 /// `pids` is the `ztop -p` list: when it is not empty, the table lists only
 /// those processes.
 ///
-/// `readonly` is `ztop --readonly`: every action that changes the system
-/// (signals, renice) is refused for this run.
+/// `flags` carries the rest of the command line: read-only mode, the
+/// starting user filter and sort key, and the refresh delay.
 ///
 /// Returns when the user presses `q`, `Esc` or `Ctrl-C`; terminal state is
 /// restored even when drawing or sampling fails.
@@ -864,23 +896,43 @@ pub fn run(
     collector: &mut dyn Collector,
     pids: &[u32],
     config: Config,
-    readonly: bool,
+    flags: RunFlags,
 ) -> io::Result<()> {
     enable_raw_mode()?;
-    let result = run_inner(collector, pids, config, readonly);
+    let result = run_inner(collector, pids, config, flags);
     restore()?;
     result
 }
+
+/// The `ztop` command-line flags that shape the run: read-only mode, the
+/// starting user filter and sort key, and the refresh delay. Display
+/// preferences like the theme stay in `Config`, which the setup screen
+/// saves; these flags are per-run.
+#[derive(Debug, Clone)]
+pub struct RunFlags {
+    /// Refuse every action that changes the system.
+    pub readonly: bool,
+    /// Show only this user's processes at startup (`-u`).
+    pub user: Option<String>,
+    /// Sort by this key at startup (`-s`).
+    pub sort: Option<SortKey>,
+    /// Seconds between samples (`-d`), at least [`MIN_DELAY`].
+    pub delay: Duration,
+}
+
+/// The smallest refresh delay the event loop accepts: below it the loop
+/// would spin and eat the machine it watches.
+pub const MIN_DELAY: Duration = Duration::from_millis(100);
 
 fn run_inner(
     collector: &mut dyn Collector,
     pids: &[u32],
     config: Config,
-    readonly: bool,
+    flags: RunFlags,
 ) -> io::Result<()> {
     execute!(io::stdout(), EnterAlternateScreen, EnableMouseCapture)?;
     let mut terminal = Terminal::new(CrosstermBackend::new(io::stdout()))?;
-    let result = event_loop(&mut terminal, collector, pids, config, readonly);
+    let result = event_loop(&mut terminal, collector, pids, config, flags);
     execute!(io::stdout(), LeaveAlternateScreen, DisableMouseCapture)?;
     result
 }
@@ -1002,20 +1054,33 @@ fn handle_key(ui: &mut Ui, key: KeyEvent) -> bool {
     false
 }
 
+/// Shape the first frame from the command line: read-only mode, the
+/// starting user filter, the starting sort key. The delay lives in
+/// `flags` and is used by the event loop directly.
+fn apply_flags(ui: &mut Ui, flags: &RunFlags) {
+    ui.readonly = flags.readonly;
+    if let Some(user) = &flags.user {
+        ui.user_filter = Some(user.clone());
+    }
+    if let Some(key) = flags.sort {
+        ui.sort_by(key);
+    }
+}
+
 fn event_loop(
     terminal: &mut Tui,
     collector: &mut dyn Collector,
     pids: &[u32],
     config: Config,
-    readonly: bool,
+    flags: RunFlags,
 ) -> io::Result<()> {
     let mut ui = Ui::with_config(config);
-    ui.readonly = readonly;
+    apply_flags(&mut ui, &flags);
     ui.pid_filter = pids.iter().copied().collect();
     ui.apply(collector.sample());
     loop {
         let area = terminal.draw(|frame| draw(frame, &ui))?.area;
-        if event::poll(REFRESH)? {
+        if event::poll(flags.delay)? {
             let event = event::read()?;
             if let Event::Key(key) = event {
                 if key.kind == KeyEventKind::Press && handle_key(&mut ui, key) {
@@ -3594,6 +3659,71 @@ mod tests {
         ui.redraw_requested = false;
         handle_key(&mut ui, KeyEvent::from(KeyCode::Char('l')));
         assert!(!ui.redraw_requested);
+    }
+
+    /// `-s` accepts exactly the documented names, and an unknown one is
+    /// an error that names the valid choices.
+    #[test]
+    fn sort_key_names_parse() {
+        use std::str::FromStr;
+        for (name, key) in [
+            ("pid", SortKey::Pid),
+            ("user", SortKey::User),
+            ("cpu", SortKey::Cpu),
+            ("mem", SortKey::Mem),
+            ("res", SortKey::Resident),
+            ("virt", SortKey::Virtual),
+            ("shr", SortKey::Shared),
+            ("pri", SortKey::Priority),
+            ("nice", SortKey::Nice),
+            ("time", SortKey::TotalTime),
+            ("start", SortKey::Start),
+            ("core", SortKey::Processor),
+            ("ppid", SortKey::Parent),
+            ("name", SortKey::Name),
+            ("command", SortKey::Command),
+        ] {
+            assert_eq!(SortKey::from_str(name), Ok(key), "{name}");
+        }
+        let err = SortKey::from_str("CPU").unwrap_err();
+        assert!(err.contains("unknown sort key"), "{err}");
+        assert!(err.contains("command"), "{err}");
+    }
+
+    /// `-u`, `-s` and `--readonly` shape the first frame; `-d` becomes the
+    /// event loop's poll timeout and `-t` feeds `Config.start_in_tree`,
+    /// neither of which passes through here.
+    #[test]
+    fn run_flags_shape_the_first_frame() {
+        let mut ui = ui_with(Some(sample()), None);
+        apply_flags(
+            &mut ui,
+            &RunFlags {
+                readonly: true,
+                user: Some("alice".to_string()),
+                sort: Some(SortKey::Nice),
+                delay: Duration::from_secs(1),
+            },
+        );
+        assert!(ui.readonly);
+        assert_eq!(ui.user_filter.as_deref(), Some("alice"));
+        assert_eq!(ui.sort, SortKey::Nice);
+        // A starting sort key begins descending, like a click on it.
+        assert!(ui.descending);
+
+        // No flags: nothing changes.
+        let mut ui = ui_with(Some(sample()), None);
+        apply_flags(
+            &mut ui,
+            &RunFlags {
+                readonly: false,
+                user: None,
+                sort: None,
+                delay: Duration::from_secs(1),
+            },
+        );
+        assert!(!ui.readonly);
+        assert!(ui.user_filter.is_none());
     }
 
     /// `--readonly` refuses the signal menu and every plan: the notice

@@ -72,7 +72,15 @@ Check an item only when it works and a test or a recorded check shows it. Add th
       `clicking_a_row_selects_it`, `clicking_the_header_sorts_then_flips`,
       `clicking_a_function_bar_hint_replays_the_key`, `clicking_quit_replays_the_quit_key`,
       `clicking_the_disks_hint_replays_d`, `clicks_are_ignored_while_a_prompt_is_open`.
-- [ ] Command-line options: delay (`-d`), user (`-u`), PIDs (`-p`), sort key (`-s`), tree (`-t`)
+- [x] Command-line options: delay (`-d`), user (`-u`), PIDs (`-p`), sort key (`-s`), tree (`-t`)
+      (`-d` fractional seconds, error below the 0.1 s `MIN_DELAY` floor;
+      `-u` sets the user filter without validating it against the sample;
+      `-s` parses lowercase sort-key names via `SortKey::FromStr` — unknown
+      names error with the valid list — and starts descending; `-t` sets
+      `Config.start_in_tree` so a later setup save keeps it; also
+      `--no-color` and `--readonly`;
+      docs/decisions/0023-command-line-options.md; tests
+      `sort_key_names_parse`, `run_flags_shape_the_first_frame`).
 - [ ] Help screen (F1) and a man page
 
 ## asitop: Apple Silicon (macOS)

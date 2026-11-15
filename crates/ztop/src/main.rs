@@ -19,6 +19,23 @@ struct Cli {
     #[arg(short = 'p', long, value_delimiter = ',')]
     pids: Vec<u32>,
 
+    /// Seconds between samples; at least 0.1 (htop's `-d`).
+    #[arg(short = 'd', long, default_value_t = 1.0)]
+    delay: f64,
+
+    /// Show only this user's processes at startup (htop's `-u`).
+    #[arg(short = 'u', long)]
+    user: Option<String>,
+
+    /// Sort by this key at startup: one of pid, user, cpu, mem, res, virt,
+    /// shr, pri, nice, time, start, core, ppid, name, command (htop's `-s`).
+    #[arg(short = 's', long)]
+    sort: Option<String>,
+
+    /// Start in tree view (htop's `-t`).
+    #[arg(short = 't', long)]
+    tree: bool,
+
     /// Render without colors, ignoring the saved theme for this run.
     #[arg(long)]
     no_color: bool,
@@ -93,7 +110,26 @@ fn run() -> Result<(), Box<dyn Error>> {
             if cli.no_color {
                 config.theme = ztop_tui::Theme::Mono;
             }
-            ztop_tui::run(&mut collector, &cli.pids, config, cli.readonly)?;
+            if cli.tree {
+                config.start_in_tree = true;
+            }
+            if cli.delay < ztop_tui::MIN_DELAY.as_secs_f64() {
+                return Err(format!(
+                    "delay must be at least {} seconds",
+                    ztop_tui::MIN_DELAY.as_secs_f64()
+                )
+                .into());
+            }
+            let flags = ztop_tui::RunFlags {
+                readonly: cli.readonly,
+                user: cli.user,
+                sort: match &cli.sort {
+                    Some(name) => Some(name.parse()?),
+                    None => None,
+                },
+                delay: std::time::Duration::from_secs_f64(cli.delay),
+            };
+            ztop_tui::run(&mut collector, &cli.pids, config, flags)?;
         }
         Some(Command::Capture { out }) => {
             let count = ztop_core::capture::capture_to(&out)?;
