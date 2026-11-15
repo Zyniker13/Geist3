@@ -142,6 +142,9 @@ pub struct Sample {
     pub net: Vec<NetIf>,
     /// Temperatures, fans and battery, when the host provides them.
     pub sensors: Sensors,
+    /// Apple Silicon–specific metrics (clusters, GPU, power, thermal
+    /// pressure).  Unavailable on non-Apple Silicon and on Linux.
+    pub apple_silicon: AppleSilicon,
 }
 
 /// Lifetime IO counters of one block device, in bytes.
@@ -288,6 +291,60 @@ pub struct ProcessIo {
     pub write_rate: Option<f64>,
 }
 
+// ── Apple Silicon structs ────────────────────────────────────────────
+
+/// One point in the power-history chart.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct PowerSample {
+    /// Milliseconds since the Unix epoch.
+    pub timestamp_ms: u64,
+    /// Power in watts.
+    pub watts: f64,
+}
+
+/// Apple Silicon–specific metrics (E/P clusters, GPU, ANE, power,
+/// thermal pressure).  Where the host does not expose a source
+/// unprivileged, the field stays unavailable so layouts keep their
+/// place (decision 0009).
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct AppleSilicon {
+    /// Chip name, e.g. "Apple M3 Pro".  Unavailable on non-Apple Silicon.
+    pub chip_name: Metric,
+    /// Number of E-cores.  Unavailable on non-Apple Silicon.
+    pub e_core_count: Metric,
+    /// Number of P-cores.  Unavailable on non-Apple Silicon.
+    pub p_core_count: Metric,
+    /// E-cluster busy percent over the sample interval.
+    pub e_cluster_busy_percent: Metric,
+    /// E-cluster frequency in MHz.  Unavailable unprivileged.
+    pub e_cluster_frequency_mhz: Metric,
+    /// P-cluster busy percent over the sample interval.
+    pub p_cluster_busy_percent: Metric,
+    /// P-cluster frequency in MHz.  Unavailable unprivileged.
+    pub p_cluster_frequency_mhz: Metric,
+    /// GPU busy percent over the sample interval.
+    pub gpu_busy_percent: Metric,
+    /// GPU frequency in MHz.  Unavailable unprivileged.
+    pub gpu_frequency_mhz: Metric,
+    /// ANE (Neural Engine) power in watts.  Unavailable unprivileged.
+    pub ane_watts: Metric,
+    /// CPU power in watts (current).  Unavailable unprivileged.
+    pub cpu_watts: Metric,
+    /// Package power in watts (current).  Unavailable unprivileged.
+    pub package_watts: Metric,
+    /// Current power in watts (CPU + GPU + ANE + other).
+    pub current_watts: Metric,
+    /// Average power in watts over the history window.
+    pub average_watts: Metric,
+    /// Peak power in watts observed during the history window.
+    pub peak_watts: Metric,
+    /// Thermal pressure level (0 = none, 1 = light, 2 = moderate,
+    /// 3 = severe).
+    pub thermal_pressure: Metric,
+    /// Power-history samples for the chart (most recent last).
+    pub power_history: Vec<PowerSample>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -369,6 +426,28 @@ mod tests {
                 gpu_watts: Metric::available(8.7, Unit::Watts),
                 system_watts: Metric::unavailable(Unit::Watts),
             },
+            apple_silicon: AppleSilicon {
+                chip_name: Metric::available(0.0, Unit::Count),
+                e_core_count: Metric::available(4.0, Unit::Count),
+                p_core_count: Metric::available(2.0, Unit::Count),
+                e_cluster_busy_percent: Metric::available(25.0, Unit::Percent),
+                e_cluster_frequency_mhz: Metric::unavailable(Unit::Hertz),
+                p_cluster_busy_percent: Metric::available(60.0, Unit::Percent),
+                p_cluster_frequency_mhz: Metric::unavailable(Unit::Hertz),
+                gpu_busy_percent: Metric::available(15.0, Unit::Percent),
+                gpu_frequency_mhz: Metric::unavailable(Unit::Hertz),
+                ane_watts: Metric::unavailable(Unit::Watts),
+                cpu_watts: Metric::unavailable(Unit::Watts),
+                package_watts: Metric::unavailable(Unit::Watts),
+                current_watts: Metric::unavailable(Unit::Watts),
+                average_watts: Metric::unavailable(Unit::Watts),
+                peak_watts: Metric::unavailable(Unit::Watts),
+                thermal_pressure: Metric::available(0.0, Unit::Count),
+                power_history: vec![PowerSample {
+                    timestamp_ms: 1_700_000_000_000,
+                    watts: 5.0,
+                }],
+            },
         };
         let json = serde_json::to_string(&sample).expect("serialize");
         let back: Sample = serde_json::from_str(&json).expect("deserialize");
@@ -396,6 +475,28 @@ mod tests {
             serde_json::to_string(&Unit::RevolutionsPerMinute).unwrap(),
             r#""revolutions_per_minute""#
         );
+    }
+
+    #[test]
+    fn apple_silicon_defaults_are_unavailable() {
+        let asil = AppleSilicon::default();
+        assert!(!asil.chip_name.available);
+        assert!(!asil.e_core_count.available);
+        assert!(!asil.p_core_count.available);
+        assert!(!asil.e_cluster_busy_percent.available);
+        assert!(!asil.e_cluster_frequency_mhz.available);
+        assert!(!asil.p_cluster_busy_percent.available);
+        assert!(!asil.p_cluster_frequency_mhz.available);
+        assert!(!asil.gpu_busy_percent.available);
+        assert!(!asil.gpu_frequency_mhz.available);
+        assert!(!asil.ane_watts.available);
+        assert!(!asil.cpu_watts.available);
+        assert!(!asil.package_watts.available);
+        assert!(!asil.current_watts.available);
+        assert!(!asil.average_watts.available);
+        assert!(!asil.peak_watts.available);
+        assert!(!asil.thermal_pressure.available);
+        assert!(asil.power_history.is_empty());
     }
 
     #[test]

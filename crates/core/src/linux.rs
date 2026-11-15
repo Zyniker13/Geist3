@@ -32,11 +32,12 @@ use std::path::Path;
 use crate::fixture::{Fixture, FixtureError};
 #[cfg(any(target_os = "linux", test))]
 use crate::model::core_percents;
+use crate::model::{
+    AppleSilicon, Cpu, CpuTimes, Disk, Memory, Metric, NetIf, Process, ProcessIo, Sample, Sensors,
+    Unit,
+};
 #[cfg(any(target_os = "linux", test))]
 use crate::model::{Battery, BatteryState, Fan, TempSensor};
-use crate::model::{
-    Cpu, CpuTimes, Disk, Memory, Metric, NetIf, Process, ProcessIo, Sample, Sensors, Unit,
-};
 
 /// Jiffies per second: the fixed `USER_HZ` of the kernel/user ABI.
 const USER_HZ: f64 = 100.0;
@@ -744,6 +745,7 @@ pub fn sample_from_fixture(dir: &Path) -> Result<Sample, FixtureSampleError> {
             battery: None,
             ..Sensors::default()
         },
+        apple_silicon: AppleSilicon::default(),
     })
 }
 
@@ -952,6 +954,7 @@ mod live {
                     gpu_watts: Metric::unavailable(Unit::Watts),
                     system_watts: Metric::unavailable(Unit::Watts),
                 },
+                apple_silicon: AppleSilicon::default(),
             })
         }
     }

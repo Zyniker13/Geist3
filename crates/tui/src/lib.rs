@@ -1265,6 +1265,7 @@ mod tests {
                 gpu_watts: Metric::unavailable(Unit::Watts),
                 system_watts: Metric::unavailable(Unit::Watts),
             },
+            apple_silicon: ztop_core::model::AppleSilicon::default(),
         }
     }
 

@@ -25,7 +25,9 @@ use std::path::Path;
 
 use crate::fixture::Fixture;
 use crate::linux::{FixtureSampleError, bad_source, missing_source};
-use crate::model::{Cpu, CpuTimes, Memory, Metric, Process, ProcessIo, Sample, Sensors, Unit};
+use crate::model::{
+    AppleSilicon, Cpu, CpuTimes, Memory, Metric, Process, ProcessIo, Sample, Sensors, Unit,
+};
 
 /// BSD scheduler tick rate in hertz, the rate `host_statistics64` CPU
 /// ticks are counted at. Confirmed unprivileged via `kern.clockrate`.
@@ -453,6 +455,7 @@ pub(crate) fn sample_from_parts(
         disks: Vec::new(),
         net: Vec::new(),
         sensors: Sensors::default(),
+        apple_silicon: AppleSilicon::default(),
     })
 }
 
