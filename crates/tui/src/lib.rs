@@ -50,12 +50,14 @@ pub enum SortKey {
     Resident,
     Virtual,
     Shared,
+    Priority,
     Nice,
     TotalTime,
     Start,
     Processor,
     Parent,
     Name,
+    Command,
 }
 
 /// One row of the process table: a process plus its tree depth (always 0
@@ -77,12 +79,14 @@ fn sort_label(sort: SortKey, descending: bool) -> String {
         SortKey::Resident => "res",
         SortKey::Virtual => "virt",
         SortKey::Shared => "shr",
+        SortKey::Priority => "pri",
         SortKey::Nice => "nice",
         SortKey::TotalTime => "time",
         SortKey::Start => "start",
         SortKey::Processor => "cpu-core",
         SortKey::Parent => "ppid",
         SortKey::Name => "name",
+        SortKey::Command => "command",
     };
     format!("{name}{}", if descending { " ↓" } else { " ↑" })
 }
@@ -198,8 +202,10 @@ impl Ui {
             SortKey::TotalTime => SortKey::Start,
             SortKey::Start => SortKey::Processor,
             SortKey::Processor => SortKey::Parent,
-            SortKey::Parent => SortKey::Name,
-            SortKey::Name => SortKey::Pid,
+            SortKey::Parent => SortKey::Priority,
+            SortKey::Priority => SortKey::Name,
+            SortKey::Name => SortKey::Command,
+            SortKey::Command => SortKey::Pid,
         };
     }
 
@@ -568,12 +574,20 @@ impl Ui {
             SortKey::Resident => a.resident_bytes.cmp(&b.resident_bytes),
             SortKey::Virtual => a.virtual_bytes.cmp(&b.virtual_bytes),
             SortKey::Shared => a.shared_bytes.cmp(&b.shared_bytes),
+            SortKey::Priority => a.priority.cmp(&b.priority),
             SortKey::Nice => a.nice.cmp(&b.nice),
             SortKey::TotalTime => a.total_time_ns.cmp(&b.total_time_ns),
             SortKey::Start => a.start_time_secs.cmp(&b.start_time_secs),
             SortKey::Processor => a.processor.cmp(&b.processor),
             SortKey::Parent => a.parent.cmp(&b.parent),
             SortKey::Name => a.name.cmp(&b.name),
+            // The command falls back to the short name, the same text the
+            // NAME column shows when no command line was recorded.
+            SortKey::Command => a
+                .command
+                .clone()
+                .unwrap_or_else(|| a.name.clone())
+                .cmp(&b.command.clone().unwrap_or_else(|| b.name.clone())),
         };
         if self.descending { ord.reverse() } else { ord }
     }
@@ -2070,12 +2084,20 @@ impl Columns {
         if area_width >= 140 {
             extend(&[("PPID", 7, Some(SortKey::Parent))]);
         }
+        if area_width >= 160 {
+            extend(&[("PRI", 4, Some(SortKey::Priority))]);
+        }
         if show_io {
             extend(&[("RD/s", 5, None), ("WR/s", 5, None)]);
         }
         names.push("NAME");
         keys.push(Some(SortKey::Name));
         widths.push(Constraint::Min(1));
+        if area_width >= 160 {
+            names.push("COMMAND");
+            keys.push(Some(SortKey::Command));
+            widths.push(Constraint::Length(32));
+        }
         Self {
             names,
             widths,
@@ -2086,11 +2108,42 @@ impl Columns {
     /// The sort key a click on column `x` (relative to the table's left
     /// edge) lands on, or None for a column that does not sort. One cell
     /// of column spacing separates the columns, matching the draw path.
-    fn sort_key_at(&self, x: u16) -> Option<SortKey> {
+    /// The name column takes the middle of the table (`Min`); fixed
+    /// columns after it (COMMAND) get the last `width + 1` cells.
+    fn sort_key_at(&self, x: u16, total: u16) -> Option<SortKey> {
         let mut left = 0u16;
         for (index, width) in self.widths.iter().enumerate() {
             let Constraint::Length(width) = width else {
-                // The name column takes the rest of the table.
+                // The name column, then any fixed columns after it: the
+                // rest of the table minus their spans belongs to the name.
+                let trailing = &self.widths[index + 1..];
+                let after: u16 = trailing
+                    .iter()
+                    .filter_map(|width| match width {
+                        Constraint::Length(width) => Some(width + 1),
+                        _ => None,
+                    })
+                    .sum();
+                if x >= total.saturating_sub(after) {
+                    let mut right = total.saturating_sub(after);
+                    for (offset, width) in trailing.iter().enumerate() {
+                        let Constraint::Length(width) = width else {
+                            return self.keys[index + 1 + offset];
+                        };
+                        // The last column's span runs to the table's edge.
+                        let is_last = offset + 1 == trailing.len();
+                        let hit = if is_last {
+                            x >= right
+                        } else {
+                            x >= right && x < right + width
+                        };
+                        if hit {
+                            return self.keys[index + 1 + offset];
+                        }
+                        right += width + 1;
+                    }
+                    return None;
+                }
                 return self.keys[index];
             };
             if x >= left && x < left + width {
@@ -2139,7 +2192,8 @@ fn handle_mouse(
                 let procs = ui.ordered_rows();
                 let show_io = procs_io_visible(&procs);
                 let columns = Columns::plan(table.width, show_io);
-                if let Some(key) = columns.sort_key_at(column.saturating_sub(table.x)) {
+                if let Some(key) = columns.sort_key_at(column.saturating_sub(table.x), table.width)
+                {
                     ui.sort_by(key);
                 }
             } else if local >= 2 {
@@ -2200,6 +2254,10 @@ fn process_row(
                 Some(nice) => Cell::from(format!("{:>4}", nice)),
                 None => Cell::from(""),
             },
+            "PRI" => match process.priority {
+                Some(priority) => Cell::from(format!("{:>4}", priority)),
+                None => Cell::from(""),
+            },
             "TIME+" => Cell::from(format!("{:>7}", time_text(process.total_time_ns))),
             // Start time in local MM/DD HH:MM and the last processor the
             // process ran on; both blank when the collector could not tell.
@@ -2227,6 +2285,14 @@ fn process_row(
             "RD/s" => Cell::from(format!("{:>5}", rate_text(process.io.read_rate))),
             "WR/s" => Cell::from(format!("{:>5}", rate_text(process.io.write_rate))),
             "NAME" => Cell::from(name.clone()),
+            // The command column shows the raw command line (or the short
+            // name) with no tree or tag decoration.
+            "COMMAND" => Cell::from(
+                process
+                    .command
+                    .clone()
+                    .unwrap_or_else(|| process.name.clone()),
+            ),
             other => unreachable!("unknown process table column {other:?}"),
         })
         .collect();
@@ -2664,6 +2730,83 @@ mod tests {
             screen,
         );
         assert_eq!(ui.sort, SortKey::Parent);
+    }
+
+    /// The 160-column tier adds PRI (after PPID) and COMMAND (after NAME).
+    /// COMMAND sorts by the recorded command line, falling back to the
+    /// short name the way the NAME column shows it.
+    #[test]
+    fn widest_terminals_gain_pri_and_command() {
+        let rows = render(&ui_with(Some(sample()), None), 160, 24);
+        assert!(rows.iter().any(|row| row.contains("PRI")));
+        assert!(rows.iter().any(|row| row.contains("COMMAND")));
+        assert!(
+            !rows
+                .iter()
+                .any(|row| row.contains("COMMAND") && row.contains("worker-01 "))
+        );
+        // The sample's priority is Some(20 + pid): worker-04 shows 24.
+        let header = rows.iter().position(|row| row.contains("PRI")).unwrap();
+        assert!(
+            rows[header + 1..]
+                .iter()
+                .filter(|row| row.contains("worker-04"))
+                .all(|row| row.contains("24")),
+            "worker-04 priority missing: {:?}",
+            rows[header + 1..]
+                .iter()
+                .find(|row| row.contains("worker-04"))
+        );
+        // Clicking PRI sorts by priority; the x anchor comes from the
+        // rendered header so the test does not hard-code column math.
+        let mut ui = ui_with(Some(sample()), None);
+        let screen = ratatui::layout::Rect::new(0, 0, 160, 24);
+        let pri_x = rows
+            .iter()
+            .find(|row| row.contains("PRI"))
+            .and_then(|row| row.find("PRI"))
+            .expect("PRI header cell") as u16;
+        handle_mouse(
+            &mut ui,
+            MouseEventKind::Down(MouseButton::Left),
+            pri_x,
+            6,
+            screen,
+        );
+        assert_eq!(ui.sort, SortKey::Priority);
+        // Clicking COMMAND (x 140 at 160) sorts by the command (fallback
+        // names here), so worker-12 leads under the default descending.
+        let mut ui = ui_with(Some(sample()), None);
+        handle_mouse(
+            &mut ui,
+            MouseEventKind::Down(MouseButton::Left),
+            140,
+            6,
+            screen,
+        );
+        assert_eq!(ui.sort, SortKey::Command);
+        let rows = render(&ui, 160, 24);
+        let header = rows.iter().position(|row| row.contains("COMMAND")).unwrap();
+        assert!(
+            rows[header + 1].contains("worker-12"),
+            "{:?}",
+            rows[header + 1]
+        );
+        // At 140 columns neither column exists. A click at x 139 lands in
+        // NAME and sorts by name, as the name column always has.
+        let at_140 = render(&ui_with(Some(sample()), None), 140, 24);
+        assert!(!at_140.iter().any(|row| row.contains("PRI")));
+        assert!(!at_140.iter().any(|row| row.contains("COMMAND")));
+        let mut ui = ui_with(Some(sample()), None);
+        let screen = ratatui::layout::Rect::new(0, 0, 140, 24);
+        handle_mouse(
+            &mut ui,
+            MouseEventKind::Down(MouseButton::Left),
+            139,
+            6,
+            screen,
+        );
+        assert_eq!(ui.sort, SortKey::Name);
     }
 
     #[test]
@@ -3529,7 +3672,11 @@ mod tests {
         ui.cycle_sort();
         assert_eq!(ui.sort, SortKey::Parent);
         ui.cycle_sort();
+        assert_eq!(ui.sort, SortKey::Priority);
+        ui.cycle_sort();
         assert_eq!(ui.sort, SortKey::Name);
+        ui.cycle_sort();
+        assert_eq!(ui.sort, SortKey::Command);
         ui.cycle_sort();
         assert_eq!(ui.sort, SortKey::Pid);
         ui.cycle_sort();
