@@ -1,7 +1,7 @@
-zTop 0.1.0  linux-aarch64  up 00:02:11  12 procs  cpu 0%  load 1.74 0.50 0.17   
-        0 0%                1 0%                2 0%                3 0%        
+zTop 0.1.0  linux-aarch64  up 00:02:11  12 procs  load 1.74 0.50 0.17           
+  Avg 0%         0 0%             1 0%              2 0%             3 0%       
 █████  1.7 GiB / 15.6 GiB · buf 82.6 MiB                 0 B / 3.0 GiB          
-17:36:50  Tasks: 12, 0 running  Linux 7.0.0-1017-azure                          
+17:36:50  Tasks: 12, 0 running  256 thr  12 kthr  Linux 7.0.0-1017-azure        
 q: quit · tab: sort cpu ↓ · i: reverse · f3: search · f4: filter · u: user · spa
 ────────────────────────────────────────────────────────────────────────────────
 PID      USER       STATE   CPU%    MEM%    THR   RES       NAME                

@@ -459,6 +459,11 @@ pub(crate) fn sample_from_parts(
             load_avg[2] as f64 / 1000.0,
         ],
         uptime: Metric::available(uptime_secs, Unit::Seconds),
+        threads: Metric::available(
+            processes.iter().map(|process| process.threads as f64).sum(),
+            Unit::Count,
+        ),
+        kernel_threads: Metric::unavailable(Unit::Count),
         processes,
         disks: Vec::new(),
         net: Vec::new(),

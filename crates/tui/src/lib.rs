@@ -1475,11 +1475,11 @@ fn title_line(ui: &Ui) -> Line<'static> {
     ];
     if let Some(sample) = &ui.sample {
         spans.push(Span::from(format!(
-            "  {}  up {}  {} procs  {}  load {:.2} {:.2} {:.2}",
+            "  {}  up {}  {} procs{}  load {:.2} {:.2} {:.2}",
             sample.hostname,
             uptime_text(&sample.uptime),
             sample.processes.len(),
-            cpu_label(sample),
+            frequency_text(sample),
             sample.load_avg[0],
             sample.load_avg[1],
             sample.load_avg[2],
@@ -1488,10 +1488,24 @@ fn title_line(ui: &Ui) -> Line<'static> {
     Line::from(spans)
 }
 
-fn cpu_label(sample: &Sample) -> String {
-    match cpu_percent_mean(sample) {
-        Some(percent) => format!("cpu {percent:.0}%"),
-        None => "cpu n/a".to_string(),
+/// The mean CPU frequency for the title (` f 3.1 GHz`), shown when the
+/// sample carries at least one core frequency.
+fn frequency_text(sample: &Sample) -> String {
+    let values: Vec<f64> = sample
+        .cpu
+        .frequency_mhz
+        .iter()
+        .filter(|metric| metric.available)
+        .map(|metric| metric.value)
+        .collect();
+    if values.is_empty() {
+        return String::new();
+    }
+    let mean = values.iter().sum::<f64>() / values.len() as f64;
+    if mean >= 1000.0 {
+        format!(" f {:.1} GHz", mean / 1000.0)
+    } else {
+        format!(" f {:.0} MHz", mean)
     }
 }
 
@@ -1511,6 +1525,15 @@ fn info_line(ui: &Ui) -> Line<'static> {
             .filter(|process| process.state == "R")
             .count(),
     )));
+    if sample.threads.available {
+        spans.push(Span::from(format!("  {} thr", sample.threads.value as u64)));
+    }
+    if sample.kernel_threads.available {
+        spans.push(Span::from(format!(
+            "  {} kthr",
+            sample.kernel_threads.value as u64
+        )));
+    }
     if !sample.system.is_empty() {
         spans.push(Span::from(format!("  {}", sample.system)));
     }
@@ -1568,13 +1591,22 @@ fn draw_cpu_row(frame: &mut Frame, ui: &Ui, area: ratatui::layout::Rect) {
         frame.render_widget(Paragraph::new("CPU n/a"), area);
         return;
     }
-    let per_core = Layout::horizontal(vec![Constraint::Fill(1); percents.len()]).split(area);
+    // One wider "Avg" meter, then the per-core meters.
+    let mut constraints = vec![Constraint::Length(10)];
+    constraints.extend(vec![Constraint::Fill(1); percents.len()]);
+    let split = Layout::horizontal(constraints).split(area);
+    let mean = cpu_percent_mean(sample).unwrap_or(0.0);
+    let avg = Gauge::default()
+        .ratio((mean / 100.0).clamp(0.0, 1.0))
+        .label(format!("Avg {:.0}%", mean))
+        .gauge_style(gauge_style(ui, Style::new().green()));
+    frame.render_widget(avg, split[0]);
     for (core, percent) in percents.iter().enumerate() {
         let gauge = Gauge::default()
             .ratio((*percent / 100.0).clamp(0.0, 1.0))
             .label(format!("{core} {:.0}%", percent))
             .gauge_style(gauge_style(ui, Style::new().green()));
-        frame.render_widget(gauge, per_core[core]);
+        frame.render_widget(gauge, split[core + 1]);
     }
 }
 
@@ -1632,6 +1664,7 @@ fn breakdown_parts(memory: &Memory) -> Vec<String> {
         ("buf", metric_bytes(&memory.buffers)),
         ("shmem", metric_bytes(&memory.shared)),
         ("cache", metric_bytes(&memory.cache)),
+        ("comp", metric_bytes(&memory.compressed)),
     ]
     .into_iter()
     .filter_map(|(name, bytes)| bytes.map(|value| format!("{name} {}", bytes_text(value))))
@@ -2107,6 +2140,8 @@ mod tests {
             timestamp_ms: 1_700_000_000_000,
             hostname: "host-a".to_string(),
             system: "Linux 6.8.0-test".to_string(),
+            threads: Metric::available(78.0, Unit::Count),
+            kernel_threads: Metric::available(2.0, Unit::Count),
             cpu: Cpu {
                 cores,
                 busy_percent: vec![10.0, 25.0, 50.0, 100.0],
@@ -2235,7 +2270,8 @@ mod tests {
         assert!(rows[0].contains("host-a"), "{:?}", rows[0]);
         assert!(rows[0].contains("up 02:00:54"), "{:?}", rows[0]);
         assert!(rows[0].contains("12 procs"), "{:?}", rows[0]);
-        assert!(rows[0].contains("cpu 46%"), "{:?}", rows[0]);
+        // The CPU row leads with the average meter.
+        assert!(rows[1].contains("Avg 46%"), "{:?}", rows[1]);
         // Per-core gauges: one labelled bar per core.
         assert!(rows[1].contains("0 10%"), "{:?}", rows[1]);
         assert!(rows[1].contains("3 100%"), "{:?}", rows[1]);
@@ -2448,6 +2484,10 @@ mod tests {
     #[test]
     fn the_header_info_line_shows_the_battery_when_present() {
         let mut sample = sample();
+        // Keep the line short: without thread counts the battery segment
+        // fits the 80-column test terminal.
+        sample.threads = Metric::unavailable(Unit::Count);
+        sample.kernel_threads = Metric::unavailable(Unit::Count);
         sample.sensors.battery = Some(Battery {
             percent: Metric::available(87.0, Unit::Percent),
             state: BatteryState::Discharging,
@@ -2459,6 +2499,92 @@ mod tests {
             rows[3].contains("bat 87% discharging"),
             "battery present: {:?}",
             rows[3]
+        );
+    }
+
+    /// The info line reports the host's thread and kernel-thread counts
+    /// when the sample carries them.
+    #[test]
+    fn the_info_line_reports_thread_counts_when_the_sample_carries_them() {
+        let ui = ui_with(Some(sample()), None);
+        let rows = render(&ui, 80, 24);
+        assert!(
+            rows[3].contains("78 thr") && rows[3].contains("2 kthr"),
+            "thread counts present: {:?}",
+            rows[3]
+        );
+    }
+
+    /// When the platform reports no thread counts the info line stays
+    /// quiet about them instead of claiming zero.
+    #[test]
+    fn the_info_line_omits_thread_counts_when_unavailable() {
+        let mut sample = sample();
+        sample.threads = Metric::unavailable(Unit::Count);
+        sample.kernel_threads = Metric::unavailable(Unit::Count);
+        let ui = ui_with(Some(sample), None);
+        let rows = render(&ui, 80, 24);
+        assert!(
+            !rows[3].contains("thr") && !rows[3].contains("kthr"),
+            "no thread claims: {:?}",
+            rows[3]
+        );
+    }
+
+    /// The title shows the mean CPU frequency when the sample carries
+    /// core frequencies, and stays quiet when it does not.
+    #[test]
+    fn the_title_shows_the_mean_frequency_when_reported() {
+        let mut sample = sample();
+        sample.cpu.frequency_mhz = vec![Metric::available(3115.0, Unit::Hertz)];
+        let mut quiet = sample.clone();
+        quiet.cpu.frequency_mhz = Vec::new();
+        let ui = ui_with(Some(sample), None);
+        let rows = render(&ui, 80, 24);
+        assert!(
+            rows[0].contains("f 3.1 GHz"),
+            "frequency in the title: {:?}",
+            rows[0]
+        );
+        let ui = ui_with(Some(quiet), None);
+        assert!(
+            !render(&ui, 80, 24)[0].contains(" f "),
+            "no frequency claim: {:?}",
+            render(&ui, 80, 24)[0]
+        );
+    }
+
+    /// The CPU row leads with an average meter before the per-core ones.
+    #[test]
+    fn the_cpu_row_leads_with_an_average_meter() {
+        let ui = ui_with(Some(sample()), None);
+        let rows = render(&ui, 80, 24);
+        assert!(
+            rows[1].contains("Avg"),
+            "average meter present: {:?}",
+            rows[1]
+        );
+    }
+
+    /// The memory gauge label reports compressed memory when the sample
+    /// carries it (macOS), and nothing about it when it does not (Linux).
+    #[test]
+    fn the_memory_gauge_label_reports_compressed_when_the_sample_carries_it() {
+        let mut s = sample();
+        // 1 MiB so the breakdown fits in the 80-col gauge.
+        s.memory.compressed = Metric::available(1.0 * 1024.0 * 1024.0, Unit::Bytes);
+        // Test memory_gauge directly at 80 cols so the breakdown fits.
+        let (_, label) = memory_gauge(&s.memory, 80);
+        assert!(
+            label.contains("comp 1.0 MiB"),
+            "compressed in the label: {:?}",
+            label
+        );
+        let (_, label) = memory_gauge(&sample().memory, 80);
+        assert!(
+            !label.contains("comp"),
+            "no compressed claim on Linux: {:?}",
+            label
         );
     }
 

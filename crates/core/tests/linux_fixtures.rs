@@ -439,6 +439,75 @@ fn fields_match_the_recording_for_each_arch() {
     }
 }
 
+/// Threads, kernel threads and CPU frequencies, re-derived from the
+/// recording: the loadavg scheduling-entity total, the processes whose
+/// recorded parent is 0 or 2, and one entry per `cpuinfo` processor
+/// block with the recorded `cpu MHz` values in order.
+#[test]
+fn thread_and_frequency_fields_match_the_recording() {
+    for name in ARCHES {
+        let dir = fixture_dir(name);
+        let sample = sample_from_fixture(&dir).unwrap();
+
+        let loadavg = data(&dir, "proc-loadavg");
+        let entities = loadavg.split_whitespace().nth(3).unwrap();
+        let total: u64 = entities.split('/').nth(1).unwrap().parse().unwrap();
+        assert_eq!(
+            sample.threads,
+            Metric::available(total as f64, Unit::Count),
+            "{name}: threads are the loadavg scheduling-entity total"
+        );
+
+        let kernel_threads: f64 = std::fs::read_dir(dir.join("data"))
+            .unwrap()
+            .filter_map(|entry| entry.ok())
+            .filter_map(|entry| entry.file_name().into_string().ok())
+            .filter_map(|file| file.strip_prefix("proc-").map(|rest| rest.to_string()))
+            .filter_map(|rest| rest.strip_suffix("-status").map(|pid| pid.to_string()))
+            .filter_map(|pid| pid.parse::<u32>().ok())
+            .filter(|pid| {
+                let status = data(&dir, &format!("proc-{pid}-status"));
+                status_field(&status, "PPid")
+                    .and_then(|value| value.parse::<u32>().ok())
+                    .is_some_and(|parent| parent == 0 || parent == 2)
+            })
+            .count() as f64;
+        assert_eq!(
+            sample.kernel_threads,
+            Metric::available(kernel_threads, Unit::Count),
+            "{name}: kernel threads are the processes with parent 0 or 2"
+        );
+
+        let cpuinfo = data(&dir, "proc-cpuinfo");
+        let blocks = cpuinfo
+            .lines()
+            .filter(|line| line.starts_with("processor"))
+            .count();
+        let mhz: Vec<f64> = cpuinfo
+            .lines()
+            .filter_map(|line| line.strip_prefix("cpu MHz"))
+            .filter_map(|rest| rest.split(':').nth(1))
+            .filter_map(|value| value.trim().parse().ok())
+            .collect();
+        assert_eq!(
+            sample.cpu.frequency_mhz.len(),
+            blocks,
+            "{name}: one entry per processor block"
+        );
+        let reported: Vec<f64> = sample
+            .cpu
+            .frequency_mhz
+            .iter()
+            .filter(|metric| metric.available)
+            .map(|metric| metric.value)
+            .collect();
+        assert_eq!(
+            reported, mhz,
+            "{name}: the recorded cpu MHz values, in order"
+        );
+    }
+}
+
 #[test]
 fn scrubbed_process_names_are_unique_and_refer_to_their_pid() {
     for name in ARCHES {

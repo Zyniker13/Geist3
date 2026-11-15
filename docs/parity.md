@@ -4,10 +4,10 @@ Check an item only when it works and a test or a recorded check shows it. Add th
 
 ## htop: Header and Meters
 
-- [ ] Per-core CPU bars, split by user, system, nice, I/O wait, IRQ, steal and guest where reported
-- [ ] Average CPU meter; CPU frequency and temperature in meters where available
-- [ ] Memory meter (used, buffers, shared, cache, compressed on macOS) and swap meter
-- [ ] Load average, uptime, task, thread, running and kernel-thread counts
+- [ ] Per-core CPU bars, split by user, system, nice, I/O wait, IRQ, steal and guest where available
+- [x] Average CPU meter; CPU frequency and temperature in meters where available — the CPU row leads with an `Avg` gauge (test `the_cpu_row_leads_with_an_average_meter`), the title line shows the mean frequency as `f X.X GHz` when reported (test `the_title_shows_the_mean_frequency_when_reported`), and the sensors row shows per-sensor temperatures (tests `the_sensors_row_shows_temperature`, `the_sensors_row_shows_temperature_when_available`).
+- [x] Memory meter (used, buffers, shared, cache, compressed on macOS) and swap meter — the memory gauge shows the used/total pair plus a breakdown of `buf`, `shmem`, `cache` (Linux), and `comp` (macOS when available) in the label (test `the_memory_gauge_label_reports_compressed_when_the_sample_carries_it` and the fixture replay snapshots); the swap gauge shows used/total (tests `the_memory_and_swap_gauges_show_the_used_and_total`, `the_swap_gauge_label_fits_the_gauge_width`).
+- [x] Load average, uptime, task, thread, running and kernel-thread counts — the title line shows the three load averages, the info line shows uptime, task count, running count, thread count and kernel-thread count (Linux only) (tests `the_info_line_reports_thread_counts_when_the_sample_carries_them`, `renders_the_header_and_table_at_80x24`, and the three fixture replay snapshots).
 - [x] Battery, clock, hostname and system meters — the info line shows the local clock (`HH:MM:SS`, host time zone, `n/a` when the timestamp cannot be converted), the system string (Linux from `/proc/sys/kernel/osrelease`, macOS from `kern.ostype`/`kern.osrelease`) and the battery (percentage and state) when the sample carries one; the hostname is in the title line. Tests: `the_header_info_line_shows_clock_tasks_and_system`, `the_header_info_line_shows_the_battery_when_present`, `renders_the_header_and_table_at_80x24`.
 - [ ] Pressure stall (PSI) meters (Linux); disk I/O and network I/O meters
 - [ ] Meter styles: bar, text, graph and LED; configurable columns of meters

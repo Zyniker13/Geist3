@@ -21,7 +21,8 @@
 //! - The process user is the numeric uid from `status`; mapping uid to a
 //!   name would need `/etc/passwd`, which the fixtures do not record.
 //! - Per-core frequencies are not read: `/proc/cpuinfo` carries them only
-//!   on some kernels, so `frequency_mhz` stays empty on Linux for now.
+//!   on some kernels; a block without a `cpu MHz` line reports
+//!   unavailable.
 //! - The first sample of a live collector cannot know an interval, so
 //!   process CPU percentages start at 0.0 and later samples report the
 //!   share of wall time since the previous sample, like `htop`.
@@ -180,6 +181,44 @@ fn parse_proc_loadavg(text: &str) -> Option<[f64; 3]> {
     let five: f64 = fields.next()?.parse().ok()?;
     let fifteen: f64 = fields.next()?.parse().ok()?;
     Some([one, five, fifteen])
+}
+
+/// Parses the scheduling-entity counts from `/proc/loadavg`'s fourth
+/// field (`1/262`): the currently runnable entities and the total
+/// scheduling entities, which is the host's thread count.
+fn parse_proc_loadavg_entities(text: &str) -> Option<(u64, u64)> {
+    let field = text.split_whitespace().nth(3)?;
+    let (running, total) = field.split_once('/')?;
+    Some((running.parse().ok()?, total.parse().ok()?))
+}
+
+/// Parses the per-core frequencies in MHz from `/proc/cpuinfo`: one
+/// metric per `processor` block, unavailable when a block carries no
+/// `cpu MHz` line (some kernels and boards omit them).
+fn parse_cpuinfo_frequencies(text: &str) -> Vec<Metric> {
+    let mut frequencies = Vec::new();
+    let mut current: Option<f64> = None;
+    let mut saw_processor = false;
+    for line in text.lines() {
+        if line.starts_with("processor") {
+            match current.take() {
+                Some(mhz) => frequencies.push(Metric::available(mhz, Unit::Hertz)),
+                None if saw_processor => frequencies.push(Metric::unavailable(Unit::Hertz)),
+                None => {}
+            }
+            saw_processor = true;
+        } else if let Some(rest) = line.strip_prefix("cpu MHz") {
+            if let Some(value) = rest.split(':').nth(1).and_then(|v| v.trim().parse().ok()) {
+                current = Some(value);
+            }
+        }
+    }
+    match current.take() {
+        Some(mhz) => frequencies.push(Metric::available(mhz, Unit::Hertz)),
+        None if saw_processor => frequencies.push(Metric::unavailable(Unit::Hertz)),
+        None => {}
+    }
+    frequencies
 }
 
 /// Parses the first field of `/proc/uptime`, in seconds.
@@ -781,6 +820,8 @@ pub fn sample_from_fixture(dir: &Path) -> Result<Sample, FixtureSampleError> {
     let mut stat = None;
     let mut meminfo = None;
     let mut loadavg = None;
+    let mut loadavg_entities = None;
+    let mut cpuinfo = None;
     let mut uptime = None;
     let mut disks = None;
     let mut net = None;
@@ -809,7 +850,9 @@ pub fn sample_from_fixture(dir: &Path) -> Result<Sample, FixtureSampleError> {
             }
             "proc-loadavg" => {
                 loadavg = Some(parse_proc_loadavg(&text).ok_or_else(|| bad_source(name))?);
+                loadavg_entities = parse_proc_loadavg_entities(&text);
             }
+            "proc-cpuinfo" => cpuinfo = Some(text),
             "proc-uptime" => {
                 uptime = Some(parse_proc_uptime(&text).ok_or_else(|| bad_source(name))?);
             }
@@ -845,11 +888,28 @@ pub fn sample_from_fixture(dir: &Path) -> Result<Sample, FixtureSampleError> {
         cpu: Cpu {
             busy_percent: vec![0.0; stat.cores.len()],
             cores: stat.cores,
-            frequency_mhz: Vec::new(),
+            frequency_mhz: cpuinfo
+                .map(|text| parse_cpuinfo_frequencies(&text))
+                .unwrap_or_default(),
         },
         memory: memory_from(meminfo),
         load_avg: loadavg,
         uptime: Metric::available(uptime, Unit::Seconds),
+        threads: match loadavg_entities {
+            Some((_, total)) => Metric::available(total as f64, Unit::Count),
+            None => Metric::unavailable(Unit::Count),
+        },
+        kernel_threads: Metric::available(
+            pids.values()
+                .filter(|data| {
+                    data.status
+                        .as_ref()
+                        .and_then(|status| status.parent)
+                        .is_some_and(|parent| parent == 0 || parent == 2)
+                })
+                .count() as f64,
+            Unit::Count,
+        ),
         processes: process_table(&pids, meminfo.total),
         disks: disks.unwrap_or_default(),
         net: net.unwrap_or_default(),
@@ -1103,11 +1163,28 @@ mod live {
                 cpu: Cpu {
                     busy_percent: per_core_percent,
                     cores: stat.cores,
-                    frequency_mhz: Vec::new(),
+                    frequency_mhz: parse_cpuinfo_frequencies(
+                        &fs::read_to_string("/proc/cpuinfo").unwrap_or_default(),
+                    ),
                 },
                 memory: memory_from(meminfo),
                 load_avg,
                 uptime: Metric::available(uptime, Unit::Seconds),
+                threads: match parse_proc_loadavg_entities(&loadavg_text) {
+                    Some((_, total)) => Metric::available(total as f64, Unit::Count),
+                    None => Metric::unavailable(Unit::Count),
+                },
+                kernel_threads: Metric::available(
+                    pids.values()
+                        .filter(|data| {
+                            data.status
+                                .as_ref()
+                                .and_then(|status| status.parent)
+                                .is_some_and(|parent| parent == 0 || parent == 2)
+                        })
+                        .count() as f64,
+                    Unit::Count,
+                ),
                 processes,
                 disks,
                 net,

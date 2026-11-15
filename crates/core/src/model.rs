@@ -135,6 +135,15 @@ pub struct Sample {
     /// for samples recorded before this field existed.
     #[serde(default)]
     pub system: String,
+    /// Total threads on the host, when the platform reports them. Linux
+    /// reads the scheduling-entity total from `/proc/loadavg`; macOS sums
+    /// the per-process counts.
+    #[serde(default)]
+    pub threads: Metric,
+    /// Kernel threads (Linux: processes whose parent is 0 or 2).
+    /// Unavailable on macOS.
+    #[serde(default)]
+    pub kernel_threads: Metric,
     pub cpu: Cpu,
     pub memory: Memory,
     /// 1, 5 and 15 minute load averages.
@@ -398,6 +407,8 @@ mod tests {
             timestamp_ms: 1_700_000_000_000,
             hostname: "host-a".into(),
             system: "Linux 6.8.0-test".into(),
+            threads: Metric::available(48.0, Unit::Count),
+            kernel_threads: Metric::available(5.0, Unit::Count),
             cpu: Cpu {
                 cores: vec![CpuTimes {
                     user: 1.5,
