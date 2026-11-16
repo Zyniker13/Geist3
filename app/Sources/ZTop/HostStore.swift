@@ -3,8 +3,8 @@ import Foundation
 import ZTopKit
 
 /// One saved host: where its agent lives and the paired token, if any.
-/// Records persist as JSON in Application Support; the Keychain move
-/// for tokens arrives with its own M5 batch.
+/// Records persist as JSON in Application Support; the tokens live in
+/// the Keychain, not in the file (decision 0047).
 struct HostRecord: Codable, Identifiable, Hashable {
     var id = UUID()
     var name: String
@@ -67,14 +67,34 @@ final class HostStore: ObservableObject {
 
     private func load() {
         guard let data = try? Data(contentsOf: fileURL),
-              let decoded = try? JSONDecoder().decode([HostRecord].self, from: data)
+              var decoded = try? JSONDecoder().decode([HostRecord].self, from: data)
         else { return }
+        for index in decoded.indices {
+            if !decoded[index].token.isEmpty {
+                // Migration from the plain-JSON era: move the token
+                // into the Keychain and blank it in the file.
+                try? TokenStore.save(decoded[index].token, for: decoded[index].host, port: decoded[index].port)
+                decoded[index].token = ""
+            }
+            decoded[index].token = TokenStore.load(for: decoded[index].host, port: decoded[index].port) ?? ""
+        }
         records = decoded
+        save()
     }
 
+    /// The file never carries tokens: they live in the Keychain
+    /// (decision 0047), one generic password per host.
     private func save() {
-        guard let data = try? JSONEncoder().encode(records) else { return }
+        let sanitized = records.map { record -> HostRecord in
+            var copy = record
+            copy.token = ""
+            return copy
+        }
+        guard let data = try? JSONEncoder().encode(sanitized) else { return }
         try? data.write(to: fileURL, options: .atomic)
+        for record in records where !record.token.isEmpty {
+            try? TokenStore.save(record.token, for: record.host, port: record.port)
+        }
     }
 
     // MARK: adding, pairing, forgetting
@@ -121,6 +141,7 @@ final class HostStore: ObservableObject {
     func remove(_ record: HostRecord) {
         records.removeAll { $0.id == record.id }
         live[record.id] = nil
+        TokenStore.delete(for: record.host, port: record.port)
         save()
     }
 

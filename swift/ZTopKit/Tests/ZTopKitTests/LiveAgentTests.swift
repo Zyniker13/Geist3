@@ -29,18 +29,25 @@ struct LiveAgentTests {
     }
 
     /// Spawns `ztop agent --tls --pair` on a random high port and
-    /// returns the endpoint, the pairing code and the process once
-    /// both startup lines have been read. The caller owns the process
-    /// and stops it. A port collision surfaces as missing startup
-    /// lines and an honest test failure; the next run rolls again.
-    static func startAgent() throws -> (endpoint: HostEndpoint, code: String, process: Foundation.Process) {
+    /// returns the endpoint, the pairing code, the process and the
+    /// agent's isolated home directory once both startup lines have
+    /// been read. The agent runs with its own HOME so concurrent
+    /// tests never share the token store, and nothing lands in the
+    /// user's real state dir. The caller owns the process and stops
+    /// it. A port collision surfaces as missing startup lines and an
+    /// honest test failure; the next run rolls again.
+    static func startAgent() throws -> (endpoint: HostEndpoint, code: String, process: Foundation.Process, home: URL) {
         let binary = try #require(agentBinary(), "no ztop binary; run the Rust build first")
         let port = UInt16.random(in: 20000...45000)
+        let home = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ztop-agent-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
         let process = Foundation.Process()
         process.executableURL = URL(fileURLWithPath: binary)
         process.arguments = [
             "agent", "--tls", "--pair", "--no-advertise", "--port", String(port),
         ]
+        process.environment = ["HOME": home.path]
         let out = Pipe()
         process.standardOutput = out
         process.standardError = FileHandle.nullDevice
@@ -71,12 +78,83 @@ struct LiveAgentTests {
             Issue.record("the agent never printed a code and fingerprint")
             throw AgentError.badAnswer("no startup lines")
         }
-        return (HostEndpoint(host: "127.0.0.1", port: port, pin: pin), code, process)
+        return (HostEndpoint(host: "127.0.0.1", port: port, pin: pin), code, process, home)
+    }
+
+    /// Restarts the same agent on the same port WITHOUT a new pairing
+    /// code: tokens persist in the agent's own state dir (its HOME),
+    /// so a client that paired before the restart keeps reading after
+    /// it.
+    static func restartAgent(endpoint: HostEndpoint, home: URL, binary: String) throws -> Foundation.Process {
+        let process = Foundation.Process()
+        process.executableURL = URL(fileURLWithPath: binary)
+        process.arguments = [
+            "agent", "--tls", "--no-advertise", "--port", String(endpoint.port),
+        ]
+        process.environment = ["HOME": home.path]
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        try process.run()
+        return process
+    }
+
+    /// Polls `body` until it returns true or the deadline passes.
+    @discardableResult
+    static func waitUpTo(_ seconds: Double, _ body: @Sendable () async -> Bool) async -> Bool {
+        let deadline = Date().addingTimeInterval(seconds)
+        while Date() < deadline {
+            if await body() { return true }
+            try? await Task.sleep(for: .milliseconds(400))
+        }
+        return await body()
+    }
+
+    @Test func theClientSurvivesAnAgentRestartWithoutRepairing() async throws {
+        let (endpoint, code, agent, home) = try Self.startAgent()
+        defer {
+            agent.terminate()
+            try? FileManager.default.removeItem(at: home)
+        }
+        let binary = try #require(Self.agentBinary(), "no ztop binary; run the Rust build first")
+
+        // Pair, then read once through the pinned channel.
+        let token = try await AgentClient.pair(endpoint: endpoint, code: code)
+        var paired = endpoint
+        paired.token = token
+        let client = AgentClient(endpoint: paired)
+        let firstRead = await Self.waitUpTo(15) {
+            (try? await client.snapshot()) != nil
+        }
+        #expect(firstRead, "no sample within 15 s of the first start")
+
+        // The agent dies: reads fail (the host is unreachable).
+        agent.terminate()
+        agent.waitUntilExit()
+        try await Task.sleep(for: .milliseconds(500))
+        let downRead = await Self.waitUpTo(5) {
+            (try? await client.snapshot()) != nil
+        }
+        #expect(!downRead, "a stopped agent still answered")
+
+        // The agent comes back on the same port; the saved token still
+        // works, so no re-pairing happens.
+        let revived = try Self.restartAgent(endpoint: endpoint, home: home, binary: binary)
+        defer {
+            revived.terminate()
+            try? FileManager.default.removeItem(at: home)
+        }
+        let backRead = await Self.waitUpTo(15) {
+            (try? await client.snapshot()) != nil
+        }
+        #expect(backRead, "the paired token stopped working after the restart")
     }
 
     @Test func theClientPairsAndReadsAPinnedSnapshot() async throws {
-        let (endpoint, code, agent) = try Self.startAgent()
-        defer { agent.terminate() }
+        let (endpoint, code, agent, home) = try Self.startAgent()
+        defer {
+            agent.terminate()
+            try? FileManager.default.removeItem(at: home)
+        }
 
         // Pair over pinned TLS.
         let token = try await AgentClient.pair(endpoint: endpoint, code: code)
@@ -109,8 +187,11 @@ struct LiveAgentTests {
     }
 
     @Test func aWrongPinFailsTheHandshake() async throws {
-        let (endpoint, code, agent) = try Self.startAgent()
-        defer { agent.terminate() }
+        let (endpoint, code, agent, home) = try Self.startAgent()
+        defer {
+            agent.terminate()
+            try? FileManager.default.removeItem(at: home)
+        }
 
         // Flip one hex character of the pin.
         var corrupted = endpoint
@@ -127,8 +208,11 @@ struct LiveAgentTests {
     }
 
     @Test func anUnpairedReadIsReportedAsNeedingPairing() async throws {
-        let (endpoint, _, agent) = try Self.startAgent()
-        defer { agent.terminate() }
+        let (endpoint, _, agent, home) = try Self.startAgent()
+        defer {
+            agent.terminate()
+            try? FileManager.default.removeItem(at: home)
+        }
 
         let client = AgentClient(endpoint: endpoint)
         do {
@@ -140,8 +224,11 @@ struct LiveAgentTests {
     }
 
     @Test func aBadCodeIsReportedAsBadCode() async throws {
-        let (endpoint, _, agent) = try Self.startAgent()
-        defer { agent.terminate() }
+        let (endpoint, _, agent, home) = try Self.startAgent()
+        defer {
+            agent.terminate()
+            try? FileManager.default.removeItem(at: home)
+        }
 
         do {
             _ = try await AgentClient.pair(endpoint: endpoint, code: "000000")
