@@ -39,6 +39,9 @@ struct FleetContent: View {
     @State private var detailProcesses: [Process] = []
     /// The pushed alerts screen.
     @State private var showingAlerts = false
+    /// The SoC screen's pushed record (the toolbar gauge on the
+    /// detail page, or `ZTOP_SOC` in a recorded run).
+    @State private var socTarget: HostRecord?
     /// The recorded-run demo switch: render synthetic process rows
     /// instead of the live ones (screenshots carry fake values only).
     @State private var demoProcesses = false
@@ -73,7 +76,10 @@ struct FleetContent: View {
                 AlertsView(center: center, store: store)
             }
             .navigationDestination(item: $detailTarget) { record in
-                HostDetailView(store: store, record: record)
+                HostDetailView(store: store, record: record, onOpenSoc: { socTarget = record })
+            }
+            .navigationDestination(item: $socTarget) { record in
+                SocView(store: store, record: record)
             }
             .sheet(isPresented: $showingAdd) {
                 AddHostSheet { name, host, port, pin, code in
@@ -117,6 +123,9 @@ struct FleetContent: View {
                     // screen and render it, so a recorded run can
                     // capture the detail screen the same way.
                     let detailName = ProcessInfo.processInfo.environment["ZTOP_DETAIL"]
+                    // ZTOP_SOC names a host: push its SoC screen and
+                    // render that instead of the detail page.
+                    let socName = ProcessInfo.processInfo.environment["ZTOP_SOC"]
                     if let name = detailName, !name.isEmpty {
                         let record = store.records.first { $0.name == name }
                         if let record {
@@ -129,6 +138,10 @@ struct FleetContent: View {
                                 .environment["ZTOP_PROCESSES_DEMO"] == "1"
                             await renderDetailLoop(record: record, to: path)
                         }
+                    } else if let socName, !socName.isEmpty,
+                              let record = store.records.first(where: { $0.name == socName }) {
+                        socTarget = record
+                        await renderSocLoop(record: record, to: path)
                     } else {
                         while !Task.isCancelled {
                             renderSnapshot(to: path)
@@ -155,6 +168,49 @@ struct FleetContent: View {
             renderDetailSnapshot(record: record, to: path)
             try? await Task.sleep(for: .seconds(5))
         }
+    }
+
+    /// Keeps rendering the named host's SoC screen to the snapshot
+    /// path; the data rides the poller's live samples, so the loop
+    /// only re-renders.
+    @MainActor
+    private func renderSocLoop(record: HostRecord, to path: String) async {
+        while !Task.isCancelled {
+            renderSocSnapshot(record: record, to: path)
+            try? await Task.sleep(for: .seconds(5))
+        }
+    }
+
+    /// Renders one host's SoC content to a PNG (ImageRenderer cannot
+    /// draw the pushed `ScrollView`, same as the detail page).
+    @MainActor
+    private func renderSocSnapshot(record: HostRecord, to path: String) {
+        #if os(macOS)
+        let backdrop = Color(nsColor: .windowBackgroundColor)
+        #else
+        let backdrop = Color(.systemBackground)
+        #endif
+        let content = SocContent(
+            record: record,
+            live: store.live[record.id]
+        )
+        .padding(24)
+        .frame(width: 820, height: 400, alignment: .top)
+        .background(backdrop)
+        let renderer = ImageRenderer(content: content)
+        renderer.scale = 2
+        #if os(macOS)
+        if let image = renderer.nsImage,
+           let tiff = image.tiffRepresentation,
+           let rep = NSBitmapImageRep(data: tiff),
+           let data = rep.representation(using: .png, properties: [:]) {
+            try? data.write(to: URL(fileURLWithPath: path))
+        }
+        #else
+        if let image = renderer.uiImage, let data = image.pngData() {
+            try? data.write(to: URL(fileURLWithPath: path))
+        }
+        #endif
     }
 
     /// The recorded-run demo rows: fake names, fake users, fake pids.

@@ -132,6 +132,46 @@ struct ChartsTests {
         #expect(ChartSeries.power([without, without]).latest == nil)
     }
 
+    /// An Apple Silicon block carrying exactly one power-history
+    /// window; every other field unavailable, as unprivileged reads
+    /// leave them (decision 0011).
+    private func makeSoc(history: [PowerSample]) -> AppleSilicon {
+        AppleSilicon(
+            chipName: "Apple M3 Pro",
+            eCoreCount: Metric(value: 0, unit: .count, available: false),
+            pCoreCount: Metric(value: 0, unit: .count, available: false),
+            eClusterBusyPercent: Metric(value: 0, unit: .percent, available: false),
+            eClusterFrequencyMhz: Metric(value: 0, unit: .hertz, available: false),
+            pClusterBusyPercent: Metric(value: 0, unit: .percent, available: false),
+            pClusterFrequencyMhz: Metric(value: 0, unit: .hertz, available: false),
+            gpuBusyPercent: Metric(value: 0, unit: .percent, available: false),
+            gpuFrequencyMhz: Metric(value: 0, unit: .hertz, available: false),
+            aneWatts: Metric(value: 0, unit: .watts, available: false),
+            cpuWatts: Metric(value: 0, unit: .watts, available: false),
+            packageWatts: Metric(value: 0, unit: .watts, available: false),
+            currentWatts: Metric(value: 0, unit: .watts, available: false),
+            averageWatts: Metric(value: 0, unit: .watts, available: false),
+            peakWatts: Metric(value: 0, unit: .watts, available: false),
+            thermalPressure: Metric(value: 0, unit: .count, available: false),
+            powerHistory: history
+        )
+    }
+
+    @Test func socPowerReadsTheAgentSideHistory() {
+        let series = ChartSeries.socPower(makeSoc(history: [
+            PowerSample(timestampMs: 1, watts: 20.0),
+            PowerSample(timestampMs: 2, watts: 10.0),
+        ]))
+        #expect(series.points == [20.0, 10.0])
+        #expect(series.latest == 10.0)
+        #expect(abs(series.topValue - 22.0) < 0.0001)
+        // No SoC block, or an empty history: an all-gap series that
+        // still tops at 1, so a screen never divides by zero.
+        #expect(ChartSeries.socPower(nil).points.isEmpty)
+        #expect(ChartSeries.socPower(makeSoc(history: [])).topValue == 1)
+        #expect(ChartSeries.socPower(makeSoc(history: [])).latest == nil)
+    }
+
     @Test func networkSeriesSumsBothDirectionsAndGapsWithoutRates() {
         let series = ChartSeries.network([makeSample(rx: 100, tx: 50), makeSample()])
         #expect(series.points == [150.0, nil])

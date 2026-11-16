@@ -10,6 +10,8 @@ import ZTopKit
 struct HostDetailView: View {
     @ObservedObject var store: HostStore
     let record: HostRecord
+    /// Opens the SoC screen; FleetView owns the navigation target.
+    var onOpenSoc: (() -> Void)?
 
     @State private var history: [Sample] = []
     @State private var loadError: String?
@@ -33,6 +35,17 @@ struct HostDetailView: View {
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
+        // The SoC screen's entry point: only when the host reports an
+        // Apple Silicon chip (Intel Macs have no SoC to zoom into).
+        .toolbar {
+            if store.live[record.id]?.sample?.appleSilicon?.chipName != nil {
+                ToolbarItem {
+                    Button(action: { onOpenSoc?() }) {
+                        Label("SoC", systemImage: "cpu")
+                    }
+                }
+            }
+        }
         .task { await refreshLoop() }
         .task { await processLoop() }
     }

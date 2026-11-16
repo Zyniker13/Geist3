@@ -87,6 +87,26 @@ public struct ChartSeries: Sendable, Hashable {
         )
     }
 
+    /// The SoC screen's watts chart, drawn from the agent's own
+    /// power history (`AppleSilicon.powerHistory`, the PSTR readings
+    /// the agent collects continuously) rather than rebuilding it
+    /// from the fetched samples: package watts stay unavailable
+    /// unprivileged (decision 0011), so the per-sample `power` series
+    /// has no source on an Apple Silicon Mac.
+    public static func socPower(_ soc: AppleSilicon?) -> ChartSeries {
+        let points: [Double?] = soc?.powerHistory.map { $0.watts } ?? []
+        // An empty window tops at 1, so the chart never divides by
+        // zero; a known window tops at its maximum with headroom.
+        let top = points.compactMap { $0 }.map { max(1.0, $0 * 1.1) }.max() ?? 1.0
+        return ChartSeries(
+            role: .power,
+            label: "Power history",
+            points: points,
+            unit: "W",
+            topValue: top
+        )
+    }
+
     /// Package watts on Apple Silicon; a gap wherever the sample has
     /// no SoC block or no package reading.
     public static func power(_ samples: [Sample]) -> ChartSeries {
