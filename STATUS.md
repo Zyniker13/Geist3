@@ -2,9 +2,9 @@
 
 Updated after every working session.
 
-- **Current milestone:** M6 (host detail views in the app, alerts, the hub). 11a (the hub), 11b (host detail views) and 12 (alerts) shipped; 13a (macOS disk + network collectors) written and locally green, pending gate/push; then the remaining M6 app items.
-- **Last done:** 13a — `macos_io` in ztop-core: mounts from `getmntinfo(3)` with APFS slices folded onto their container device, disk IO counters from the IOKit registry (IOMedia walk up to the driver's `Statistics` dictionary), network interfaces from the `NET_RT_IFLIST2` sysctl with offsets verified against the live kernel via a C probe; rates follow the Linux per-name delta rules (decision 0051). All 108 ztop-core lib tests green including the live disk/net tests; parity disk + network items re-honest (macOS rows no longer "none today").
-- **Next step:** gate, commit and push 13a; watch CI (04db5b3, 4999b7c, 4f4426f and the 13a push); rebuild the app and record the detail view with disk + network sections live; then 13b (process list in the app), the Apple Silicon view, hub login item, iPad sizes — per parity.md.
+- **Current milestone:** M6 (process list, Apple Silicon view, hub login item, iPad sizes). 11a (the hub), 11b (host detail views), 12 (alerts) and 13a (macOS disk + network collectors, with the app sections recorded live) are shipped; CI green through 4f4426f.
+- **Last done:** 13a — `macos_io` in ztop-core: mounts from `getmntinfo(3)` with APFS slices folded onto their container device, disk IO counters from the IOKit registry (IOMedia walk up to the driver's `Statistics` dictionary), network interfaces from the `NET_RT_IFLIST2` sysctl with offsets verified against the live kernel via a C probe; rates follow the Linux per-name delta rules (decision 0051). All 108 ztop-core lib tests green including the live disk/net tests; pushed as 4bdf7dc. Recorded the app live: two TLS agents on the new binary, the detail view shows the network section (per-interface rates) and disks section (usage bars + rates) — `docs/screenshots/m6-mac-detail-disks-net.png` (one real volume label scrubbed to `vol-a`); parity "Disks, network, temperatures and fans" ticked. CI green on 04db5b3, 4999b7c, 4f4426f.
+- **Next step:** watch CI on 4bdf7dc; then 13b (process list in the app), the Apple Silicon view, hub login item, iPad sizes — per parity.md.
 - **Blocked on:** nothing.
 
 ## Log
