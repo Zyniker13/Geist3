@@ -211,15 +211,19 @@ Check an item only when it works and a test or a recorded check shows it. Add th
       mount, used/total bytes and usage percent plus lifetime read/write counters,
       with read/write rates where a live collector measured a delta (a first sample or
       a fixture shows `-`); Linux parses `/proc/diskstats` with mount points from
-      `/proc/mounts` and usage from statvfs; macOS reports no disks today and shows
-      the honest empty state (decision 0009). Tests:
+      `/proc/mounts` and usage from statvfs; macOS mounts come from `getmntinfo(3)`
+      with APFS slices folded onto their container device and IO counters from the
+      IOKit registry (decision 0051; live tests `live_disks_carry_mounts_within_universal_bounds`
+      and `live_net_lists_loopback_with_counters` on this Mac). Tests:
       `the_disk_panel_shows_usage_counters_and_rates`,
       `panels_without_data_say_so_instead_of_fake_zeros`,
       `panels_without_a_sample_wait_for_data`, `counter_rate_needs_previous_and_positive_interval`.
 - [x] Network interfaces with rates and totals — the `n` screen lists each interface
       with rx/tx byte totals and rates plus packet counters; rates come from
       `counter_rate` deltas between live samples (`/proc/net/dev` on Linux; macOS
-      reports no interfaces today). Tests:
+      parses the `NET_RT_IFLIST2` sysctl, decision 0051; live test
+      `live_net_lists_loopback_with_counters` and the rate rules in
+      `byte_rates_rate_known_names_and_skip_new_or_rewound_ones` on this Mac). Tests:
       `the_network_panel_shows_interfaces_and_rates`.
 - [x] Temperatures and fans — TUI header row: temps (up to 3), fans (up to 1), system/GPU watts. Snapshot test at 80x24 (5-row header), plus fixture replay at 80x24 (4-row header when no sensors).
 - [x] Linux GPUs: NVIDIA through NVML, AMD through sysfs — `Sample.gpus` fills from

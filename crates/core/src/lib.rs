@@ -20,6 +20,8 @@ pub mod linux;
 pub mod linux_gpu;
 pub mod macos;
 #[cfg(target_os = "macos")]
+pub mod macos_io;
+#[cfg(target_os = "macos")]
 pub mod macos_live;
 #[cfg(target_os = "macos")]
 pub mod macos_power;

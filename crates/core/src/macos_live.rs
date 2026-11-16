@@ -12,6 +12,7 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use crate::collector::{CollectError, Collector};
 use crate::macos::{core_times, parse_hostinfo, parse_processes, sample_from_parts};
+use crate::macos_io;
 use crate::macos_power::MacOsPower;
 use crate::model::{CpuRates, CpuTimes, Sample};
 
@@ -36,6 +37,10 @@ struct Prev {
     cores: Vec<CpuTimes>,
     /// Cumulative (user, system) CPU nanoseconds per pid.
     pids: HashMap<u32, (u64, u64)>,
+    /// Cumulative (read, write) bytes per disk device.
+    disks: HashMap<String, (u64, u64)>,
+    /// Cumulative (received, sent) bytes per interface.
+    net: HashMap<String, (u64, u64)>,
 }
 
 impl Collector for MacOsCollector {
@@ -138,10 +143,42 @@ impl Collector for MacOsCollector {
                 process.cpu_percent = *cpu;
             }
         }
+        // Disk and network: the same counters between two live samples
+        // become rates; the first sample reports no rate, like Linux.
+        let mut disks = macos_io::read_disks();
+        let mut net = macos_io::read_net();
+        let current_disks: HashMap<String, (u64, u64)> = disks
+            .iter()
+            .map(|d| (d.name.clone(), (d.read_bytes, d.write_bytes)))
+            .collect();
+        let current_net: HashMap<String, (u64, u64)> = net
+            .iter()
+            .map(|n| (n.name.clone(), (n.rx_bytes, n.tx_bytes)))
+            .collect();
+        if let Some(prev) = self.prev.as_ref() {
+            if let Some(secs) = interval_secs {
+                for (name, read, write) in macos_io::byte_rates(&prev.disks, &current_disks, secs) {
+                    if let Some(disk) = disks.iter_mut().find(|d| d.name == name) {
+                        disk.read_rate = read;
+                        disk.write_rate = write;
+                    }
+                }
+                for (name, rx, tx) in macos_io::byte_rates(&prev.net, &current_net, secs) {
+                    if let Some(interface) = net.iter_mut().find(|n| n.name == name) {
+                        interface.rx_rate = rx;
+                        interface.tx_rate = tx;
+                    }
+                }
+            }
+        }
+        sample.disks = disks;
+        sample.net = net;
         self.prev = Some(Prev {
             at: now,
             cores,
             pids: current_pids,
+            disks: current_disks,
+            net: current_net,
         });
         Ok(sample)
     }
