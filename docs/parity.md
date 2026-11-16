@@ -355,6 +355,33 @@ Check an item only when it works and a test or a recorded check shows it. Add th
 - [x] Disks, network, temperatures and fans — recorded live in `docs/screenshots/m6-mac-detail-disks-net.png`: the detail page shows a network section (aggregate chart with a real burst, per-interface rx/tx rows: en0/en1/anpi0/anpi1/lo0) and a disks section (per-device rows with mount path, usage bar and percent, read/write rate lines), alongside the existing CPU/memory/load/temperatures/fans/Apple-Silicon sections. macOS disk/network data comes from decision 0051's collectors; temperatures, fans and power were already live (decision 0013 sources).
 - [x] Alerts with thresholds and local notifications — `AlertRule`/`AlertEngine` in ZTopKit (kinds cpu/memory/load/disk/unreachable, fleet-wide or per-host, duration before firing, clear events, per-(rule, host) timers; 11 tests with fixed clocks) and `AlertCenter` in the app (rules in `alerts.json`, evaluation off `HostStore.$live`, UNUserNotificationCenter posts only for an authorized user — authorization is requested from the add-alert sheet). The alerts screen shows rules with condition text and firing badges; recorded live: a fleet-wide CPU rule fired and then an unreachable rule fired after an agent was killed — `docs/screenshots/m6-mac-alert-firing.png`, `m6-mac-alerts-two-firing.png` (decision 0050).
 - [ ] Mac app installs and runs the hub as a login item; iPad works through the hub
+  - Partial (14a done, the iPad-through-hub half still open): the app
+    runs the hub itself — the `ztop` binary is embedded in the app
+    bundle (`Contents/MacOS/ztop-embedded`, a build phase), the hub
+    screen (`HubView`, toolbar "Hub") shows the endpoint
+    `127.0.0.1:7101 · TLS · pairing on`, the hub's printed TLS
+    fingerprint, Run now/Stop, and a watched-agents list fed by the
+    hub's own `/v1/hosts` (new `AgentClient.hosts()` +
+    `HubHostStatus` in ZTopKit). The agent list is the app's saved
+    hosts, written to the hub's default `state_dir()/hub/agents.json`
+    with the agents' bearer tokens, file mode 0600 (decision 0054).
+    The app is its own first hub client: it pins the fingerprint the
+    hub printed and pairs with the printed code (`HubRunner.pairWithHub`),
+    the token in the Keychain under the fixed name `hub`. The
+    login-item install writes `dev.ztop.hub.plist` into the app
+    bundle's `Contents/Library/LaunchAgents` (`HubPlan.plistXML`,
+    shared argument list `HubPlan.arguments`, KeepAlive) and
+    registers it with SMAppService — registration is NOT exercised
+    on this machine, because the operating rules forbid installing
+    launchd services here; the plist contents and the agents file
+    are unit-tested (`HubKitTests`, ZTopKit 41/41) and the
+    unregistered toggle renders its off state. Recorded live in
+    `docs/screenshots/m6-mac-hub.png`: the app starts the embedded
+    hub, both agents read back **Live** through it over TLS with
+    their own pins. `ZTOP_HUB=1` recorded-run hook; decision 0054.
+    Remaining: the iPad side — connecting the app through one hub
+    endpoint (`?host=` selects the machine) and the three-agent
+    recorded check.
 - [ ] iPad split view and Stage Manager sizes; Mac window sizes
 - [ ] VoiceOver, Dynamic Type and contrast pass
 

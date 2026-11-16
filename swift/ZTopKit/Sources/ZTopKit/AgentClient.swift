@@ -182,6 +182,12 @@ public final class AgentClient: @unchecked Sendable {
         return envelope.sample
     }
 
+    /// `GET /v1/hosts`: what the hub watches and how fresh each one
+    /// is. Served by the hub, not by an agent.
+    public func hosts() async throws -> HubHosts {
+        try await get("/v1/hosts")
+    }
+
     /// `GET /v1/history?seconds=N`: up to the last N seconds of samples.
     public func history(seconds: UInt64) async throws -> [Sample] {
         let envelope: HistoryEnvelope = try await get("/v1/history?seconds=\(seconds)")

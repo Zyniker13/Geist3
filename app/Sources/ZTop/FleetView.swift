@@ -30,6 +30,14 @@ struct FleetContent: View {
     @ObservedObject var center: AlertCenter
     @Binding var showingAdd: Bool
     @Binding var pairing: HostRecord?
+#if os(macOS)
+    // The hub is macOS-only (the iPad reaches the hub over the
+    // network instead of running one); these stay out of the iOS
+    // build entirely.
+    @StateObject private var hubRunner = HubRunner()
+    @StateObject private var hubInstaller = HubInstaller()
+    @State private var showingHub = false
+#endif
     /// The pushed host detail; the recorded-run hook also sets this
     /// so the window shows the same screen the snapshot captures.
     @State private var detailTarget: HostRecord?
@@ -64,6 +72,15 @@ struct FleetContent: View {
                         Label("Add Host", systemImage: "plus")
                     }
                 }
+#if os(macOS)
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        showingHub = true
+                    } label: {
+                        Label("Hub", systemImage: "server.rack")
+                    }
+                }
+#endif
                 ToolbarItem(placement: .primaryAction) {
                     Button {
                         showingAlerts = true
@@ -72,6 +89,11 @@ struct FleetContent: View {
                     }
                 }
             }
+#if os(macOS)
+            .navigationDestination(isPresented: $showingHub) {
+                HubView(store: store, runner: hubRunner, installer: hubInstaller)
+            }
+#endif
             .navigationDestination(isPresented: $showingAlerts) {
                 AlertsView(center: center, store: store)
             }
@@ -126,7 +148,18 @@ struct FleetContent: View {
                     // ZTOP_SOC names a host: push its SoC screen and
                     // render that instead of the detail page.
                     let socName = ProcessInfo.processInfo.environment["ZTOP_SOC"]
-                    if let name = detailName, !name.isEmpty {
+                    var hubHandled = false
+#if os(macOS)
+                    // ZTOP_HUB=1: the hub recorded-run hook (writing
+                    // the agent list, starting the embedded hub, and
+                    // rendering the hub screen) lives with the hub
+                    // views, which are macOS-only.
+                    if ProcessInfo.processInfo.environment["ZTOP_HUB"] == "1" {
+                        hubHandled = true
+                        await HubRecorded.run(store: store, to: path)
+                    }
+#endif
+                    if !hubHandled, let name = detailName, !name.isEmpty {
                         let record = store.records.first { $0.name == name }
                         if let record {
                             detailTarget = record

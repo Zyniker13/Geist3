@@ -19,6 +19,31 @@ targets:
     supportedDestinations: [iOS, macOS]
     sources:
       - Sources
+    preBuildScripts:
+      # The hub runs from inside the app on macOS: the Rust binary is
+      # copied into Contents/MacOS/ztop-embedded. Nothing to do on
+      # iOS (an .app bundle has no Contents there), and the release
+      # binary is preferred when one has been built.
+      - name: EmbedHubBinary
+        script: |
+          set -e
+          case "$PLATFORM_NAME" in
+            macos*) ;;
+            *) exit 0 ;;
+          esac
+          BIN="$SRCROOT/../target/release/ztop"
+          if [ ! -x "$BIN" ]; then
+            BIN="$SRCROOT/../target/debug/ztop"
+          fi
+          if [ ! -x "$BIN" ]; then
+            echo "error: ztop binary not found; build the Rust workspace first (cargo build)" >&2
+            exit 1
+          fi
+          cp "$BIN" "$BUILT_PRODUCTS_DIR/ZTop.app/Contents/MacOS/ztop-embedded"
+        # Named output so Xcode tracks the copy instead of warning
+        # that the phase runs unconditionally.
+        outputFiles:
+          - $(BUILT_PRODUCTS_DIR)/ZTop.app/Contents/MacOS/ztop-embedded
     info:
       path: Sources/Info.plist
       properties:
