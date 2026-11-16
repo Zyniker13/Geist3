@@ -349,7 +349,7 @@ Check an item only when it works and a test or a recorded check shows it. Add th
 - [ ] Apple Silicon view for Macs
 - [ ] Process list: search, sort and, where allowed, signals
 - [ ] Disks, network, temperatures and fans
-- [ ] Alerts with thresholds and local notifications
+- [x] Alerts with thresholds and local notifications — `AlertRule`/`AlertEngine` in ZTopKit (kinds cpu/memory/load/disk/unreachable, fleet-wide or per-host, duration before firing, clear events, per-(rule, host) timers; 11 tests with fixed clocks) and `AlertCenter` in the app (rules in `alerts.json`, evaluation off `HostStore.$live`, UNUserNotificationCenter posts only for an authorized user — authorization is requested from the add-alert sheet). The alerts screen shows rules with condition text and firing badges; recorded live: a fleet-wide CPU rule fired and then an unreachable rule fired after an agent was killed — `docs/screenshots/m6-mac-alert-firing.png`, `m6-mac-alerts-two-firing.png` (decision 0050).
 - [ ] Mac app installs and runs the hub as a login item; iPad works through the hub
 - [ ] iPad split view and Stage Manager sizes; Mac window sizes
 - [ ] VoiceOver, Dynamic Type and contrast pass

@@ -2,14 +2,16 @@
 
 Updated after every working session.
 
-- **Current milestone:** M6 (host detail views in the app, alerts, the hub). 11a (the hub) and 11b (host detail views) are implemented and locally green; CI watch on both pushes remains.
-- **Last done:** 11b — host detail views: `ChartSeries` chart math in ZTopKit (19/19 tests) and `HostDetailView` (availability-gated CPU/memory/load/power sections, per-core bars, sensor rows), navigation from a card tap plus the `ZTOP_DETAIL` recorded-run hook. Recorded live against two TLS agents: overview with both hosts live (`m6-mac-overview-live.png`) and the full detail page (`m6-mac-detail.png`). Root-caused the app-launch wedge (decision 0049): stale `dev.ztop.token` Keychain items from earlier ad-hoc-signed builds made startup Keychain access demand an undisplayable ACL prompt; deleting the items fixed every launch. Recorded-run recipe: wipe the Keychain service and app state, restart agents, use codes within 5 minutes.
-- **Next step:** gate, commit and push 11b; watch CI on 04db5b3 and the 11b push; then M6 batch 12 — alerts with thresholds and local notifications.
-- **Blocked on:** nothing.
+- **Current milestone:** M6 (host detail views in the app, alerts, the hub). 11a (the hub), 11b (host detail views) and 12 (alerts) are implemented and locally green; CI watch on the pushes remains.
+- **Last done:** 12 — alerts: `AlertRule`/`AlertEngine` in ZTopKit (30/30 ZTopKit tests; kinds cpu/memory/load/disk/unreachable, fleet-wide or per-host, duration-before-firing, clear events), `AlertCenter` (alerts.json persistence, evaluation off `HostStore.$live`, UN notifications only for an authorized user), alerts screen with firing badges + add-alert sheet + toolbar bell, and the `ZTOP_ALERTS`/`ZTOP_ALERTS_SNAPSHOT` recorded-run hooks. Recorded live: a fleet-wide CPU rule fired, then an unreachable rule fired after an agent was killed (`m6-mac-alert-firing.png`, `m6-mac-alerts-two-firing.png`); decision 0050; parity ticked.
+- **Next step:** gate, commit and push 12; watch CI (04db5b3, 4999b7c, and the 12 push); then the remaining M6 app items — Apple Silicon view, process list, disks/network/temperatures/fans in the app, hub login item, iPad sizes — per parity.md.
+- **Blocked on:** nothing. (A handful of idle test processes — one ZTop.app instance and one loopback agent — are still running from the recorded run; the kill command was consent-blocked, they are harmless and local-only.)
 
 ## Log
 
 Newest first. One or two lines per session: what changed, what is next.
+
+- 2026-11-15: M6 batch 12 — alerts (decision 0050): `AlertRule`/`AlertEngine` in ZTopKit (11 tests with fixed clocks; fleet-wide or per-host kinds cpu/memory/load/disk/unreachable, duration before firing, clear events, stale-track cleanup) and `AlertCenter` in the app (rules persisted to `alerts.json`, evaluation off `HostStore.$live`, UN notifications only for an authorized user, authorization requested from the add-alert sheet). Alerts screen (rows with condition text and firing badges), toolbar bell, and `ZTOP_ALERTS`/`ZTOP_ALERTS_SNAPSHOT` recorded-run hooks. Recorded live: the CPU rule fired on both hosts, then the unreachable rule fired after an agent was killed — `m6-mac-alert-firing.png` and `m6-mac-alerts-two-firing.png`; parity ticked.
 
 - 2026-11-15: M6 batch 11b — host detail views (decision 0049): `ChartSeries` (pure chart math, gaps + auto-scale, ZTopKit 19/19 tests) and `HostDetailView` (availability-gated CPU/memory/load/network/power sections, live per-core bars, sensor rows), card-tap navigation and the `ZTOP_DETAIL` recorded-run hook re-rendering via ImageRenderer every 5 s. Recorded live: two paired TLS agents, live overview (`m6-mac-overview-live.png`) and the detail page (`m6-mac-detail.png`); parity "host detail with charts" ticked. Root-caused the app-launch wedge: stale `dev.ztop.token` Keychain items from earlier ad-hoc-signed builds demanded an undisplayable ACL prompt at startup — deleting the items fixed every launch instantly (documented with the failed alternatives in 0049).
 

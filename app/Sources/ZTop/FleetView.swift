@@ -10,11 +10,12 @@ import ZTopKit
 /// The fleet overview: one live card per host.
 struct FleetView: View {
     @StateObject private var store = HostStore()
+    @StateObject private var alertCenter = AlertCenter()
     @State private var showingAdd = false
     @State private var pairing: HostRecord?
 
     var body: some View {
-        FleetContent(store: store, showingAdd: $showingAdd, pairing: $pairing)
+        FleetContent(store: store, center: alertCenter, showingAdd: $showingAdd, pairing: $pairing)
     }
 }
 
@@ -23,6 +24,7 @@ struct FleetView: View {
 /// no screen-recording permission, so `screencapture` is not usable).
 struct FleetContent: View {
     @ObservedObject var store: HostStore
+    @ObservedObject var center: AlertCenter
     @Binding var showingAdd: Bool
     @Binding var pairing: HostRecord?
     /// The pushed host detail; the recorded-run hook also sets this
@@ -30,6 +32,8 @@ struct FleetContent: View {
     @State private var detailTarget: HostRecord?
     /// The detail's history window, fetched for the snapshot hook.
     @State private var detailHistory: [Sample] = []
+    /// The pushed alerts screen.
+    @State private var showingAlerts = false
 
     var body: some View {
         NavigationStack {
@@ -49,6 +53,16 @@ struct FleetContent: View {
                         Label("Add Host", systemImage: "plus")
                     }
                 }
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        showingAlerts = true
+                    } label: {
+                        Label("Alerts", systemImage: center.active.isEmpty ? "bell" : "bell.badge")
+                    }
+                }
+            }
+            .navigationDestination(isPresented: $showingAlerts) {
+                AlertsView(center: center, store: store)
             }
             .navigationDestination(item: $detailTarget) { record in
                 HostDetailView(store: store, record: record)
@@ -69,6 +83,21 @@ struct FleetContent: View {
                 // then the live state is rendered to the snapshot path.
                 if let seeds = ProcessInfo.processInfo.environment["ZTOP_PAIR"], !seeds.isEmpty {
                     await store.seed(from: seeds)
+                }
+                // The alert engine rides the store's published state
+                // from here on; recorded runs may seed rules by host
+                // name (`ZTOP_ALERTS=name|host or *|kind|threshold|duration;…`).
+                center.attach(to: store)
+                if let alertSeeds = ProcessInfo.processInfo.environment["ZTOP_ALERTS"], !alertSeeds.isEmpty {
+                    center.seed(from: alertSeeds, hosts: store.records)
+                }
+                if let path = ProcessInfo.processInfo.environment["ZTOP_ALERTS_SNAPSHOT"], !path.isEmpty {
+                    // Render the alerts screen instead of the fleet
+                    // overview, so a recorded run captures rule states.
+                    while !Task.isCancelled {
+                        renderAlertsSnapshot(to: path)
+                        try? await Task.sleep(for: .seconds(5))
+                    }
                 }
                 if let path = ProcessInfo.processInfo.environment["ZTOP_SNAPSHOT"], !path.isEmpty {
                     // Let the poller gather a couple of ticks first,
@@ -129,6 +158,35 @@ struct FleetContent: View {
         .padding(24)
         .frame(width: 820, height: 1500, alignment: .top)
         .background(backdrop)
+        let renderer = ImageRenderer(content: content)
+        renderer.scale = 2
+        #if os(macOS)
+        if let image = renderer.nsImage,
+           let tiff = image.tiffRepresentation,
+           let rep = NSBitmapImageRep(data: tiff),
+           let png = rep.representation(using: .png, properties: [:]) {
+            try? png.write(to: URL(fileURLWithPath: path), options: .atomic)
+        }
+        #else
+        if let image = renderer.uiImage, let png = image.pngData() {
+            try? png.write(to: URL(fileURLWithPath: path), options: .atomic)
+        }
+        #endif
+    }
+
+    /// Renders the alerts screen to a PNG (same ImageRenderer limits
+    /// as the overview: a plain VStack, not the window's `List`).
+    @MainActor
+    private func renderAlertsSnapshot(to path: String) {
+        #if os(macOS)
+        let backdrop = Color(nsColor: .windowBackgroundColor)
+        #else
+        let backdrop = Color(.systemBackground)
+        #endif
+        var hostNames: [UUID: String] = [:]
+        for record in store.records { hostNames[record.id] = record.name }
+        let content = AlertsContent(rules: center.rules, active: center.active, hostNames: hostNames)
+            .background(backdrop)
         let renderer = ImageRenderer(content: content)
         renderer.scale = 2
         #if os(macOS)
