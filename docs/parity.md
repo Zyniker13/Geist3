@@ -326,7 +326,7 @@ Check an item only when it works and a test or a recorded check shows it. Add th
 
 ## App
 
-- [ ] Add a host by Bonjour or by hand, and pair
+- [x] Add a host by Bonjour or by hand, and pair — by hand: `AddHostSheet` (address, port, optional SHA256 pin, optional pairing code) and `PairSheet` on an unpaired card both drive the real `AgentClient.pair` flow; recorded live: the app paired two TLS agents (`host-a`, `host-b` fake names, loopback only) and showed both live with CPU/MEM meters — `docs/screenshots/m5-mac-overview.png` (the app's own ImageRenderer render, decision 0046: the shell lacks Screen Recording permission) and `docs/screenshots/m5-ipad-overview.png` (real `simctl` screenshot, iPad Pro simulator). Bonjour-based adding remains open until its batch.
 - [ ] Fleet overview with live cards; stale and unreachable hosts obvious
 - [ ] Host detail with charts for every metric
 - [ ] Apple Silicon view for Macs

@@ -2,15 +2,16 @@
 
 Updated after every working session.
 
-- **Current milestone:** M5 (ZTopKit, the SwiftUI app) — client batch 10a pushed; CI green on a600964 (the first cross aarch64 clippy passed).
-- **Last done:** 10a — ZTopKit (swift/ZTopKit) gets the real protocol client: Codable mirror of the wire model (snake_case via convertFromSnakeCase), SHA-256 leaf pinning through a URLSession trust delegate (decision 0045), pair/snapshot/history against a real spawned agent (`agent --tls --pair --no-advertise`, random port), plus wire-shape decode tests with fake values. Fixed the 8f e2e wrong-pin builder that reproduced the real pin 1-in-256 (fired in CI on 437c45c): it now flips the first hex char. Gate green (check=0, deny=0).
-- **Next step:** 10b — the app shell (ZTopApp + host list/overview cards wired to AgentClient), then Keychain + detail views; CI on 437c45c-children as they land.
+- **Current milestone:** M5 (ZTopKit, the SwiftUI app) — client (10a) and app shell (10b) pushed; the app pairs two agents and shows both live, recorded on the iPad simulator and the Mac.
+- **Last done:** 10b — the app shell: HostStore (Application Support JSON, concurrent 2 s polling, live/stale/unreachable states), FleetView cards with state colors and drawn CPU/MEM meters, AddHostSheet + PairSheet driving the real pair flow, and the recorded-run hooks (ZTOP_PAIR pairs through the real flow; ZTOP_SNAPSHOT renders the live cards — decision 0046; the shell has no Screen Recording permission, so the Mac artifact is the app's own render). Recorded: docs/screenshots/m5-mac-overview.png + m5-ipad-overview.png, two live TLS agents, fake names only. Gate green (check=0, deny=0).
+- **Next step:** 10c — Keychain token storage (ROADMAP M5) + reconnection behavior; then the Fleet-overview parity tick once stale/unreachable states are exercised, then M6 (hub + detail views).
 - **Blocked on:** nothing.
 
 ## Log
 
 Newest first. One or two lines per session: what changed, what is next.
 
+- 2026-11-15: M5 batch 10b — the app shell: HostStore (persisted records, concurrent polling, live/stale/unreachable), fleet cards with state colors and capsule CPU/MEM meters, AddHostSheet/PairSheet over the real pairing flow, launch hooks for the recorded runs (decision 0046). The app paired two live TLS agents and both screenshots (Mac render + real iPad-simulator capture) are recorded; parity "add a host by hand, and pair" ticked. ImageRenderer cannot draw ProgressView — meters are drawn capsules.
 - 2026-11-15: CI verdict on a600964: green — the first cross aarch64 clippy passed. The STATUS-only commit 437c45c ran red on the agent e2e test: its "wrong pin" (62 hex chars + "00") equals the real pin whenever the fingerprint tail is "00" — a 1-in-256 flake, now fixed to flip the first hex character (decision 0045 records it).
 - 2026-11-15: M5 batch 10a — ZTopKit speaks the protocol: Codable model mirror of crates/core model.rs (convertFromSnakeCase; Optional only for the real Option fields), AgentClient with snapshot/history/pair and SHA-256 leaf pinning via a URLSession trust delegate (decision 0045), and tests that spawn the real agent (--tls --pair --no-advertise, random port), pair with the printed code, read pinned snapshots and history, and meet a wrong pin as a handshake failure.
 
