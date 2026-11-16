@@ -37,6 +37,9 @@ public enum AgentError: Error, Equatable {
     case needsPairing
     /// The pairing code did not match, was used up or expired (403).
     case badCode
+    /// The agent refused an action (403 on a control plan): control is
+    /// off, or the token may only read. Carries the agent's wording.
+    case refused(String)
     /// The agent's protocol version is not one this client speaks.
     case protocolMismatch(expected: Int, got: Int)
     /// The body could not be decoded, or the answer was not what was asked.
@@ -183,6 +186,47 @@ public final class AgentClient: @unchecked Sendable {
     public func history(seconds: UInt64) async throws -> [Sample] {
         let envelope: HistoryEnvelope = try await get("/v1/history?seconds=\(seconds)")
         return envelope.samples
+    }
+
+    /// `GET /v1/processes`: the latest sample's process list.
+    public func processes() async throws -> [Process] {
+        let envelope: ProcessesEnvelope = try await get("/v1/processes")
+        return envelope.processes
+    }
+
+    /// `GET /v1/control`: this agent's signal catalog — the names and
+    /// numbers ITS platform uses, so a signal is sent by the target's
+    /// numbering, never the client's.
+    public func signalCatalog() async throws -> [SignalEntry] {
+        let reply: SignalCatalogReply = try await get("/v1/control")
+        return reply.signals
+    }
+
+    /// `POST /v1/control`: run one action on the pids. A refusal (the
+    /// agent disallows control, or the token may only read) comes back
+    /// as [`AgentError.refused`] with the agent's wording.
+    public func control(pids: [UInt32], action: ControlAction) async throws -> [ControlResult] {
+        var request = URLRequest(url: URL(string: "\(endpoint.urlBase)/v1/control")!)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if !endpoint.token.isEmpty {
+            request.setValue("Bearer \(endpoint.token)", forHTTPHeaderField: "Authorization")
+        }
+        request.httpBody = try JSONEncoder().encode(ControlWire(pids: pids, action: action))
+        let (data, response) = try await session.data(for: request)
+        if let http = response as? HTTPURLResponse, http.statusCode == 403 {
+            let body = String(data: data.prefix(200), encoding: .utf8) ?? ""
+            throw AgentError.refused(body)
+        }
+        try Self.checkStatus(response, data: data)
+        return try Self.decode(ControlReply.self, from: data).results
+    }
+
+    /// The control body the protocol carries: pids plus the externally
+    /// tagged action.
+    private struct ControlWire: Encodable {
+        var pids: [UInt32]
+        var action: ControlAction
     }
 
     /// `POST /v1/pair`: trade the agent's pairing code for a token.

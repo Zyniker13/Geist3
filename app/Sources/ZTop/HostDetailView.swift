@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 import SwiftUI
+// Foundation also declares a `Process`; the selective import keeps
+// `Process` unambiguous in this file.
+import struct ZTopKit.Process
 import ZTopKit
 
 /// One host's detail: charts over the history window plus the
@@ -10,19 +13,28 @@ struct HostDetailView: View {
 
     @State private var history: [Sample] = []
     @State private var loadError: String?
+    @State private var processes: [Process] = []
+    @State private var processError: String?
 
     var body: some View {
         let live = store.live[record.id]
         ScrollView {
-            HostDetailContent(record: record, live: live, history: history)
-                .padding(.horizontal)
-                .padding(.bottom, 24)
+            HostDetailContent(
+                record: record,
+                live: live,
+                history: history,
+                processes: processes,
+                processError: processError
+            )
+            .padding(.horizontal)
+            .padding(.bottom, 24)
         }
         .navigationTitle(record.name)
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .task { await refreshLoop() }
+        .task { await processLoop() }
     }
 
     /// Fetches the history window on arrival and every few seconds
@@ -40,6 +52,21 @@ struct HostDetailView: View {
             try? await Task.sleep(for: .seconds(10))
         }
     }
+
+    /// The process list rides its own loop: it changes faster than the
+    /// charts care about, and a failed fetch only blanks the table
+    /// when nothing has ever arrived.
+    private func processLoop() async {
+        while !Task.isCancelled {
+            do {
+                processes = try await AgentClient(endpoint: record.endpoint).processes()
+                processError = nil
+            } catch {
+                if processes.isEmpty { processError = error.localizedDescription }
+            }
+            try? await Task.sleep(for: .seconds(5))
+        }
+    }
 }
 
 /// The detail's content, split out so the recorded-run hook can
@@ -49,6 +76,13 @@ struct HostDetailContent: View {
     let record: HostRecord
     let live: HostLive?
     let history: [Sample]
+    /// The latest sample's process rows, and the fetch error to show
+    /// when nothing has ever arrived.
+    let processes: [Process]
+    let processError: String?
+    /// True in the recorded-run snapshot: the search box draws as a
+    /// static field because ImageRenderer cannot draw `TextField`.
+    var staticProcessSearch = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -88,6 +122,7 @@ struct HostDetailContent: View {
             socSection
             gpuSection
             pressureSection
+            processSection
         }
     }
 
@@ -311,6 +346,16 @@ struct HostDetailContent: View {
                 }
             }
         }
+    }
+
+    /// The live process table, fed by the detail's process loop.
+    private var processSection: some View {
+        ProcessListView(
+            record: record,
+            rows: processes,
+            fetchError: processError,
+            staticSearch: staticProcessSearch
+        )
     }
 
     // MARK: pieces

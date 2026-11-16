@@ -31,12 +31,15 @@ struct LiveAgentTests {
     /// Spawns `ztop agent --tls --pair` on a random high port and
     /// returns the endpoint, the pairing code, the process and the
     /// agent's isolated home directory once both startup lines have
-    /// been read. The agent runs with its own HOME so concurrent
-    /// tests never share the token store, and nothing lands in the
-    /// user's real state dir. The caller owns the process and stops
-    /// it. A port collision surfaces as missing startup lines and an
-    /// honest test failure; the next run rolls again.
-    static func startAgent() throws -> (endpoint: HostEndpoint, code: String, process: Foundation.Process, home: URL) {
+    /// been read. With `allowControl` the agent also grants paired
+    /// tokens the right to act (signals, renice), the way
+    /// `--allow-control` does on the command line. The agent runs
+    /// with its own HOME so concurrent tests never share the token
+    /// store, and nothing lands in the user's real state dir. The
+    /// caller owns the process and stops it. A port collision
+    /// surfaces as missing startup lines and an honest test failure;
+    /// the next run rolls again.
+    static func startAgent(allowControl: Bool = false) throws -> (endpoint: HostEndpoint, code: String, process: Foundation.Process, home: URL) {
         let binary = try #require(agentBinary(), "no ztop binary; run the Rust build first")
         let port = UInt16.random(in: 20000...45000)
         let home = FileManager.default.temporaryDirectory
@@ -46,7 +49,7 @@ struct LiveAgentTests {
         process.executableURL = URL(fileURLWithPath: binary)
         process.arguments = [
             "agent", "--tls", "--pair", "--no-advertise", "--port", String(port),
-        ]
+        ] + (allowControl ? ["--allow-control"] : [])
         process.environment = ["HOME": home.path]
         let out = Pipe()
         process.standardOutput = out
@@ -236,5 +239,78 @@ struct LiveAgentTests {
         } catch let error as AgentError {
             #expect(error == .badCode)
         }
+    }
+
+    /// The full control path over the wire: an agent without the
+    /// grant refuses a control plan in its own words, its paired
+    /// token still reads the signal catalog, and an agent started
+    /// with `--allow-control` really stops, resumes and ends a
+    /// process the test owns — by the numbers ITS catalog names.
+    @Test func controlRefusesWithoutTheGrantAndActsThroughTheCatalog() async throws {
+        // Agent A: control off. Pairing grants read only, so a plan
+        // is refused with the agent's wording.
+        let (plain, code, plainAgent, plainHome) = try Self.startAgent()
+        defer {
+            plainAgent.terminate()
+            try? FileManager.default.removeItem(at: plainHome)
+        }
+        let readToken = try await AgentClient.pair(endpoint: plain, code: code)
+        var readEndpoint = plain
+        readEndpoint.token = readToken
+        let reader = AgentClient(endpoint: readEndpoint)
+        do {
+            _ = try await reader.control(pids: [1], action: .signal(15))
+            Issue.record("control succeeded against an agent that never allowed it")
+        } catch let error as AgentError {
+            guard case .refused(let wording) = error else {
+                Issue.record("expected a refusal, got \(error)")
+                return
+            }
+            #expect(wording.contains("control"), "the refusal should name control: \(wording)")
+        }
+
+        // The read-only token still learns the target's numbering.
+        let catalog = try await reader.signalCatalog()
+        #expect(catalog.contains { $0.name == "TERM" && $0.number == 15 })
+
+        // Agent B: started with the grant, so its paired token acts.
+        let (armed, armedCode, armedAgent, armedHome) = try Self.startAgent(allowControl: true)
+        defer {
+            armedAgent.terminate()
+            try? FileManager.default.removeItem(at: armedHome)
+        }
+        let controlToken = try await AgentClient.pair(endpoint: armed, code: armedCode)
+        var controlEndpoint = armed
+        controlEndpoint.token = controlToken
+        let controller = AgentClient(endpoint: controlEndpoint)
+
+        // A disposable sleeper the test owns. The signal numbers come
+        // from the agent's own catalog — the same numbers STOP and
+        // CONT would carry on a Linux agent, read from wherever this
+        // test runs.
+        let sleeper = Foundation.Process()
+        sleeper.executableURL = URL(fileURLWithPath: "/bin/sleep")
+        sleeper.arguments = ["60"]
+        try sleeper.run()
+
+        let armedCatalog = try await controller.signalCatalog()
+        let stop = try #require(armedCatalog.first { $0.name == "STOP" }?.number)
+        let cont = try #require(armedCatalog.first { $0.name == "CONT" }?.number)
+        let term = try #require(armedCatalog.first { $0.name == "TERM" }?.number)
+        let pid = UInt32(max(1, sleeper.processIdentifier))
+
+        let stopped = try await controller.control(pids: [pid], action: .signal(stop))
+        let stoppedOk = stopped.allSatisfy(\.ok)
+        #expect(stoppedOk, "STOP failed: \(stopped)")
+        let resumed = try await controller.control(pids: [pid], action: .signal(cont))
+        let resumedOk = resumed.allSatisfy(\.ok)
+        #expect(resumedOk, "CONT failed: \(resumed)")
+        let ended = try await controller.control(pids: [pid], action: .signal(term))
+        let endedOk = ended.allSatisfy(\.ok)
+        #expect(endedOk, "TERM failed: \(ended)")
+
+        // The TERM the agent delivered really reached the sleeper.
+        let exited = await Self.waitUpTo(5) { !sleeper.isRunning }
+        #expect(exited, "the sleeper outlived the TERM the agent delivered")
     }
 }

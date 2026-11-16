@@ -5,6 +5,6 @@ import Testing
 
 struct ZTopKitTests {
     @Test func versionMatchesTheRustCrates() {
-        #expect(ZTopKit.version == "0.1.0")
+        #expect(ZTopKitVersion.version == "0.1.0")
     }
 }

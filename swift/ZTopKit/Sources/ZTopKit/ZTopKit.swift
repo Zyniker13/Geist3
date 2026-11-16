@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-import Foundation
 
-/// The zTop protocol client, models and pairing.
+/// The kit's protocol and package version, matching the Rust crates.
 ///
-/// The zTop protocol client, models, pairing and pinning.
-public enum ZTopKit {
+/// Named `ZTopKitVersion` rather than `ZTopKit` so the module name
+/// stays usable for qualified lookups (`ZTopKit.Process`): a type
+/// named like its module shadows the module in Swift and would make
+/// every Foundation-`Process` collision worse.
+public enum ZTopKitVersion {
     /// The protocol and package version, matching the Rust crates.
     public static let version = "0.1.0"
 }

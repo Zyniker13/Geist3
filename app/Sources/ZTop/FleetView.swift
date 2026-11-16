@@ -5,6 +5,9 @@ import AppKit
 import UIKit
 #endif
 import SwiftUI
+// Foundation also declares a `Process`; the selective import keeps
+// `Process` unambiguous in this file.
+import struct ZTopKit.Process
 import ZTopKit
 
 /// The fleet overview: one live card per host.
@@ -32,8 +35,13 @@ struct FleetContent: View {
     @State private var detailTarget: HostRecord?
     /// The detail's history window, fetched for the snapshot hook.
     @State private var detailHistory: [Sample] = []
+    /// The detail's process rows, fetched for the snapshot hook.
+    @State private var detailProcesses: [Process] = []
     /// The pushed alerts screen.
     @State private var showingAlerts = false
+    /// The recorded-run demo switch: render synthetic process rows
+    /// instead of the live ones (screenshots carry fake values only).
+    @State private var demoProcesses = false
 
     var body: some View {
         NavigationStack {
@@ -113,6 +121,12 @@ struct FleetContent: View {
                         let record = store.records.first { $0.name == name }
                         if let record {
                             detailTarget = record
+                            // ZTOP_PROCESSES_DEMO swaps the live
+                            // process rows for synthetic ones, so a
+                            // committed screenshot never carries this
+                            // machine's real process list.
+                            demoProcesses = ProcessInfo.processInfo
+                                .environment["ZTOP_PROCESSES_DEMO"] == "1"
                             await renderDetailLoop(record: record, to: path)
                         }
                     } else {
@@ -126,18 +140,78 @@ struct FleetContent: View {
         }
     }
 
-    /// Fetches the named host's history and keeps rendering its
-    /// detail to the snapshot path, so a recorded run captures the
-    /// charts over a live window.
+    /// Fetches the named host's history and process list and keeps
+    /// rendering its detail to the snapshot path, so a recorded run
+    /// captures the charts over a live window and the live table.
     @MainActor
     private func renderDetailLoop(record: HostRecord, to path: String) async {
         while !Task.isCancelled {
             if let samples = try? await AgentClient(endpoint: record.endpoint).history(seconds: 3600) {
                 detailHistory = samples
             }
+            if let rows = try? await AgentClient(endpoint: record.endpoint).processes() {
+                detailProcesses = demoProcesses ? Self.demoRows : rows
+            }
             renderDetailSnapshot(record: record, to: path)
             try? await Task.sleep(for: .seconds(5))
         }
+    }
+
+    /// The recorded-run demo rows: fake names, fake users, fake pids.
+    /// A committed screenshot shows these instead of this machine's
+    /// real process list (fake values only, like `host-a` and
+    /// `alice` everywhere else in the fixtures).
+    @MainActor
+    static let demoRows: [Process] = [
+        demo("builder", pid: 4112, user: "alice", cpu: 38.4, mem: 6.2),
+        demo("renderer", pid: 911, user: "alice", cpu: 24.1, mem: 11.7),
+        demo("worker", pid: 2087, user: "bob", cpu: 12.9, mem: 2.4),
+        demo("monitor", pid: 604, user: "carol", cpu: 7.3, mem: 1.1),
+        demo("logger", pid: 3330, user: "bob", cpu: 4.6, mem: 0.8),
+        demo("helper", pid: 815, user: "alice", cpu: 2.2, mem: 1.9),
+        demo("indexer", pid: 1477, user: "bob", cpu: 1.8, mem: 3.5),
+        demo("daemon", pid: 102, user: "carol", cpu: 0.4, mem: 0.6),
+        demo("relay", pid: 2381, user: "alice", cpu: 0.2, mem: 0.3),
+        demo("sweeper", pid: 5190, user: "bob", cpu: 0.1, mem: 0.2),
+    ]
+
+    /// One demo row with neutral fields everywhere the table doesn't
+    /// show (a full memberwise init; the hidden fields stay fake).
+    @MainActor
+    private static func demo(
+        _ name: String, pid: UInt32, user: String, cpu: Double, mem: Double
+    ) -> Process {
+        ZTopKit.Process(
+            pid: pid,
+            parent: nil,
+            user: user,
+            state: "run",
+            name: name,
+            cpuPercent: cpu,
+            memPercent: mem,
+            virtualBytes: 1 << 28,
+            residentBytes: 1 << 26,
+            threads: 2,
+            priority: nil,
+            nice: nil,
+            sharedBytes: nil,
+            totalTimeNs: nil,
+            startTimeSecs: nil,
+            processor: nil,
+            command: nil,
+            isThread: false,
+            kernelThread: false,
+            io: ProcessIo(readBytes: nil, writeBytes: nil, readRate: nil, writeRate: nil),
+            container: nil
+        )
+    }
+
+    /// The extra snapshot height the process table needs: its chrome
+    /// (title, search, header, footer) plus one line per shown row.
+    @MainActor
+    private func detailHeight(_ rows: [Process]) -> CGFloat {
+        guard !rows.isEmpty else { return 0 }
+        return 150 + CGFloat(min(rows.count, 30)) * 34
     }
 
     /// Renders one host's detail content to a PNG (ImageRenderer
@@ -153,10 +227,20 @@ struct FleetContent: View {
         let content = HostDetailContent(
             record: record,
             live: store.live[record.id],
-            history: detailHistory
+            history: detailHistory,
+            processes: detailProcesses,
+            processError: nil,
+            staticProcessSearch: true
         )
         .padding(24)
-        .frame(width: 820, height: 1500, alignment: .top)
+        // The table adds one row line per process (capped at 30) plus
+        // its own chrome, so the frame grows with it instead of
+        // clipping the sections that follow.
+        .frame(
+            width: 820,
+            height: 1500 + detailHeight(detailProcesses),
+            alignment: .top
+        )
         .background(backdrop)
         let renderer = ImageRenderer(content: content)
         renderer.scale = 2

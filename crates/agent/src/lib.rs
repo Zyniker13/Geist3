@@ -123,7 +123,7 @@ pub fn router(state: Arc<AgentState>) -> Router {
     Router::new()
         .route("/healthz", get(health))
         .route("/v1/pair", post(pair))
-        .route("/v1/control", post(control))
+        .route("/v1/control", get(control_catalog).post(control))
         .route("/v1/tokens", get(tokens_list))
         .route("/v1/tokens/{id}", delete(tokens_revoke))
         .route("/v1/snapshot", get(snapshot))
@@ -380,6 +380,33 @@ async fn pair(State(state): State<Arc<AgentState>>, Json(body): Json<PairBody>) 
 struct ControlBody {
     pids: Vec<u32>,
     action: ztop_core::control::Control,
+}
+
+/// `GET /v1/control`: this platform's signal catalog, so a remote
+/// client sends signals by the numbers THIS agent's platform uses —
+/// macOS and Linux number STOP/TSTP/CONT differently, and a number
+/// from the client's own table would hit the wrong signal.
+async fn control_catalog(
+    State(state): State<Arc<AgentState>>,
+    headers: axum::http::HeaderMap,
+) -> Response {
+    let bearer = headers
+        .get(axum::http::header::AUTHORIZATION)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.strip_prefix("Bearer "));
+    let known = state.auth.lock().expect("auth").check(bearer.unwrap_or(""));
+    if state.enforce_auth && !known {
+        return (StatusCode::UNAUTHORIZED, "pair with this agent to read it").into_response();
+    }
+    let signals: Vec<serde_json::Value> = ztop_core::control::common_signals()
+        .iter()
+        .map(|(name, number)| serde_json::json!({ "name": name, "number": number }))
+        .collect();
+    Json(serde_json::json!({
+        "protocol": PROTOCOL_VERSION,
+        "signals": signals,
+    }))
+    .into_response()
 }
 
 /// How many pids one control request may touch: the TUI plans cover a
@@ -774,6 +801,43 @@ mod tests {
         .into_response();
         assert_eq!(response.status(), StatusCode::FORBIDDEN);
         assert!(body_text(response).await.contains("not control"));
+    }
+
+    #[tokio::test]
+    async fn the_signal_catalog_names_this_platforms_signals() {
+        // Unpaired and enforced: the catalog needs a token like any read.
+        let state = Arc::new(AgentState {
+            enforce_auth: true,
+            ..AgentState::default()
+        });
+        let response = control_catalog(State(state.clone()), axum::http::HeaderMap::new())
+            .await
+            .into_response();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+        // Paired: the catalog answers with this platform's names and
+        // numbers, TERM among them whatever the platform numbers it.
+        let token = control_token(&state, vec!["read".to_string()]);
+        let response = control_catalog(State(state), bearer(&token))
+            .await
+            .into_response();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = body_text(response).await;
+        let value: serde_json::Value = serde_json::from_str(&body).expect("a JSON catalog");
+        assert_eq!(value["protocol"], 1);
+        let signals = value["signals"].as_array().expect("a signal list").clone();
+        assert!(
+            signals
+                .iter()
+                .any(|entry| entry["name"] == "TERM" && entry["number"].as_i64() == Some(15)),
+            "TERM is 15 on both platforms: {signals:?}"
+        );
+        assert!(
+            signals
+                .iter()
+                .any(|entry| entry["name"] == "STOP" && entry["number"].as_i64().is_some()),
+            "STOP is present with this platform's number: {signals:?}"
+        );
     }
 
     #[tokio::test]

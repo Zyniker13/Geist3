@@ -132,6 +132,52 @@ public struct Process: Codable, Hashable, Sendable, Identifiable {
     public var container: Container?
 
     public var id: UInt32 { pid }
+
+    public init(
+        pid: UInt32,
+        parent: UInt32? = nil,
+        user: String,
+        state: String,
+        name: String,
+        cpuPercent: Double,
+        memPercent: Double,
+        virtualBytes: UInt64,
+        residentBytes: UInt64,
+        threads: UInt32,
+        priority: Int32? = nil,
+        nice: Int32? = nil,
+        sharedBytes: UInt64? = nil,
+        totalTimeNs: UInt64? = nil,
+        startTimeSecs: UInt64? = nil,
+        processor: UInt32? = nil,
+        command: String? = nil,
+        isThread: Bool = false,
+        kernelThread: Bool = false,
+        io: ProcessIo = ProcessIo(),
+        container: Container? = nil
+    ) {
+        self.pid = pid
+        self.parent = parent
+        self.user = user
+        self.state = state
+        self.name = name
+        self.cpuPercent = cpuPercent
+        self.memPercent = memPercent
+        self.virtualBytes = virtualBytes
+        self.residentBytes = residentBytes
+        self.threads = threads
+        self.priority = priority
+        self.nice = nice
+        self.sharedBytes = sharedBytes
+        self.totalTimeNs = totalTimeNs
+        self.startTimeSecs = startTimeSecs
+        self.processor = processor
+        self.command = command
+        self.isThread = isThread
+        self.kernelThread = kernelThread
+        self.io = io
+        self.container = container
+    }
 }
 
 /// One container as the process table and detail screen show it.
@@ -148,6 +194,18 @@ public struct ProcessIo: Codable, Hashable, Sendable {
     public var writeBytes: UInt64?
     public var readRate: Double?
     public var writeRate: Double?
+
+    public init(
+        readBytes: UInt64? = nil,
+        writeBytes: UInt64? = nil,
+        readRate: Double? = nil,
+        writeRate: Double? = nil
+    ) {
+        self.readBytes = readBytes
+        self.writeBytes = writeBytes
+        self.readRate = readRate
+        self.writeRate = writeRate
+    }
 }
 
 /// One pressure-stall resource: `some` and optional `full` averages.
