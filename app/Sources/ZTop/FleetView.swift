@@ -25,6 +25,11 @@ struct FleetContent: View {
     @ObservedObject var store: HostStore
     @Binding var showingAdd: Bool
     @Binding var pairing: HostRecord?
+    /// The pushed host detail; the recorded-run hook also sets this
+    /// so the window shows the same screen the snapshot captures.
+    @State private var detailTarget: HostRecord?
+    /// The detail's history window, fetched for the snapshot hook.
+    @State private var detailHistory: [Sample] = []
 
     var body: some View {
         NavigationStack {
@@ -44,6 +49,9 @@ struct FleetContent: View {
                         Label("Add Host", systemImage: "plus")
                     }
                 }
+            }
+            .navigationDestination(item: $detailTarget) { record in
+                HostDetailView(store: store, record: record)
             }
             .sheet(isPresented: $showingAdd) {
                 AddHostSheet { name, host, port, pin, code in
@@ -68,13 +76,73 @@ struct FleetContent: View {
                     // catch state changes (a host going stale or
                     // unreachable) while it runs.
                     try? await Task.sleep(for: .seconds(7))
-                    while !Task.isCancelled {
-                        renderSnapshot(to: path)
-                        try? await Task.sleep(for: .seconds(5))
+                    // ZTOP_DETAIL names a host: push its detail on
+                    // screen and render it, so a recorded run can
+                    // capture the detail screen the same way.
+                    let detailName = ProcessInfo.processInfo.environment["ZTOP_DETAIL"]
+                    if let name = detailName, !name.isEmpty {
+                        let record = store.records.first { $0.name == name }
+                        if let record {
+                            detailTarget = record
+                            await renderDetailLoop(record: record, to: path)
+                        }
+                    } else {
+                        while !Task.isCancelled {
+                            renderSnapshot(to: path)
+                            try? await Task.sleep(for: .seconds(5))
+                        }
                     }
                 }
             }
         }
+    }
+
+    /// Fetches the named host's history and keeps rendering its
+    /// detail to the snapshot path, so a recorded run captures the
+    /// charts over a live window.
+    @MainActor
+    private func renderDetailLoop(record: HostRecord, to path: String) async {
+        while !Task.isCancelled {
+            if let samples = try? await AgentClient(endpoint: record.endpoint).history(seconds: 3600) {
+                detailHistory = samples
+            }
+            renderDetailSnapshot(record: record, to: path)
+            try? await Task.sleep(for: .seconds(5))
+        }
+    }
+
+    /// Renders one host's detail content to a PNG (ImageRenderer
+    /// cannot draw the `ScrollView` the window shows, same as the
+    /// overview's `List` limit).
+    @MainActor
+    private func renderDetailSnapshot(record: HostRecord, to path: String) {
+        #if os(macOS)
+        let backdrop = Color(nsColor: .windowBackgroundColor)
+        #else
+        let backdrop = Color(.systemBackground)
+        #endif
+        let content = HostDetailContent(
+            record: record,
+            live: store.live[record.id],
+            history: detailHistory
+        )
+        .padding(24)
+        .frame(width: 820, height: 1500, alignment: .top)
+        .background(backdrop)
+        let renderer = ImageRenderer(content: content)
+        renderer.scale = 2
+        #if os(macOS)
+        if let image = renderer.nsImage,
+           let tiff = image.tiffRepresentation,
+           let rep = NSBitmapImageRep(data: tiff),
+           let png = rep.representation(using: .png, properties: [:]) {
+            try? png.write(to: URL(fileURLWithPath: path), options: .atomic)
+        }
+        #else
+        if let image = renderer.uiImage, let png = image.pngData() {
+            try? png.write(to: URL(fileURLWithPath: path), options: .atomic)
+        }
+        #endif
     }
 
     /// Renders the current overview with the live data to a PNG.
@@ -130,6 +198,8 @@ struct FleetContent: View {
                 } onForget: {
                     store.remove(record)
                 }
+                .contentShape(Rectangle())
+                .onTapGesture { detailTarget = record }
             }
             .onDelete { indexSet in
                 for index in indexSet {
