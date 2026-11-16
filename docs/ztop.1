@@ -17,7 +17,8 @@ host; the
 and
 .B connect
 subcommands record raw inputs, serve them over the loopback interface,
-and drive the TUI from a remote host.
+watch a whole fleet through one hub process, and drive the TUI from a
+remote host.
 .SS Options
 .TP
 .BR \-p ", " \-\-pids " " \fIPIDS\fP
@@ -212,6 +213,26 @@ falling back, and a 401 asks to pair with
 Without
 .BR \-\-tls ,
 connect stays plaintext, for loopback or an SSH tunnel.
+.TP
+.B ztop hub \-\-pair
+Serve the fleet hub on loopback port 7101. The hub polls the agents
+listed in \fIhub/agents.json\fP, files every sample in
+\fIhub/history.db\fP, and answers the same protocol an agent answers,
+plus \fI/v1/hosts\fP, the fleet listing with freshness and last errors,
+and a
+.B ?host=\fIname\fP
+selector on snapshot and history so one client reads one machine or
+the whole fleet. Clients pair with the hub exactly as with an agent
+(\fB\-\-pair\fP prints the code); the hub's own tokens gate its reads,
+while its connections to the agents are configured in \fIagents.json\fP.
+A
+.B \-\-bind
+wider than loopback needs
+.BR \-\-tls .
+.TP
+.B ztop connect 127.0.0.1:7101
+The TUI can point at a hub instead of an agent: pick any host with the
+host selector and the screens work the same.
 .SH SEE ALSO
 .BR top (1),
 .BR htop (1),

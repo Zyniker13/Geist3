@@ -79,11 +79,29 @@ enum Command {
         #[arg(long)]
         tls: bool,
     },
-    /// Serve the hub protocol on the loopback interface.
+    /// Serve the hub protocol, polling the agents in --agents.
     Hub {
-        /// TCP port to listen on (loopback only).
+        /// TCP port to listen on.
         #[arg(long, default_value_t = 7101)]
         port: u16,
+        /// The agents to watch, as a JSON file of
+        /// {"agents":[{"name","target","pin"?,"token"?}]}.
+        #[arg(long)]
+        agents: Option<PathBuf>,
+        /// Where the history lives (SQLite); default under the state
+        /// directory.
+        #[arg(long)]
+        db: Option<PathBuf>,
+        /// Address to bind; anything wider than loopback needs --tls.
+        #[arg(long, default_value = "127.0.0.1")]
+        bind: String,
+        /// Print a pairing code so a client can pair with the hub.
+        #[arg(long)]
+        pair: bool,
+        /// Serve HTTPS with a self-signed certificate and enforce
+        /// tokens.
+        #[arg(long)]
+        tls: bool,
     },
     /// Drive the TUI from a remote agent or hub (lands with the protocol, M4).
     Connect {
@@ -196,11 +214,38 @@ fn run() -> Result<(), Box<dyn Error>> {
                 !no_advertise,
             ))?;
         }
-        Some(Command::Hub { port }) => {
+        Some(Command::Hub {
+            port,
+            ref agents,
+            ref db,
+            ref bind,
+            pair,
+            tls,
+        }) => {
+            // The agent list and the history default under the state
+            // directory; a hub needs a real home, so a missing state
+            // dir is an error, not a silent memory-only hub.
+            let home = ztop_core::paths::state_dir()
+                .map(|dir| dir.join("hub"))
+                .ok_or_else(|| {
+                    std::io::Error::other("no home directory: pass --agents and --db")
+                })?;
+            let agents_path = agents.clone().unwrap_or_else(|| home.join("agents.json"));
+            let db_path = db.clone().unwrap_or_else(|| home.join("history.db"));
+            let bind: std::net::IpAddr = bind.parse().map_err(|error| {
+                std::io::Error::other(format!("{bind} is not an address: {error}"))
+            })?;
             let runtime = tokio::runtime::Builder::new_multi_thread()
                 .enable_all()
                 .build()?;
-            runtime.block_on(ztop_hub::serve(port))?;
+            runtime.block_on(ztop_hub::serve(
+                bind,
+                port,
+                &agents_path,
+                &db_path,
+                pair,
+                tls,
+            ))?;
         }
         Some(Command::Connect {
             ref target,
@@ -313,7 +358,17 @@ mod tests {
             Some(Command::Agent { tls: true, .. })
         ));
         let cli = Cli::try_parse_from(["ztop", "hub"]).expect("parses");
-        assert!(matches!(cli.command, Some(Command::Hub { port: 7101 })));
+        assert!(matches!(
+            cli.command,
+            Some(Command::Hub {
+                port: 7101,
+                agents: None,
+                db: None,
+                bind: _,
+                pair: false,
+                tls: false
+            })
+        ));
     }
 
     #[test]

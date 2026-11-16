@@ -32,6 +32,7 @@ tokio-rustls = { version = "0.26", default-features = false, features = ["ring"]
 rcgen = { version = "0.13", default-features = false, features = ["ring", "pem"] }
 time = { version = "0.3", features = ["std"] }
 hyper-util = { version = "0.1", features = ["tokio", "server-auto", "service"] }
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "sqlite", "migrate", "macros"] }
 
 [profile.release]
 lto = "thin"

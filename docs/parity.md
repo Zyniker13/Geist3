@@ -313,7 +313,24 @@ Check an item only when it works and a test or a recorded check shows it. Add th
     Tests: `control_needs_tls_the_allowance_and_the_right`,
     `control_answers_per_pid_when_all_the_gates_pass`,
     `control_replies_map_back_onto_the_plan`.
-- [ ] `ztop hub` with SQLite history, serving the same protocol
+- [x] `ztop hub` with SQLite history, serving the same protocol
+  - `ztop hub` polls every agent in `agents.json` (one
+    `spawn_blocking` `RemoteCollector` per agent on the agent's own
+    cadence), files each sample verbatim in SQLite via sqlx
+    (migration `0001_samples`, index `samples_host_ts`, decision
+    0004), and serves the agent's routes with one addition —
+    `?host=` on snapshot and history plus `/v1/hosts` (fleet listing
+    with freshness and last errors); no selector means the first
+    agent, so `ztop connect` to a hub works unchanged. Pairing and
+    tokens are the hub's own (the agent's `auth` module,
+    `state_dir()/hub/tokens.json`); TLS and auth reuse the agent's
+    `serve_router_on_tls`/`enforce_auth` verbatim. Tests:
+    `the_hub_polls_two_agents_and_serves_the_fleet` (two real TLS
+    agents in-process), `store_round_trips_and_prunes`,
+    `history_serves_the_stored_window`,
+    `enforced_hub_rejects_unpaired_reads_and_pairs`,
+    `hosts_lists_the_fleet_with_states`,
+    `config_rejects_duplicates_bad_targets_and_bad_pins`.
 - [x] launchd and systemd services
   - `packaging/launchd/com.ztop.agent.plist` and
     `packaging/systemd/ztop-agent.service` run the agent as a

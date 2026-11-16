@@ -98,16 +98,25 @@ fn hex(bytes: &[u8]) -> String {
     text
 }
 
-/// Serve the router over TLS on an already-bound listener: the seam
-/// the integration tests use to get an ephemeral port. A failed
-/// handshake just drops that connection.
+/// Serve the agent's router over TLS on an already-bound listener:
+/// the seam the integration tests use to get an ephemeral port.
 pub async fn serve_on_tls(
     state: Arc<crate::AgentState>,
     listener: tokio::net::TcpListener,
     config: rustls::ServerConfig,
 ) -> io::Result<()> {
+    serve_router_on_tls(listener, config, crate::router(state)).await
+}
+
+/// Serve any axum router over TLS on an already-bound listener: the
+/// hub (and any future service) rides the same handshake rules as
+/// the agent. A failed handshake just drops that connection.
+pub async fn serve_router_on_tls(
+    listener: tokio::net::TcpListener,
+    config: rustls::ServerConfig,
+    router: axum::Router,
+) -> io::Result<()> {
     let acceptor = tokio_rustls::TlsAcceptor::from(Arc::new(config));
-    let router = crate::router(state);
     loop {
         let (stream, _) = listener.accept().await?;
         let acceptor = acceptor.clone();
