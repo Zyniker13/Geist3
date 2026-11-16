@@ -63,9 +63,15 @@ struct FleetContent: View {
                     await store.seed(from: seeds)
                 }
                 if let path = ProcessInfo.processInfo.environment["ZTOP_SNAPSHOT"], !path.isEmpty {
-                    // Let the poller gather a couple of ticks first.
+                    // Let the poller gather a couple of ticks first,
+                    // then keep re-rendering so a recorded run can
+                    // catch state changes (a host going stale or
+                    // unreachable) while it runs.
                     try? await Task.sleep(for: .seconds(7))
-                    renderSnapshot(to: path)
+                    while !Task.isCancelled {
+                        renderSnapshot(to: path)
+                        try? await Task.sleep(for: .seconds(5))
+                    }
                 }
             }
         }
@@ -105,11 +111,13 @@ struct FleetContent: View {
            let tiff = image.tiffRepresentation,
            let rep = NSBitmapImageRep(data: tiff),
            let png = rep.representation(using: .png, properties: [:]) {
-            try? png.write(to: URL(fileURLWithPath: path))
+            // Atomic so a reader copying the file mid-run never sees
+            // a half-written PNG.
+            try? png.write(to: URL(fileURLWithPath: path), options: .atomic)
         }
         #else
         if let image = renderer.uiImage, let png = image.pngData() {
-            try? png.write(to: URL(fileURLWithPath: path))
+            try? png.write(to: URL(fileURLWithPath: path), options: .atomic)
         }
         #endif
     }

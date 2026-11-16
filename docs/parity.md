@@ -327,7 +327,7 @@ Check an item only when it works and a test or a recorded check shows it. Add th
 ## App
 
 - [x] Add a host by Bonjour or by hand, and pair — by hand: `AddHostSheet` (address, port, optional SHA256 pin, optional pairing code) and `PairSheet` on an unpaired card both drive the real `AgentClient.pair` flow; recorded live: the app paired two TLS agents (`host-a`, `host-b` fake names, loopback only) and showed both live with CPU/MEM meters — `docs/screenshots/m5-mac-overview.png` (the app's own ImageRenderer render, decision 0046: the shell lacks Screen Recording permission) and `docs/screenshots/m5-ipad-overview.png` (real `simctl` screenshot, iPad Pro simulator). Bonjour-based adding remains open until its batch.
-- [ ] Fleet overview with live cards; stale and unreachable hosts obvious
+- [x] Fleet overview with live cards; stale and unreachable hosts obvious — the card set (state color, address:port, uptime, CPU/MEM) is recorded live in `docs/screenshots/m5-mac-overview.png` (decision 0046) and again in the state-change run `m5-mac-live.png`; killing one agent mid-run flags its card `stale` (orange, last good sample kept) inside the 10-second window (`m5-mac-stale.png`) and `unreachable` (red, still showing the last known values) past it (`m5-mac-unreachable.png`), while the other host stays live — recorded with the snapshot hook re-rendering every 5 s, two isolated agents (`host-a`/`host-b`, loopback only), and the run's lesson (the seed hook reuses persisted records, so the run wiped `hosts.json` first to exercise fresh pairing) noted in decision 0046.
 - [ ] Host detail with charts for every metric
 - [ ] Apple Silicon view for Macs
 - [ ] Process list: search, sort and, where allowed, signals

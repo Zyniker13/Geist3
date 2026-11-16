@@ -29,13 +29,23 @@ screenshot` works), but its forms cannot be typed into either.
   `name=host:port=pin=code;…`) pairs through the same `add` call the
   form drives, idempotent per host:port; `ZTOP_SNAPSHOT` renders the
   live `HostCard`s offscreen with `ImageRenderer` after two poll
-  ticks and writes a PNG.
+  ticks and writes a PNG. For the stale/unreachable recording the
+  snapshot hook keeps re-rendering every 5 seconds (writes are
+  atomic, so a reader copying the file mid-run never sees a partial
+  PNG), which is how one run records a host going live → stale →
+  unreachable without any screen permission.
 - The recorded artifacts: `docs/screenshots/m5-mac-overview.png` (the
   app's own render of its live overview for two agents on this
   machine) and `docs/screenshots/m5-ipad-overview.png` (a real
   `simctl` screenshot of the iPad Pro simulator watching the same two
   agents). Both show fake names (`host-a`, `host-b`) and loopback
-  addresses only.
+  addresses only. The state-change run adds
+  `m5-mac-live.png` (both live), `m5-mac-stale.png` (agent B killed:
+  orange `stale`, last good sample retained) and
+  `m5-mac-unreachable.png` (past the 10-second window: red
+  `unreachable`, still showing the last known values); in that run
+  each demo agent runs with its own `HOME` state dir, the same
+  isolation decision 0047 gives the tests.
 
 ## Consequences
 

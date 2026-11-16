@@ -2,15 +2,16 @@
 
 Updated after every working session.
 
-- **Current milestone:** M5 (ZTopKit, the SwiftUI app) — client (10a), app shell (10b) and Keychain+reconnection (10c) pushed; ZTopKit's ROADMAP list is complete, the app's remaining M5 work is the overview's stale/unreachable recording pass.
-- **Last done:** 10c — ZTopKit.TokenStore keeps one Keychain generic password per host (service dev.ztop.token, account host:port, AfterFirstUnlock, duplicate-Add fallback); HostStore writes tokens only through it and migrates any old plain-text token on load; a live test proves reconnection: pair, kill the agent, restart it on the same port without re-pairing, and the same token reads again. Live agents now run with per-test HOMEs (concurrent tests clobbered a shared tokens.json — decision 0047). Gate green (check=0, deny=0).
-- **Next step:** 10d — exercise stale/unreachable on the recorded overview (kill an agent mid-run and capture the state change), tick the fleet-overview parity item, then close M5 (re-check ROADMAP done-when) and start M6.
+- **Current milestone:** M5 CLOSED (client, app shell, Keychain+reconnection, and the recorded stale/unreachable pass; done-when met: two agents paired and live in screenshots on the iPad simulator and the Mac, ZTopKit tests green in CI). Now M6 (host detail, alerts, hub).
+- **Last done:** 10d — the state-change recording: the snapshot hook re-renders every 5 s (atomic writes); a clean run (isolated per-agent HOMEs, wiped hosts.json so fresh pairing was exercised) recorded both hosts live, then agent B killed mid-run: `stale` (orange, last good sample kept) inside the 10 s window and `unreachable` (red, last known values retained) past it — docs/screenshots/m5-mac-{live,stale,unreachable}.png, decision 0046 amended, parity fleet-overview item ticked. Also triaged 1d58797's red CI run: the same shared-state-dir race 10c fixed at the root (per-test HOMEs); c8f2bdd and 74f1800 ran green.
+- **Next step:** M6 batch 11a — `ztop hub`: SQLite-backed history over the same protocol (decision 0004), reusing the agent's serve path; then host detail views in the app.
 - **Blocked on:** nothing.
 
 ## Log
 
 Newest first. One or two lines per session: what changed, what is next.
 
+- 2026-11-15: M5 closed with 10d — stale/unreachable recorded live (hook re-renders every 5 s; per-agent HOME isolation for the demo too; parity ticked; decision 0046 amended). CI triage: 1d58797's failure was the shared-state-dir race, fixed at root in 74f1800 (green).
 - 2026-11-15: M5 batch 10c — Keychain tokens and reconnection: TokenStore (Security framework, one generic password per host, save/load/delete with an errSecDuplicateItem fallback for the data-protection keychain's lookup race), HostStore stores tokens only in the Keychain with plain-text migration on load, and a live restart test (pair → kill → restart same port → same token still reads; per-test HOME isolates agent state dirs, decision 0047). ZTopKit tests: 11 passing.
 - 2026-11-15: M5 batch 10b — the app shell: HostStore (persisted records, concurrent polling, live/stale/unreachable), fleet cards with state colors and capsule CPU/MEM meters, AddHostSheet/PairSheet over the real pairing flow, launch hooks for the recorded runs (decision 0046). The app paired two live TLS agents and both screenshots (Mac render + real iPad-simulator capture) are recorded; parity "add a host by hand, and pair" ticked. ImageRenderer cannot draw ProgressView — meters are drawn capsules.
 - 2026-11-15: CI verdict on a600964: green — the first cross aarch64 clippy passed. The STATUS-only commit 437c45c ran red on the agent e2e test: its "wrong pin" (62 hex chars + "00") equals the real pin whenever the fingerprint tail is "00" — a 1-in-256 flake, now fixed to flip the first hex character (decision 0045 records it).
