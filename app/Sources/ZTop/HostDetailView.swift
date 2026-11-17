@@ -258,6 +258,9 @@ struct HostDetailContent: View {
                                     .foregroundStyle(.secondary)
                             }
                         }
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel("disk \(disk.name), mounted at \(disk.mount)")
+                        .accessibilityValue("\(Int(disk.usagePct.rounded())) percent used")
                     }
                 }
             }
@@ -393,7 +396,12 @@ struct HostDetailContent: View {
                         .foregroundStyle(tint)
                 }
             }
-            MetricChart(points: series.normalized, tint: tint)
+            MetricChart(
+                points: series.normalized,
+                tint: tint,
+                accessibilityLabel: "\(series.label) chart",
+                accessibilityValue: series.latest.map { chartValue(series, $0) } ?? "no data"
+            )
             if let range = series.range {
                 Text("\(chartValue(series, range.low)) – \(chartValue(series, range.high))")
                     .font(.caption2.monospacedDigit())
@@ -476,6 +484,9 @@ struct CoreBars: View {
                     }
                     .frame(width: 84, height: 5)
                 }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("core \(index)")
+                .accessibilityValue("\(Int(busy[index].rounded())) percent")
             }
         }
     }
@@ -488,6 +499,10 @@ struct MetricChart: View {
     let points: [Double?]
     let tint: Color
     var height: CGFloat = 64
+    /// The accessibility label for the chart (e.g. "CPU usage").
+    var accessibilityLabel: String = ""
+    /// The accessibility value for the chart (e.g. "45 percent").
+    var accessibilityValue: String = ""
 
     var body: some View {
         Canvas { context, size in
@@ -532,5 +547,8 @@ struct MetricChart: View {
         }
         .frame(height: height)
         .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityLabel)
+        .accessibilityValue(accessibilityValue)
     }
 }

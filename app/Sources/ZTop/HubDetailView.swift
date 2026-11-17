@@ -23,6 +23,36 @@ struct HubMachineCard: View {
             meter(title: "MEM", value: memPercent)
         }
         .padding(.vertical, 2)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityLabel)
+        .accessibilityValue(accessibilityValue)
+    }
+
+    /// The combined VoiceOver label for the card.
+    private var accessibilityLabel: String {
+        var parts: [String] = [machine.name]
+        switch machine.state {
+        case .connecting: parts.append("connecting")
+        case .live: parts.append("live")
+        case .stale: parts.append("stale")
+        case .unreachable: parts.append("unreachable")
+        }
+        if let error = machine.error, machine.state != .live {
+            parts.append(error)
+        }
+        return parts.joined(separator: ", ")
+    }
+
+    /// The combined VoiceOver value for the card (CPU and MEM percentages).
+    private var accessibilityValue: String {
+        var parts: [String] = []
+        if let cpu = cpuPercent {
+            parts.append("CPU \(Int((cpu * 100).rounded())) percent")
+        }
+        if let mem = memPercent {
+            parts.append("memory \(Int((mem * 100).rounded())) percent")
+        }
+        return parts.isEmpty ? "no data" : parts.joined(separator: ", ")
     }
 
     private var caption: String {
