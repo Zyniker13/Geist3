@@ -2,14 +2,16 @@
 
 Updated after every working session.
 
-- **Current milestone:** M8 (hardening and 0.1.0). 11a, 11b, 12 (alerts), 13a (macOS disk + network collectors), 13b (process list in the app), 13c (the Apple Silicon SoC screen), 14a (the hub runs from the Mac app), 14b (the iPad through the hub), 15 (iPad split view and Stage Manager sizes) and 16 (the accessibility pass) are done; M7 (packaging) is done; M8 is in progress (fuzzing, threat model review, and CPU/memory measurement).
-- **Last done:** M8 — hardening: added 15 fuzzing targets for all network-facing parsers, created a script to measure the agent's CPU and memory usage against the DESIGN.md budget (0.7% CPU, 16.6 MB memory — within budget), and created a decision record for the threat model review.
-- **Next step:** Tag the 0.1.0 release.
-- **Blocked on:** nothing.
+- **Current milestone:** M8 (hardening and 0.1.0) — code done (17 fuzzing targets, threat-model review, budget measurement, packaging); the remaining step is a green CI run on main, then the 0.1.0 tag.
+- **Last done:** M8 CI repair: committed the fuzzing batch (14b1762, decision 0057) and the packaging batch (6f6d24c, decision 0058), then fixed what their CI runs exposed — the .deb postinst `useradd` could fail the install on a fresh runner (now best-effort; the amd64 "Install .deb" step passed after that), the Homebrew tap formula path `local/ztop/ztop/ztop` was invalid syntax (brew resolves `tap/formula`) and a local tap needs `brew trust` on current Homebrew (both fixed; trusted only when the command exists), and measure-agent.sh now measures the CPU-time delta across the window instead of `ps -o %cpu`'s lifetime average, so certificate-generation startup no longer counts against the steady-state budget (agent exits fail loudly; `--no-advertise`; local run 0.60% CPU, 14.7 MB — within budget).
+- **Next step:** Watch the Packaging and CI runs on 2ecded5; if green, tag v0.1.0.
+- **Blocked on:** nothing outside CI. Note for any session working here: `app/Sources/Info.plist` was found overwritten back to `1.0` several times by a process outside this session; the correct value is `0.1.0` (commit 34023d8). Re-check `git status` and the version immediately before every commit.
 
 ## Log
 
 Newest first. One or two lines per session: what changed, what is next.
+
+- 2026-11-17 (evening): M8 CI repair — pushed the fuzzing (14b1762) and packaging (6f6d24c) batches, then fixed the three failures their first CI runs exposed: best-effort postinst (the amd64 "Install .deb" step then passed), the Homebrew tap formula path corrected to `local/ztop/ztop` plus `brew trust` for the local tap, and measure-agent.sh rewritten to measure the window CPU delta (cputime before/after; macOS and Linux formats; loud failure if the agent exits; --no-advertise). Fuzzing count corrected to 17 everywhere. Next: green CI on 2ecded5, then the 0.1.0 tag.
 
 - 2026-11-17: M8 — hardening: added 15 fuzzing targets for all network-facing parsers (fuzz/), created a script to measure the agent's CPU and memory usage against the DESIGN.md budget (scripts/measure-agent.sh — 0.7% CPU, 16.6 MB memory, within budget), and created a decision record for the threat model review (docs/decisions/0056-threat-model-review-and-fuzzing.md). Next: tag the 0.1.0 release.
 
