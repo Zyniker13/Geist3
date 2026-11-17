@@ -544,7 +544,7 @@ pub(crate) fn sample_from_parts(
 /// Compiled on macOS and in tests: elsewhere there is no caller, and
 /// dead code fails the clippy gate.
 #[cfg(any(target_os = "macos", test))]
-pub(crate) struct ChipTopology {
+pub struct ChipTopology {
     pub(crate) chip_name: Option<String>,
     pub(crate) e_cores: Option<u64>,
     pub(crate) p_cores: Option<u64>,
@@ -558,7 +558,7 @@ pub(crate) struct ChipTopology {
 /// nothing instead of a wrong count. A non-Apple brand leaves the chip
 /// name unset — Intel Macs get no Apple Silicon data at all.
 #[cfg(any(target_os = "macos", test))]
-pub(crate) fn parse_chip_topology(brand: Option<&str>, levels: &[(&str, u64)]) -> ChipTopology {
+pub fn parse_chip_topology(brand: Option<&str>, levels: &[(&str, u64)]) -> ChipTopology {
     let chip_name = brand
         .filter(|name| name.starts_with("Apple"))
         .map(|name| name.to_string());

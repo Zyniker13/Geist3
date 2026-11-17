@@ -11,11 +11,125 @@ cargo-fuzz = true
 libfuzzer-sys = "0.4"
 
 [dependencies.ztop-core]
-path = ".."
+path = "../crates/core"
+
+# One fuzzing target per network-facing parser; scripts/fuzz-smoke.sh
+# runs every one of them for a short smoke run on each push.
+[[bin]]
+name = "parse_chip_topology"
+path = "fuzz_targets/parse_chip_topology.rs"
+test = false
+doc = false
+bench = false
 
 [[bin]]
-name = "fuzz_target_1"
-path = "fuzz_targets/fuzz_target_1.rs"
+name = "parse_control_reply"
+path = "fuzz_targets/parse_control_reply.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "parse_cpuinfo_frequencies"
+path = "fuzz_targets/parse_cpuinfo_frequencies.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "parse_hostinfo"
+path = "fuzz_targets/parse_hostinfo.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "parse_iflist2"
+path = "fuzz_targets/parse_iflist2.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "parse_pid_status"
+path = "fuzz_targets/parse_pid_status.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "parse_pin"
+path = "fuzz_targets/parse_pin.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "parse_pressure"
+path = "fuzz_targets/parse_pressure.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "parse_proc_diskstats"
+path = "fuzz_targets/parse_proc_diskstats.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "parse_proc_loadavg"
+path = "fuzz_targets/parse_proc_loadavg.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "parse_proc_loadavg_entities"
+path = "fuzz_targets/parse_proc_loadavg_entities.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "parse_proc_meminfo"
+path = "fuzz_targets/parse_proc_meminfo.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "parse_proc_mounts"
+path = "fuzz_targets/parse_proc_mounts.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "parse_proc_net_dev"
+path = "fuzz_targets/parse_proc_net_dev.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "parse_proc_stat"
+path = "fuzz_targets/parse_proc_stat.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "parse_proc_uptime"
+path = "fuzz_targets/parse_proc_uptime.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "parse_processes"
+path = "fuzz_targets/parse_processes.rs"
 test = false
 doc = false
 bench = false

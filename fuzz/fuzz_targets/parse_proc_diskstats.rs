@@ -10,6 +10,9 @@
 use libfuzzer_sys::fuzz_target;
 
 fuzz_target!(|data: &str| {
-    // The parser should never panic, even on malformed input.
-    let _ = ztop_core::linux::parse_proc_diskstats(data);
+    // The parser should never panic, even on malformed input. The
+    // mount table is the collector's second input; an empty one means
+    // every disk keeps its device name.
+    let mounts = std::collections::HashMap::new();
+    let _ = ztop_core::linux::parse_proc_diskstats(data, &mounts);
 });

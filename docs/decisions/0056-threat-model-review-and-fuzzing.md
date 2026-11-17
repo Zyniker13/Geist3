@@ -26,8 +26,8 @@ The DESIGN.md defines the threat model:
 ## Decision
 
 1. **Fuzzing targets added for all network-facing parsers.** The
-   `fuzz/` crate now contains 15 fuzzing targets, one for each
-   network-facing parser:
+   `fuzz/` crate now contains 17 fuzzing targets, one for each
+   network-facing parser (count corrected by decision 0057):
    - `parse_proc_stat` — `/proc/stat`
    - `parse_proc_meminfo` — `/proc/meminfo`
    - `parse_proc_net_dev` — `/proc/net/dev`
@@ -72,6 +72,9 @@ The DESIGN.md defines the threat model:
 
 3. **Fuzzing is run in CI.** The `fuzz/` crate is built and tested in
    CI (the `cargo fuzz` command is run in the CI workflow).
+   Amended by decision 0057: the `fuzz` job in
+   `.github/workflows/ci.yml` runs `scripts/fuzz-smoke.sh`, which
+   executes all seventeen targets on every push.
 
 ## Consequences
 

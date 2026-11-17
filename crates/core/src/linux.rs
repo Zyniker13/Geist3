@@ -46,7 +46,7 @@ const USER_HZ: f64 = 100.0;
 /// Parsed `/proc/stat`: one [`CpuTimes`] per core, ordered by core number,
 /// plus the boot time (`btime`) when the line is present.
 #[derive(Debug, Clone, Default)]
-pub(crate) struct ProcStat {
+pub struct ProcStat {
     pub(crate) cores: Vec<CpuTimes>,
     /// Boot time in Unix seconds; `None` when the `btime` line is
     /// missing, which turns every start time unavailable.
@@ -61,7 +61,7 @@ pub(crate) struct ProcStat {
 /// every non-CPU line are ignored; the aggregate's kernel-side accounting
 /// does not reliably equal the sum of the cores, so the collector only
 /// reports per-core times.
-fn parse_proc_stat(text: &str) -> Option<ProcStat> {
+pub fn parse_proc_stat(text: &str) -> Option<ProcStat> {
     let mut cores: Vec<(usize, CpuTimes)> = Vec::new();
     let mut btime = None;
     for line in text.lines() {
@@ -128,7 +128,7 @@ fn parse_cpu_fields(fields: &str) -> Option<CpuTimes> {
 
 /// Parsed `/proc/meminfo`, in bytes.
 #[derive(Debug, Clone, Copy, Default)]
-pub(crate) struct ProcMem {
+pub struct ProcMem {
     pub(crate) total: u64,
     pub(crate) available: u64,
     pub(crate) free: Option<u64>,
@@ -143,7 +143,7 @@ pub(crate) struct ProcMem {
 ///
 /// `MemTotal` is required; `MemAvailable` falls back to `MemFree` on old
 /// kernels that do not report it.
-fn parse_proc_meminfo(text: &str) -> Option<ProcMem> {
+pub fn parse_proc_meminfo(text: &str) -> Option<ProcMem> {
     let mut mem = ProcMem::default();
     let mut seen_total = false;
     let mut seen_available = false;
@@ -185,7 +185,7 @@ fn parse_proc_meminfo(text: &str) -> Option<ProcMem> {
 }
 
 /// Parses the first three fields of `/proc/loadavg`.
-fn parse_proc_loadavg(text: &str) -> Option<[f64; 3]> {
+pub fn parse_proc_loadavg(text: &str) -> Option<[f64; 3]> {
     let mut fields = text.split_whitespace();
     let one: f64 = fields.next()?.parse().ok()?;
     let five: f64 = fields.next()?.parse().ok()?;
@@ -196,7 +196,7 @@ fn parse_proc_loadavg(text: &str) -> Option<[f64; 3]> {
 /// Parses the scheduling-entity counts from `/proc/loadavg`'s fourth
 /// field (`1/262`): the currently runnable entities and the total
 /// scheduling entities, which is the host's thread count.
-fn parse_proc_loadavg_entities(text: &str) -> Option<(u64, u64)> {
+pub fn parse_proc_loadavg_entities(text: &str) -> Option<(u64, u64)> {
     let field = text.split_whitespace().nth(3)?;
     let (running, total) = field.split_once('/')?;
     Some((running.parse().ok()?, total.parse().ok()?))
@@ -205,7 +205,7 @@ fn parse_proc_loadavg_entities(text: &str) -> Option<(u64, u64)> {
 /// Parses the per-core frequencies in MHz from `/proc/cpuinfo`: one
 /// metric per `processor` block, unavailable when a block carries no
 /// `cpu MHz` line (some kernels and boards omit them).
-fn parse_cpuinfo_frequencies(text: &str) -> Vec<Metric> {
+pub fn parse_cpuinfo_frequencies(text: &str) -> Vec<Metric> {
     let mut frequencies = Vec::new();
     let mut current: Option<f64> = None;
     let mut saw_processor = false;
@@ -232,14 +232,14 @@ fn parse_cpuinfo_frequencies(text: &str) -> Vec<Metric> {
 }
 
 /// Parses the first field of `/proc/uptime`, in seconds.
-fn parse_proc_uptime(text: &str) -> Option<f64> {
+pub fn parse_proc_uptime(text: &str) -> Option<f64> {
     text.split_whitespace().next()?.parse().ok()
 }
 
 /// Parses one `/proc/pressure/<resource>` file: the `some` line always,
 /// the `full` line when the kernel writes one (cpu has none). Returns
 /// `None` for unparseable or truncated text.
-fn parse_pressure(text: &str) -> Option<Psi> {
+pub fn parse_pressure(text: &str) -> Option<Psi> {
     let mut some = None;
     let mut full = None;
     for line in text.lines() {
@@ -281,7 +281,7 @@ fn system_text(osrelease: &str) -> String {
 /// Parses `/proc/mounts` into a map of device name → mount point.
 ///
 /// Lines that do not follow the field layout are skipped.
-fn parse_proc_mounts(text: &str) -> std::collections::HashMap<String, String> {
+pub fn parse_proc_mounts(text: &str) -> std::collections::HashMap<String, String> {
     let mut mounts = std::collections::HashMap::new();
     for line in text.lines() {
         let fields: Vec<&str> = line.split_whitespace().collect();
@@ -327,7 +327,7 @@ fn disk_usage(mount: &str) -> (u64, u64, f64) {
 /// filesystems; the live collectors fill it with `disk_usage`. Lines
 /// that do not follow the field layout are skipped: device sets
 /// legitimately differ between hosts.
-fn parse_proc_diskstats(
+pub fn parse_proc_diskstats(
     text: &str,
     mounts: &std::collections::HashMap<String, String>,
 ) -> Vec<Disk> {
@@ -365,7 +365,7 @@ fn parse_proc_diskstats(
 /// Parses `/proc/net/dev`, skipping the two header lines.
 ///
 /// Lines that do not follow the field layout are skipped.
-fn parse_proc_net_dev(text: &str) -> Vec<NetIf> {
+pub fn parse_proc_net_dev(text: &str) -> Vec<NetIf> {
     let mut interfaces = Vec::new();
     for line in text.lines().skip(2) {
         let Some((name, counters)) = line.split_once(':') else {
@@ -393,7 +393,7 @@ fn parse_proc_net_dev(text: &str) -> Vec<NetIf> {
 
 /// Parsed fields of one process's `status` file.
 #[derive(Debug, Default)]
-pub(crate) struct PidStatus {
+pub struct PidStatus {
     pub(crate) name: String,
     pub(crate) state: Option<String>,
     pub(crate) parent: Option<u32>,
@@ -405,7 +405,7 @@ pub(crate) struct PidStatus {
 
 /// Parses the `status` fields the collectors use; missing lines stay at
 /// their defaults.
-fn parse_pid_status(text: &str) -> PidStatus {
+pub fn parse_pid_status(text: &str) -> PidStatus {
     let mut status = PidStatus::default();
     for line in text.lines() {
         let Some((key, value)) = line.split_once(':') else {

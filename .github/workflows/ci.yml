@@ -27,6 +27,25 @@ jobs:
       # ring's C code, so the target clippy needs a real cross C
       # toolchain (decision 0043), which cross ships in its container.
       - run: cross clippy --workspace --all-targets --target aarch64-unknown-linux-gnu -- -D warnings
+  fuzz:
+    name: Fuzz smoke
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # nightly
+        with:
+          toolchain: nightly
+      - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2
+        with:
+          tool: cargo-fuzz
+      - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
+        with:
+          workspaces: fuzz
+      # Every network-facing parser runs a short fuzz smoke on every
+      # push (decision 0057); macOS is the host where all seventeen
+      # targets compile, including the macOS-only sysctl one.
+      - run: scripts/fuzz-smoke.sh
   macos:
     name: macOS
     runs-on: macos-latest

@@ -144,7 +144,7 @@ impl rustls::client::danger::ServerCertVerifier for PinVerifier {
 }
 
 /// Parse `SHA256:<64 hex>` into the 32 pin bytes.
-fn parse_pin(pin: &str) -> Option<[u8; 32]> {
+pub fn parse_pin(pin: &str) -> Option<[u8; 32]> {
     let hex = pin.strip_prefix("SHA256:")?;
     if hex.len() != 64 || !hex.bytes().all(|b| b.is_ascii_hexdigit()) {
         return None;
@@ -333,7 +333,7 @@ struct ControlReply {
 
 /// Map the agent's reply onto the plan's pids: every pid the agent did
 /// not answer for reads as a failure, so the counts always add up.
-fn parse_control_reply(text: &str, pids: &[u32]) -> Vec<(u32, Result<(), String>)> {
+pub fn parse_control_reply(text: &str, pids: &[u32]) -> Vec<(u32, Result<(), String>)> {
     let reply: ControlReply = serde_json::from_str(text).unwrap_or(ControlReply {
         results: Vec::new(),
     });
