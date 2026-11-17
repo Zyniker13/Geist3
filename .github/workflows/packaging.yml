@@ -112,12 +112,15 @@ jobs:
           # The real formula builds from the v0.1.0 git tag; the tag does
           # not exist until release, so the CI check points the same
           # formula at this checkout with a file:// git URL (decision
-          # 0058). The formula lives in a local tap so that
-          # `brew upgrade` can find it again.
+          # 0058). The git download strategy defaults to a "master"
+          # branch when no branch is named, and this repository's
+          # default branch is main, so the checkout names it. The
+          # formula lives in a local tap so that `brew upgrade` can
+          # find it again.
           repo="$PWD"
           tap="$RUNNER_TEMP/ztop-tap"
           mkdir -p "$tap/Formula"
-          sed 's|url "https://github.com/Zyniker13/Geist3.git", tag: "v0.1.0"|url "file://'"$repo"'", using: :git|' \
+          sed 's|url "https://github.com/Zyniker13/Geist3.git", tag: "v0.1.0"|url "file://'\"$repo\"'", using: :git, branch: "main"|' \
             packaging/homebrew/ztop.rb > "$tap/Formula/ztop.rb"
           git -C "$tap" init -q
           git -C "$tap" add Formula

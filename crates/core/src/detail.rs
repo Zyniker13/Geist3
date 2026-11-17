@@ -69,8 +69,14 @@ fn linux_files(pid: u32) -> Result<Vec<String>, String> {
         let fd: u32 = name
             .parse()
             .map_err(|_| format!("open files {pid}: unexpected entry {name}"))?;
-        let target = std::fs::read_link(entry.path())
-            .map_err(|e| format!("open files {pid}: fd {fd}: {e}"))?;
+        let target = match std::fs::read_link(entry.path()) {
+            // An fd can close between the readdir and this read; a
+            // snapshot that omits it is honest, a hard error is not
+            // (a loaded CI runner hit exactly this on its own pid).
+            Ok(target) => target,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(e) => return Err(format!("open files {pid}: fd {fd}: {e}")),
+        };
         rows.push((fd, format!("fd {fd} -> {}", target.to_string_lossy())));
     }
     rows.sort_by_key(|(fd, _)| *fd);
@@ -208,7 +214,6 @@ fn macos_files(pid: u32) -> Result<Vec<String>, String> {
             std::io::Error::last_os_error()
         ));
     }
-    let count = list_size as usize / std::mem::size_of::<ProcFdInfo>();
     let mut buffer = vec![0u8; list_size as usize];
     let filled = unsafe {
         proc_pidinfo(
@@ -225,6 +230,10 @@ fn macos_files(pid: u32) -> Result<Vec<String>, String> {
             std::io::Error::last_os_error()
         ));
     }
+    // Count from what the second call actually filled: an fd can close
+    // between the two calls, and counting from the first call's size
+    // would read zero-filled tail rows (fd 0, garbage type).
+    let count = filled as usize / std::mem::size_of::<ProcFdInfo>();
     let entries: &[ProcFdInfo] =
         unsafe { std::slice::from_raw_parts(buffer.as_ptr().cast(), count) };
     let mut rows = Vec::with_capacity(count);
@@ -301,6 +310,34 @@ mod tests {
         let mut sorted = numbers.clone();
         sorted.sort_unstable();
         assert_eq!(numbers, sorted, "rows are sorted by fd");
+    }
+
+    #[test]
+    fn open_files_survives_fd_churn() {
+        // An fd can close between the listing and the read of its
+        // target; the snapshot must skip it instead of failing. A
+        // loaded CI runner hit exactly this on its own pid (Linux,
+        // fd 5). Churn pipes on a thread so every run of this test
+        // races the list against real closures.
+        use std::os::unix::net::UnixStream;
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicBool, Ordering};
+
+        let stop = Arc::new(AtomicBool::new(false));
+        let churner_stop = stop.clone();
+        let churner = std::thread::spawn(move || {
+            while !churner_stop.load(Ordering::Relaxed) {
+                let pairs: Vec<_> = (0..32).map(|_| UnixStream::pair()).collect();
+                std::thread::yield_now();
+                drop(pairs);
+            }
+        });
+        for _ in 0..100 {
+            let lines = open_files(std::process::id()).expect("own fds under churn");
+            assert!(!lines.is_empty(), "stdio is always open");
+        }
+        stop.store(true, Ordering::Relaxed);
+        churner.join().expect("the churn thread ends");
     }
 
     #[test]

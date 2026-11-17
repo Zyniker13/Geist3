@@ -24,10 +24,19 @@ for target in $(ls fuzz_targets/*.rs | sed 's|fuzz_targets/||; s|\.rs$||' | sort
     then
         printf 'fuzz-smoke: %s ok\n' "$target"
     else
-        # Re-run without the output swallowed so the failure is readable.
         printf 'fuzz-smoke: %s FAILED\n' "$target"
-        cargo +nightly fuzz run "$target" --sanitizer none -- \
-            -runs="$runs" -max_len="$max_len" || true
+        # Re-run with the output captured, and surface the reason as a
+        # workflow command so it survives in the run's annotations even
+        # where the step log itself is not readable.
+        out="$(cargo +nightly fuzz run "$target" --sanitizer none -- \
+            -runs="$runs" -max_len="$max_len" 2>&1 || true)"
+        printf '%s\n' "$out"
+        msg="$(printf '%s\n' "$out" \
+            | tr -d '\r' \
+            | sed 's/%/%25/g' \
+            | tail -c 1400 \
+            | sed -e ':a' -e 'N' -e '$!ba' -e 's/\n/%0A/g')"
+        printf '::error title=fuzz target %s::%s\n' "$target" "$msg"
         status=1
     fi
 done
