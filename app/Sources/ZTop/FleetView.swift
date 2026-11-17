@@ -10,6 +10,14 @@ import SwiftUI
 import struct ZTopKit.Process
 import ZTopKit
 
+/// What the detail column shows: a direct host, or a machine reached
+/// through a hub (`?host=`). `nil` means "nothing selected" (the
+/// split view's empty detail).
+enum FleetSelection: Hashable {
+    case host(HostRecord)
+    case hubMachine(HubMachine)
+}
+
 /// The fleet overview: one live card per host.
 struct FleetView: View {
     @StateObject private var store = HostStore()
@@ -38,9 +46,6 @@ struct FleetContent: View {
     @StateObject private var hubInstaller = HubInstaller()
     @State private var showingHub = false
 #endif
-    /// The pushed host detail; the recorded-run hook also sets this
-    /// so the window shows the same screen the snapshot captures.
-    @State private var detailTarget: HostRecord?
     /// The detail's history window, fetched for the snapshot hook.
     @State private var detailHistory: [Sample] = []
     /// The detail's process rows, fetched for the snapshot hook.
@@ -50,19 +55,21 @@ struct FleetContent: View {
     /// The SoC screen's pushed record (the toolbar gauge on the
     /// detail page, or `ZTOP_SOC` in a recorded run).
     @State private var socTarget: HostRecord?
-    /// The pushed hub machine's detail.
-    @State private var hubDetail: HubMachine?
+    /// The split view's selection: which machine the detail column
+    /// shows. The recorded-run hook sets this so the window shows the
+    /// same screen the snapshot captures.
+    @State private var selection: FleetSelection?
     /// The recorded-run demo switch: render synthetic process rows
     /// instead of the live ones (screenshots carry fake values only).
     @State private var demoProcesses = false
 
     var body: some View {
-        NavigationStack {
+        NavigationSplitView {
             Group {
                 if store.records.isEmpty {
                     FleetEmptyState()
                 } else {
-                    cards
+                    sidebarList
                 }
             }
             .navigationTitle("zTop")
@@ -91,28 +98,22 @@ struct FleetContent: View {
                     }
                 }
             }
+        } detail: {
+            NavigationStack {
+                detailContent
 #if os(macOS)
-            .navigationDestination(isPresented: $showingHub) {
-                HubView(store: store, runner: hubRunner, installer: hubInstaller)
-            }
+                .navigationDestination(isPresented: $showingHub) {
+                    HubView(store: store, runner: hubRunner, installer: hubInstaller)
+                }
 #endif
-            .navigationDestination(isPresented: $showingAlerts) {
-                AlertsView(center: center, store: store)
-            }
-            .navigationDestination(item: $detailTarget) { record in
-                HostDetailView(store: store, record: record, onOpenSoc: { socTarget = record })
-            }
-            .navigationDestination(item: $socTarget) { record in
-                SocView(store: store, record: record)
-            }
-            .navigationDestination(item: $hubDetail) { machine in
-                if let hub = store.records.first(where: { $0.id == machine.hubID }) {
-                    HubDetailView(store: store, hub: hub, machine: machine)
-                } else {
-                    Text("The hub was removed.")
-                        .foregroundStyle(.secondary)
+                .navigationDestination(isPresented: $showingAlerts) {
+                    AlertsView(center: center, store: store)
+                }
+                .navigationDestination(item: $socTarget) { record in
+                    SocView(store: store, record: record)
                 }
             }
+        }
             .sheet(isPresented: $showingAdd) {
                 AddHostSheet { name, host, port, pin, code, isHub in
                     _ = try await store.add(name: name, host: host, port: port, pin: pin, code: code, isHub: isHub)
@@ -177,7 +178,7 @@ struct FleetContent: View {
                     if !hubHandled, let name = detailName, !name.isEmpty {
                         let record = store.records.first { $0.name == name }
                         if let record {
-                            detailTarget = record
+                            selection = .host(record)
                             // ZTOP_PROCESSES_DEMO swaps the live
                             // process rows for synthetic ones, so a
                             // committed screenshot never carries this
@@ -198,7 +199,6 @@ struct FleetContent: View {
                     }
                 }
             }
-        }
     }
 
     /// Fetches the named host's history and process list and keeps
@@ -449,16 +449,18 @@ struct FleetContent: View {
         #endif
     }
 
-    private var cards: some View {
-        List {
+    /// The sidebar's list: one row per host, and one section per hub
+    /// with the machines it watches. Selecting a row drives the detail
+    /// column (the split view's selection).
+    private var sidebarList: some View {
+        List(selection: $selection) {
             ForEach(store.records.filter { !$0.isHub }) { record in
                 HostCard(record: record, live: store.live[record.id]) {
                     pairing = record
                 } onForget: {
                     store.remove(record)
                 }
-                .contentShape(Rectangle())
-                .onTapGesture { detailTarget = record }
+                .tag(FleetSelection.host(record))
             }
             .onDelete { indexSet in
                 for index in indexSet {
@@ -479,11 +481,33 @@ struct FleetContent: View {
                     }
                     ForEach(machines) { machine in
                         HubMachineCard(machine: machine)
-                            .contentShape(Rectangle())
-                            .onTapGesture { hubDetail = machine }
+                            .tag(FleetSelection.hubMachine(machine))
                     }
                 }
             }
+        }
+    }
+
+    /// The detail column: the selected machine's detail, or a
+    /// placeholder when nothing is selected.
+    @ViewBuilder
+    private var detailContent: some View {
+        switch selection {
+        case .host(let record):
+            HostDetailView(store: store, record: record, onOpenSoc: { socTarget = record })
+        case .hubMachine(let machine):
+            if let hub = store.records.first(where: { $0.id == machine.hubID }) {
+                HubDetailView(store: store, hub: hub, machine: machine)
+            } else {
+                Text("The hub was removed.")
+                    .foregroundStyle(.secondary)
+            }
+        case .none:
+            ContentUnavailableView(
+                "Select a host",
+                systemImage: "desktopcomputer",
+                description: Text("Choose a machine to watch.")
+            )
         }
     }
 }
