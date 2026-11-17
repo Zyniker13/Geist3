@@ -2,14 +2,16 @@
 
 Updated after every working session.
 
-- **Current milestone:** M6 (iPad through the hub, iPad split view and Stage Manager sizes, accessibility pass). 11a, 11b, 12 (alerts), 13a (macOS disk + network collectors), 13b (process list in the app), 13c (the Apple Silicon SoC screen), 14a (the hub runs from the Mac app) and 14b (the iPad through the hub) are done; CI green through a711065.
-- **Last done:** 14b — the iPad connects through one hub endpoint (decision 0054 continued): `HostStore.seedHub` pairs with the hub's printed code (env `ZTOP_HUB_PAIR` for recorded runs) and stores the hub as a `HostRecord(isHub: true)`; `FleetView` shows a "Through the hub" section with one card per watched agent (live CPU/MEM from the hub's `/v1/hosts` poll); tapping a card opens `HubDetailView`, which reads the machine's history through the hub's `?host=` endpoint. `HostStore.save()` falls back to file-stored tokens when the Keychain is unavailable (simulator). Recorded live: `docs/screenshots/m6-ipad-hub.png`, three agents (host-a, host-b, host-c) reading back **Live** through one hub endpoint on the iPad. Parity item checked.
-- **Next step:** 15 — iPad split view and Stage Manager sizes; Mac window sizes. Then 16 — the accessibility pass.
+- **Current milestone:** M6 (iPad through the hub, iPad split view and Stage Manager sizes, accessibility pass). 11a, 11b, 12 (alerts), 13a (macOS disk + network collectors), 13b (process list in the app), 13c (the Apple Silicon SoC screen), 14a (the hub runs from the Mac app), 14b (the iPad through the hub) and 15 (iPad split view and Stage Manager sizes) are done; CI green through f4ba97e.
+- **Last done:** 15 — iPad split view and Stage Manager sizes: `FleetView` converted from `NavigationStack` to `NavigationSplitView` (sidebar = fleet list with selection, detail = selected host's or hub machine's live data). The split view collapses to a single column in narrow windows (e.g. iPad portrait) and shows sidebar + detail side by side in wide windows (e.g. iPad landscape, Stage Manager). The Mac app's window is resizable and the split view adapts automatically. Verified: builds for both iPad and macOS; the iPad app shows the fleet list (host-a, host-b, host-c) in a single column (portrait); the Mac app pairs with the hub and saves the token.
+- **Next step:** 16 — the accessibility pass.
 - **Blocked on:** nothing.
 
 ## Log
 
 Newest first. One or two lines per session: what changed, what is next.
+
+- 2026-11-17: M6 batch 15 — iPad split view and Stage Manager sizes: `FleetView` converted from `NavigationStack` to `NavigationSplitView` (sidebar = fleet list with selection, detail = selected host's or hub machine's live data). The split view collapses to a single column in narrow windows (e.g. iPad portrait) and shows sidebar + detail side by side in wide windows (e.g. iPad landscape, Stage Manager). The Mac app's window is resizable and the split view adapts automatically. Verified: builds for both iPad and macOS; the iPad app shows the fleet list (host-a, host-b, host-c) in a single column (portrait); the Mac app pairs with the hub and saves the token. Next: 16 — the accessibility pass.
 
 - 2026-11-17: M6 batch 14b — the iPad through the hub (decision 0054 continued): `HostStore.seedHub` pairs with the hub's printed code (env `ZTOP_HUB_PAIR` for recorded runs) and stores the hub as a `HostRecord(isHub: true)`; `FleetView` shows a "Through the hub" section with one card per watched agent (live CPU/MEM from the hub's `/v1/hosts` poll); tapping a card opens `HubDetailView`, which reads the machine's history through the hub's `?host=` endpoint. `HostStore.save()` falls back to file-stored tokens when the Keychain is unavailable (simulator). Recorded live: `docs/screenshots/m6-ipad-hub.png`, three agents (host-a, host-b, host-c) reading back **Live** through one hub endpoint on the iPad. Parity item checked. Next: 15 — iPad split view and Stage Manager sizes.
 
