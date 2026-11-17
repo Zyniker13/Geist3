@@ -106,9 +106,11 @@ final class HostStore: ObservableObject {
     }
 
     /// The file never carries tokens: they live in the Keychain
-    /// (decision 0047), one generic password per host.
+    /// (decision 0047), one generic password per host. On platforms
+    /// where the Keychain is unavailable (simulator), fall back to
+    /// storing the token in the file so hub polling still works.
     private func save() {
-        let sanitized = records.map { record -> HostRecord in
+        var sanitized = records.map { record -> HostRecord in
             var copy = record
             copy.token = ""
             return copy
@@ -116,7 +118,13 @@ final class HostStore: ObservableObject {
         guard let data = try? JSONEncoder().encode(sanitized) else { return }
         try? data.write(to: fileURL, options: .atomic)
         for record in records where !record.token.isEmpty {
-            try? TokenStore.save(record.token, for: record.host, port: record.port)
+            let result = Result { try TokenStore.save(record.token, for: record.host, port: record.port) }
+            if case .failure = result {
+                // Keychain unavailable (simulator): store token in file.
+                sanitized[records.firstIndex(where: { $0.id == record.id }) ?? 0].token = record.token
+                guard let data = try? JSONEncoder().encode(sanitized) else { return }
+                try? data.write(to: fileURL, options: .atomic)
+            }
         }
     }
 
