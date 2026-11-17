@@ -68,6 +68,11 @@ EOF
 # Create the postinst script
 cat > "$PKG_DIR/DEBIAN/postinst" << 'EOF'
 #!/bin/bash
+# Create the dedicated ztop user if it doesn't exist
+if ! id ztop &> /dev/null; then
+    useradd --system --create-home --shell /usr/sbin/nologin ztop
+fi
+
 # Enable the systemd user service
 if command -v systemctl &> /dev/null; then
     systemctl --user daemon-reload
@@ -75,6 +80,17 @@ if command -v systemctl &> /dev/null; then
 fi
 EOF
 chmod 755 "$PKG_DIR/DEBIAN/postinst"
+
+# Create the postrm script
+cat > "$PKG_DIR/DEBIAN/postrm" << 'EOF'
+#!/bin/bash
+# Remove the dedicated ztop user if it exists
+if [ "$1" = "purge" ] && id ztop &> /dev/null; then
+    userdel ztop 2>/dev/null || true
+    rm -rf /home/ztop 2>/dev/null || true
+fi
+EOF
+chmod 755 "$PKG_DIR/DEBIAN/postrm"
 
 # Create the prerm script
 cat > "$PKG_DIR/DEBIAN/prerm" << 'EOF'
