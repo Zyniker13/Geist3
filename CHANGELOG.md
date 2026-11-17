@@ -16,7 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **zTop app**: a universal SwiftUI app for iPad and Mac with a fleet overview, a detail view for any one machine, alerts, and the Apple Silicon view for Macs.
 - **ZTopKit**: a Swift package with the protocol client, models and pairing, used by the app and its tests.
 - **Packaging**: Homebrew formula, .deb packages for amd64 and arm64 with a systemd unit and a dedicated user, and a man page.
-- **Fuzzing**: 15 fuzzing targets for all network-facing parsers.
+- **Fuzzing**: 17 fuzzing targets for all network-facing parsers, smoke-run in CI on every push.
 - **Accessibility**: VoiceOver labels for cards, charts, and meters.
 
 ### Changed

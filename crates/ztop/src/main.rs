@@ -6,6 +6,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
+use ztop_core::collector::Collector;
 
 /// The `ztop` command line.
 #[derive(Debug, Parser)]
@@ -119,6 +120,10 @@ enum Command {
         /// saved under the state directory for this host.
         #[arg(long, requires = "tls")]
         code: Option<String>,
+        /// Read one sample, print a one-line summary, and exit: the
+        /// non-interactive client for scripts and CI pairing checks.
+        #[arg(long)]
+        once: bool,
     },
     /// Render one TUI frame from a recorded fixture and print it.
     Replay {
@@ -146,6 +151,63 @@ fn flags_from(cli: &Cli, readonly: bool) -> Result<ztop_tui::RunFlags, Box<dyn E
         },
         delay: std::time::Duration::from_secs_f64(cli.delay),
     })
+}
+
+/// One gibibyte, for the `--once` summary line.
+const GIB: f64 = 1_073_741_824.0;
+
+/// `connect --once`: read the agent's latest sample, print a one-line
+/// summary, and exit. The CPU figure is the agent's own measurement over
+/// its last sampling interval, so a lone read is still a live rate;
+/// memory and swap render as `used/total GiB` with `-` for a value the
+/// host does not report.
+fn connect_once(
+    mut collector: ztop_core::client::RemoteCollector,
+    target: &str,
+) -> Result<(), Box<dyn Error>> {
+    let sample = collector.sample()?;
+    let cpu = if sample.cpu.busy_percent.is_empty() {
+        "-".to_string()
+    } else {
+        let mean =
+            sample.cpu.busy_percent.iter().sum::<f64>() / sample.cpu.busy_percent.len() as f64;
+        format!("{mean:.1}%")
+    };
+    let seconds = if sample.uptime.available {
+        let total = sample.uptime.value.max(0.0) as u64;
+        format!(
+            "{}:{:02}:{:02}",
+            total / 3600,
+            (total % 3600) / 60,
+            total % 60
+        )
+    } else {
+        "-".to_string()
+    };
+    let used = |value: &ztop_core::model::Metric| {
+        if value.available {
+            format!("{:.1}", value.value / GIB)
+        } else {
+            "-".to_string()
+        }
+    };
+    let system = if sample.system.is_empty() {
+        "system unknown".to_string()
+    } else {
+        sample.system.clone()
+    };
+    println!(
+        "{target} · {system} · up {seconds} · cpu {cpu} · mem {}/{} GiB · swap {}/{} GiB · load {:.2} {:.2} {:.2} · {} processes",
+        used(&sample.memory.used),
+        used(&sample.memory.total),
+        used(&sample.memory.swap_used),
+        used(&sample.memory.swap_total),
+        sample.load_avg[0],
+        sample.load_avg[1],
+        sample.load_avg[2],
+        sample.processes.len(),
+    );
+    Ok(())
 }
 
 fn main() -> ExitCode {
@@ -252,6 +314,7 @@ fn run() -> Result<(), Box<dyn Error>> {
             tls,
             ref pin,
             ref code,
+            once,
         }) => {
             // A remote view is observation-only for now: signals and
             // renice through the protocol come with the pairing work
@@ -296,6 +359,9 @@ fn run() -> Result<(), Box<dyn Error>> {
             } else {
                 ztop_core::client::RemoteCollector::new(target.clone())
             };
+            if once {
+                return connect_once(collector, target);
+            }
             let mut collector = collector;
             ztop_tui::run(&mut collector, &cli.pids, config, flags)?;
         }
@@ -375,6 +441,26 @@ mod tests {
     fn connect_takes_a_target() {
         let cli = Cli::try_parse_from(["ztop", "connect", "host-b:7100"]).expect("parses");
         assert!(matches!(cli.command, Some(Command::Connect { .. })));
+    }
+
+    #[test]
+    fn connect_once_flag_parses() {
+        let cli = Cli::try_parse_from([
+            "ztop",
+            "connect",
+            "--tls",
+            "--pin",
+            "SHA256:00",
+            "--code",
+            "ABCDEF",
+            "--once",
+            "127.0.0.1:7100",
+        ])
+        .expect("parses");
+        let Some(Command::Connect { once, .. }) = cli.command else {
+            panic!("expected the connect subcommand");
+        };
+        assert!(once);
     }
 
     #[test]

@@ -62,6 +62,16 @@ run packaging sh -c '
         echo "the systemd service must not allow control by default"
         exit 1
     fi
+    # The Homebrew formula: syntax where ruby exists, and the shipped
+    # service is read-only.
+    if command -v ruby >/dev/null 2>&1; then
+        ruby -c packaging/homebrew/ztop.rb
+    fi
+    if grep -q '"--allow-control"' packaging/homebrew/ztop.rb; then
+        echo "the Homebrew service must not allow control by default"
+        exit 1
+    fi
+    test -f packaging/man/ztop.1
     if command -v plutil >/dev/null 2>&1; then
         plutil -lint packaging/launchd/com.ztop.agent.plist
     fi

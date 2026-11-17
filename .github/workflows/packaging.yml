@@ -6,6 +6,9 @@ on:
     paths:
       - 'packaging/**'
       - '.github/workflows/packaging.yml'
+      - 'crates/**'
+      - 'Cargo.lock'
+      - 'scripts/measure-agent.sh'
   pull_request:
     paths:
       - 'packaging/**'
@@ -16,7 +19,7 @@ jobs:
   deb:
     name: .deb ${{ matrix.arch }} (Debian/Ubuntu)
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -59,29 +62,34 @@ jobs:
           sudo dpkg -i ztop_0.1.0_amd64.deb
           which ztop
           ztop --version
-      - name: Test agent and measure budget
+      - name: Upgrade .deb
         if: matrix.install_test
         run: |
-          # Start the agent in the background
-          ztop agent --tls --pair --port 7102 &
-          AGENT_PID=$!
-          sleep 5
-          # Check that the agent is running
-          if ! kill -0 $AGENT_PID 2>/dev/null; then
-            echo "Agent failed to start"
+          # The upgrade path: the same tree packaged as 0.1.1 over the
+          # installed 0.1.0 exercises dpkg's upgrade (postinst re-run).
+          ./packaging/build-deb.sh 0.1.1 ${{ matrix.arch }}
+          sudo dpkg -i ztop_0.1.1_amd64.deb
+          dpkg-query -W -f='${Version}\n' ztop | grep -qx 0.1.1
+          ztop --version
+      - name: Measure the agent against the budget
+        if: matrix.install_test
+        run: scripts/measure-agent.sh 30
+      - name: Pair a test client with the installed agent
+        if: matrix.install_test
+        run: |
+          ztop agent --tls --pair --no-advertise --port 7103 >agent.log 2>&1 &
+          pid=$!
+          sleep 6
+          code="$(sed -n 's/^Pairing code: \([A-Za-z0-9]*\).*/\1/p' agent.log | head -1)"
+          pin="$(sed -n 's/^TLS fingerprint: \(SHA256:[0-9a-f]*\)$/\1/p' agent.log | head -1)"
+          if [ -z "$code" ] || [ -z "$pin" ]; then
+            echo "the agent never printed a pairing code and fingerprint:" >&2
+            cat agent.log >&2
             exit 1
           fi
-          # Measure the agent's memory against the DESIGN.md budget
-          # (under 1% of one core and under 30 MB resident memory)
-          ps -o %cpu,rss -p $AGENT_PID
-          RSS=$(ps -o rss= -p $AGENT_PID | tr -d ' ')
-          if [ "$RSS" -gt 30720 ]; then
-            echo "Agent RSS ${RSS} KB exceeds the 30 MB budget"
-            exit 1
-          fi
-          # Kill the agent
-          kill $AGENT_PID
-          wait $AGENT_PID 2>/dev/null || true
+          ztop connect --tls --pin "$pin" --code "$code" --once 127.0.0.1:7103
+          kill "$pid"
+          wait "$pid" 2>/dev/null || true
       - name: Uninstall .deb
         if: matrix.install_test
         run: |
@@ -91,34 +99,61 @@ jobs:
   homebrew:
     name: Homebrew (macOS)
     runs-on: macos-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         with:
           toolchain: stable
-      - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
-      - name: Build ztop
-        run: |
-          cargo build --release
-          ls -la target/release/ztop
       - name: Check formula syntax
+        run: ruby -c packaging/homebrew/ztop.rb
+      - name: Install the formula from this checkout
         run: |
-          ruby -c packaging/homebrew/ztop.rb
-      - name: Test agent
+          # The real formula builds from the v0.1.0 git tag; the tag does
+          # not exist until release, so the CI check points the same
+          # formula at this checkout with a file:// git URL (decision
+          # 0058). The formula lives in a local tap so that
+          # `brew upgrade` can find it again.
+          repo="$PWD"
+          tap="$RUNNER_TEMP/ztop-tap"
+          mkdir -p "$tap/Formula"
+          sed 's|url "https://github.com/Zyniker13/Geist3.git", tag: "v0.1.0"|url "file://'"$repo"'", using: :git|' \
+            packaging/homebrew/ztop.rb > "$tap/Formula/ztop.rb"
+          git -C "$tap" init -q
+          git -C "$tap" add Formula
+          git -C "$tap" -c user.name=ci -c user.email=ci@ztop.dev commit -qm "ztop 0.1.0"
+          brew tap local/ztop "$tap"
+          brew install --build-from-source local/ztop/ztop/ztop
+          "$(brew --prefix)/bin/ztop" --version
+      - name: Upgrade the formula
         run: |
-          # Start the agent in the background
-          ./target/release/ztop agent --tls --pair --port 7102 &
-          AGENT_PID=$!
-          sleep 5
-          # Check that the agent is running
-          if ! kill -0 $AGENT_PID 2>/dev/null; then
-            echo "Agent failed to start"
+          tap="$RUNNER_TEMP/ztop-tap"
+          sed -i '' 's/version "0.1.0"/version "0.1.1"/' "$tap/Formula/ztop.rb"
+          git -C "$tap" add Formula
+          git -C "$tap" -c user.name=ci -c user.email=ci@ztop.dev commit -qm "ztop 0.1.1"
+          brew upgrade --build-from-source local/ztop/ztop/ztop
+          brew list --versions ztop | grep -q 0.1.1
+      - name: Start the agent as a service and pair a test client
+        run: |
+          brew services start ztop
+          log="$(brew --prefix)/var/log/ztop-agent.log"
+          code=""
+          pin=""
+          for _ in 1 2 3 4 5 6 7 8 9 10; do
+            sleep 3
+            code="$(sed -n 's/^Pairing code: \([A-Za-z0-9]*\).*/\1/p' "$log" | head -1)"
+            pin="$(sed -n 's/^TLS fingerprint: \(SHA256:[0-9a-f]*\)$/\1/p' "$log" | head -1)"
+            [ -n "$code" ] && [ -n "$pin" ] && break
+          done
+          if [ -z "$code" ] || [ -z "$pin" ]; then
+            echo "the service never printed a pairing code and fingerprint:" >&2
+            cat "$log" >&2
+            brew services info ztop || true
             exit 1
           fi
-          # Measure the agent's memory against the DESIGN.md budget (30 MB)
-          RSS=$(ps -o rss= -p $AGENT_PID | tr -d ' ')
-          echo "Agent RSS: ${RSS} KB"
-          # Kill the agent
-          kill $AGENT_PID
-          wait $AGENT_PID 2>/dev/null || true
+          "$(brew --prefix)/bin/ztop" connect --tls --pin "$pin" --code "$code" --once 127.0.0.1:7100
+      - name: Stop the service and uninstall
+        run: |
+          brew services stop ztop
+          brew uninstall ztop
+          test ! -x "$(brew --prefix)/bin/ztop" && echo "ztop removed successfully"

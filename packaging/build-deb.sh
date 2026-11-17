@@ -44,6 +44,7 @@ mkdir -p "$PKG_DIR/DEBIAN"
 mkdir -p "$PKG_DIR/usr/local/bin"
 mkdir -p "$PKG_DIR/usr/local/lib/ztop"
 mkdir -p "$PKG_DIR/lib/systemd/user"
+mkdir -p "$PKG_DIR/usr/local/share/man/man1"
 
 # Copy the binary
 cp "target/${TARGET}/release/ztop" "$PKG_DIR/usr/local/bin/ztop"
@@ -52,6 +53,10 @@ chmod 755 "$PKG_DIR/usr/local/bin/ztop"
 # Copy the systemd service
 cp "packaging/systemd/ztop-agent.service" "$PKG_DIR/lib/systemd/user/ztop-agent.service"
 chmod 644 "$PKG_DIR/lib/systemd/user/ztop-agent.service"
+
+# Copy the man page
+cp "packaging/man/ztop.1" "$PKG_DIR/usr/local/share/man/man1/ztop.1"
+chmod 644 "$PKG_DIR/usr/local/share/man/man1/ztop.1"
 
 # Create the control file
 cat > "$PKG_DIR/DEBIAN/control" << EOF
@@ -68,15 +73,21 @@ EOF
 # Create the postinst script
 cat > "$PKG_DIR/DEBIAN/postinst" << 'EOF'
 #!/bin/bash
-# Create the dedicated ztop user if it doesn't exist
+# Create the dedicated ztop user if it doesn't exist. Best-effort:
+# the binary runs fine as any user, so a failure here (for example on
+# a CI runner whose useradd or nologin path differs) must not break the
+# package install.
 if ! id ztop &> /dev/null; then
-    useradd --system --create-home --shell /usr/sbin/nologin ztop
+    useradd --system --create-home --shell /usr/sbin/nologin ztop || \
+        echo "warning: could not create the ztop user; ztop still runs as any user" >&2
 fi
 
-# Enable the systemd user service
+# Enable the systemd user service. Best-effort: headless machines
+# (and CI) have no user bus, and the unit can be enabled later with
+# `systemctl --user enable ztop-agent.service`.
 if command -v systemctl &> /dev/null; then
-    systemctl --user daemon-reload
-    systemctl --user enable ztop-agent.service
+    systemctl --user daemon-reload || true
+    systemctl --user enable ztop-agent.service || true
 fi
 EOF
 chmod 755 "$PKG_DIR/DEBIAN/postinst"

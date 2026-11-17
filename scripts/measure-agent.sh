@@ -82,19 +82,18 @@ echo "  CPU usage: ${FINAL_CPU}%"
 echo "  Resident memory: ${FINAL_RSS} KB"
 echo ""
 
-# Check against the budget
+# Check against the budget (awk: bc is not everywhere)
 CPU_BUDGET=1.0
 MEM_BUDGET=30720  # 30 MB in KB
 
-CPU_OK=$(echo "$FINAL_CPU < $CPU_BUDGET" | bc)
-MEM_OK=$(echo "$FINAL_RSS < $MEM_BUDGET" | bc)
-
-if [[ "$CPU_OK" == "1" && "$MEM_OK" == "1" ]]; then
+if awk -v cpu="$FINAL_CPU" -v mem="$FINAL_RSS" 'BEGIN {
+    exit (cpu < 1.0 && mem < 30720) ? 0 : 1
+}'; then
     echo "PASS: Agent is within the budget (CPU < 1%, memory < 30 MB)"
     exit 0
 else
     echo "FAIL: Agent exceeds the budget"
-    [[ "$CPU_OK" != "1" ]] && echo "  CPU usage (${FINAL_CPU}%) exceeds the budget (${CPU_BUDGET}%)"
-    [[ "$MEM_OK" != "1" ]] && echo "  Memory usage (${FINAL_RSS} KB) exceeds the budget (${MEM_BUDGET} KB)"
+    awk -v cpu="$FINAL_CPU" 'BEGIN { if (cpu >= 1.0) print "  CPU usage (" cpu "%) exceeds the budget (1.0%)" }'
+    awk -v mem="$FINAL_RSS" 'BEGIN { if (mem >= 30720) print "  Memory usage (" mem " KB) exceeds the budget (30720 KB)" }'
     exit 1
 fi

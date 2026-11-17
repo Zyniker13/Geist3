@@ -4,38 +4,104 @@
 ztop \- a lightweight system monitor for macOS and Linux
 .SH SYNOPSIS
 .B ztop
-[\fIOPTIONS\fR]
+[
+.BI options
+]
 .SH DESCRIPTION
 .B ztop
 is a lightweight system monitor that displays CPU, memory, disk, and network
-usage in real time. It runs as a local agent that collects metrics and
-serves them over a secure, paired connection.
-.SH OPTIONS
-.TP
-.B \-\-port <PORT>
-The port to listen on (default: 7102).
-.TP
-.B \-\-bind <ADDRESS>
-The address to bind to (default: 127.0.0.1).
-.TP
-.B \-\-tls
-Enable TLS (required for pairing).
-.TP
-.B \-\-pair
-Enable pairing (required for remote access).
-.TP
-.B \-\-allow\-control
-Allow paired clients to send signals and renice processes.
-.TP
-.B \-\-no\-advertise
-Do not advertise the agent on the local network.
+usage in real time. It runs as a local agent that collects metrics and serves
+them over a secure, paired connection; a client (the TUI) renders them.
 .SH SUBCOMMANDS
 .TP
 .B agent
-Run the zTop agent (default).
+Run the zTop agent (the default when no subcommand is given).
 .TP
 .B hub
-Run the zTop hub (for managing multiple agents).
+Run the zTop hub, which polls the agents named in
+.B --agents
+and serves their combined view.
+.TP
+.BI "connect " target
+Drive the TUI from a remote agent or hub.
+.TP
+.B capture
+Record this host's raw inputs as a fixture for collector tests.
+.TP
+.B replay
+Render one TUI frame from a recorded fixture.
+.SH AGENT OPTIONS
+.TP
+.BI \-\-port " PORT"
+The port to listen on (default: 7100).
+.TP
+.BI \-\-bind " ADDRESS"
+The address to bind to (default: 127.0.0.1). Anything wider than loopback
+requires
+.B \-\-tls
+, so no unauthenticated metrics ever leave the machine.
+.TP
+.B \-\-tls
+Serve HTTPS with a self-signed certificate and require tokens.
+.TP
+.B \-\-pair
+Show a pairing code a client can trade for a token.
+.TP
+.B \-\-allow\-control
+Let paired tokens send signals and renice processes. Off by default.
+.TP
+.B \-\-no\-advertise
+Skip the Bonjour advertisement that
+.B \-\-tls
+turns on.
+.SH HUB OPTIONS
+.TP
+.BI \-\-port " PORT"
+The port to listen on (default: 7101).
+.TP
+.BI \-\-agents " FILE"
+The agents to watch, as a JSON file of
+.nf
+{"agents":[{"name":"...","target":"...","pin":"...","token":"..."}]}
+.fi
+.TP
+.BI \-\-db " FILE"
+Where the history lives (SQLite); default under the state directory.
+.TP
+.BI \-\-bind " ADDRESS"
+The address to bind to (default: 127.0.0.1).
+.TP
+.B \-\-pair
+Print a pairing code so a client can pair with the hub.
+.TP
+.B \-\-tls
+Serve HTTPS with a self-signed certificate and enforce tokens.
+.SH CONNECT OPTIONS
+.TP
+.BI target
+The agent or hub to connect to, e.g.
+.BR 127.0.0.1:7100 .
+.TP
+.B \-\-tls
+Connect over TLS, verifying the certificate against
+.BR \-\-pin .
+.TP
+.BI \-\-pin " FINGERPRINT"
+The certificate fingerprint, exactly as the agent printed it:
+.BR SHA256:<64\ hex> .
+.TP
+.BI \-\-code " CODE"
+The pairing code, traded once for a token and then saved under the state
+directory for this host.
+.TP
+.B \-\-once
+Read one sample, print a one-line summary, and exit: the non-interactive
+client for scripts and CI pairing checks.
+.SH FILES
+.TP
+.BI ~/.config/ztop/
+State directory (tokens, hub history). Honors
+.BR $XDG_CONFIG_HOME .
 .SH EXAMPLES
 Run the agent with TLS and pairing:
 .PP
@@ -43,20 +109,10 @@ Run the agent with TLS and pairing:
 $ ztop agent \-\-tls \-\-pair
 .fi
 .PP
-Run the agent with control enabled:
+Pair a client and open the TUI:
 .PP
 .nf
-$ ztop agent \-\-tls \-\-pair \-\-allow\-control
+$ ztop connect \-\-tls \-\-pin SHA256:... \-\-code ABCDEF 127.0.0.1:7100
 .fi
-.SH FILES
-.TP
-.B ~/.config/ztop/
-Configuration directory.
-.TP
-.B ~/.local/share/ztop/
-Data directory (tokens, logs).
-.SH SEE ALSO
-.BR ztop\-hub (1),
-.BR ztop\-agent (1)
 .SH AUTHOR
 zTop Maintainers <maintainers@ztop.dev>
