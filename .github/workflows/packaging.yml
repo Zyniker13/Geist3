@@ -14,26 +14,53 @@ permissions:
   contents: read
 jobs:
   deb:
-    name: .deb (Debian/Ubuntu)
+    name: .deb ${{ matrix.arch }} (Debian/Ubuntu)
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            target: x86_64-unknown-linux-gnu
+            cross: false
+            install_test: true
+          - arch: arm64
+            target: aarch64-unknown-linux-gnu
+            cross: true
+            install_test: false
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         with:
           toolchain: stable
-          targets: x86_64-unknown-linux-gnu
+          targets: ${{ matrix.target }}
+      - name: Install cross toolchain
+        if: matrix.cross
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
       - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
+        with:
+          key: ${{ matrix.target }}
+      - name: Set cross linker
+        if: matrix.cross
+        run: |
+          echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> "$GITHUB_ENV"
+          echo "CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc" >> "$GITHUB_ENV"
+          echo "AR_aarch64_unknown_linux_gnu=aarch64-linux-gnu-ar" >> "$GITHUB_ENV"
       - name: Build .deb
         run: |
-          ./packaging/build-deb.sh 0.1.0 amd64
+          ./packaging/build-deb.sh 0.1.0 ${{ matrix.arch }}
           ls -la *.deb
       - name: Install .deb
+        if: matrix.install_test
         run: |
           sudo dpkg -i ztop_0.1.0_amd64.deb
           which ztop
           ztop --version
-      - name: Test agent
+      - name: Test agent and measure budget
+        if: matrix.install_test
         run: |
           # Start the agent in the background
           ztop agent --tls --pair --port 7102 &
@@ -44,10 +71,19 @@ jobs:
             echo "Agent failed to start"
             exit 1
           fi
+          # Measure the agent's memory against the DESIGN.md budget
+          # (under 1% of one core and under 30 MB resident memory)
+          ps -o %cpu,rss -p $AGENT_PID
+          RSS=$(ps -o rss= -p $AGENT_PID | tr -d ' ')
+          if [ "$RSS" -gt 30720 ]; then
+            echo "Agent RSS ${RSS} KB exceeds the 30 MB budget"
+            exit 1
+          fi
           # Kill the agent
           kill $AGENT_PID
           wait $AGENT_PID 2>/dev/null || true
       - name: Uninstall .deb
+        if: matrix.install_test
         run: |
           sudo dpkg -r ztop
           which ztop || echo "ztop removed successfully"
@@ -66,6 +102,9 @@ jobs:
         run: |
           cargo build --release
           ls -la target/release/ztop
+      - name: Check formula syntax
+        run: |
+          ruby -c packaging/homebrew/ztop.rb
       - name: Test agent
         run: |
           # Start the agent in the background
@@ -77,6 +116,9 @@ jobs:
             echo "Agent failed to start"
             exit 1
           fi
+          # Measure the agent's memory against the DESIGN.md budget (30 MB)
+          RSS=$(ps -o rss= -p $AGENT_PID | tr -d ' ')
+          echo "Agent RSS: ${RSS} KB"
           # Kill the agent
           kill $AGENT_PID
           wait $AGENT_PID 2>/dev/null || true
