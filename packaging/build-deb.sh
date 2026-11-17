@@ -103,10 +103,10 @@ fi
 EOF
 chmod 755 "$PKG_DIR/DEBIAN/prerm"
 
-# Build the .deb package
-dpkg-deb --build "$PKG_DIR"
+# Build the .deb package in the repository root
+dpkg-deb --build "$PKG_DIR" "${PACKAGE_NAME}_${VERSION}_${ARCH}.deb"
 
-echo "Built: ${BUILD_DIR}/${PACKAGE_NAME}_${VERSION}_${ARCH}.deb"
+echo "Built: ${PACKAGE_NAME}_${VERSION}_${ARCH}.deb"
 
-# Clean up
-rm -rf "$BUILD_DIR"
+# Clean up the staging directory (keep the .deb)
+rm -rf "$PKG_DIR"
