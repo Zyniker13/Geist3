@@ -176,9 +176,11 @@ public final class AgentClient: @unchecked Sendable {
         )
     }
 
-    /// `GET /v1/snapshot`: the agent's latest sample.
-    public func snapshot() async throws -> Sample {
-        let envelope: SnapshotEnvelope = try await get("/v1/snapshot")
+    /// `GET /v1/snapshot`: the agent's latest sample. Through a hub,
+    /// `host` names one of the hub's agents (`?host=`, decision 0048);
+    /// a direct agent call leaves it nil.
+    public func snapshot(host: String? = nil) async throws -> Sample {
+        let envelope: SnapshotEnvelope = try await get(Self.path("/v1/snapshot", host: host))
         return envelope.sample
     }
 
@@ -188,9 +190,11 @@ public final class AgentClient: @unchecked Sendable {
         try await get("/v1/hosts")
     }
 
-    /// `GET /v1/history?seconds=N`: up to the last N seconds of samples.
-    public func history(seconds: UInt64) async throws -> [Sample] {
-        let envelope: HistoryEnvelope = try await get("/v1/history?seconds=\(seconds)")
+    /// `GET /v1/history?seconds=N`: up to the last N seconds of
+    /// samples. Through a hub, `?host=` selects the machine and the
+    /// samples come from the hub's own store.
+    public func history(seconds: UInt64, host: String? = nil) async throws -> [Sample] {
+        let envelope: HistoryEnvelope = try await get(Self.path("/v1/history?seconds=\(seconds)", host: host))
         return envelope.samples
     }
 
@@ -251,6 +255,15 @@ public final class AgentClient: @unchecked Sendable {
     }
 
     // MARK: internals
+
+    /// Appends the hub's machine selector: `&host=name` after an
+    /// existing query, `?host=name` otherwise, percent-encoded.
+    static func path(_ base: String, host: String?) -> String {
+        guard let host, !host.isEmpty else { return base }
+        let encoded = host.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? host
+        let separator = base.contains("?") ? "&" : "?"
+        return "\(base)\(separator)host=\(encoded)"
+    }
 
     private func get<T: Decodable>(_ path: String) async throws -> T {
         var request = URLRequest(url: URL(string: "\(endpoint.urlBase)\(path)")!)

@@ -17,9 +17,10 @@ extension View {
     }
 }
 
-/// The add-host form: address, optional pin, optional immediate pairing.
+/// The add-host form: address, optional pin, optional immediate pairing,
+/// and a switch that makes the record a hub.
 struct AddHostSheet: View {
-    let onAdd: (String, String, UInt16, String, String) async throws -> Void
+    let onAdd: (String, String, UInt16, String, String, Bool) async throws -> Void
 
     @Environment(\.dismiss) private var dismiss
     @State private var name = ""
@@ -27,17 +28,23 @@ struct AddHostSheet: View {
     @State private var portText = "7100"
     @State private var pin = ""
     @State private var code = ""
+    @State private var isHub = false
     @State private var error: String?
     @State private var working = false
 
     var body: some View {
         NavigationStack {
             Form {
-                Section("Host") {
+                Section {
                     TextField("Name", text: $name, prompt: Text("e.g. workstation"))
                     TextField("Address", text: $host, prompt: Text("127.0.0.1"))
                         .autocorrectionDisabled()
-                    TextField("Port", text: $portText, prompt: Text("7100"))
+                    TextField("Port", text: $portText, prompt: Text(isHub ? "7101" : "7100"))
+                    Toggle("This is a hub", isOn: $isHub)
+                } footer: {
+                    Text(isHub
+                        ? "The hub watches a fleet: pair with it like an agent, and the machines it watches appear under its card."
+                        : "One machine's agent.")
                 }
                 Section {
                     TextField("SHA256 pin (optional)", text: $pin, prompt: Text("SHA256:…"))
@@ -55,7 +62,9 @@ struct AddHostSheet: View {
                 } header: {
                     Text("Pairing")
                 } footer: {
-                    Text("Run `ztop agent --pair` and enter the code to pair right away; you can also pair later from the host card.")
+                    Text(isHub
+                        ? "Run `ztop hub --pair` and enter the code it prints to pair right away."
+                        : "Run `ztop agent --pair` and enter the code to pair right away; you can also pair later from the host card.")
                 }
                 if let error {
                     Section {
@@ -107,10 +116,10 @@ struct AddHostSheet: View {
         guard let parsedPort = port else {
             throw AgentError.badAnswer("the port must be a number between 1 and 65535")
         }
-        try await onAdd(trimmedName, trimmedHost, parsedPort, pin.trimmingCharacters(in: .whitespaces), code.trimmingCharacters(in: .whitespaces))
+        try await onAdd(trimmedName, trimmedHost, parsedPort, pin.trimmingCharacters(in: .whitespaces), code.trimmingCharacters(in: .whitespaces), isHub)
     }
 }
 
 #Preview {
-    AddHostSheet { _, _, _, _, _ in }
+    AddHostSheet { _, _, _, _, _, _ in }
 }

@@ -96,6 +96,12 @@ struct HostDetailContent: View {
     /// True in the recorded-run snapshot: the search box draws as a
     /// static field because ImageRenderer cannot draw `TextField`.
     var staticProcessSearch = false
+    /// A hub machine's detail hides the process table: the hub
+    /// archives samples, not process lists.
+    var showsProcesses = true
+    /// The caption address when it is not the record's own (a hub
+    /// machine's real agent address comes from the hub's config).
+    var addressOverride: String? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -135,7 +141,9 @@ struct HostDetailContent: View {
             socSection
             gpuSection
             pressureSection
-            processSection
+            if showsProcesses {
+                processSection
+            }
         }
     }
 
@@ -157,7 +165,7 @@ struct HostDetailContent: View {
                     .font(.caption.weight(.medium))
                     .foregroundStyle(stateColor)
             }
-            Text("\(record.host):\(record.port)")
+            Text(addressOverride ?? "\(record.host):\(record.port)")
                 .font(.caption.monospaced())
                 .foregroundStyle(.secondary)
             if let sample = live?.sample {

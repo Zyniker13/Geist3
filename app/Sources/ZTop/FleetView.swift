@@ -50,6 +50,8 @@ struct FleetContent: View {
     /// The SoC screen's pushed record (the toolbar gauge on the
     /// detail page, or `ZTOP_SOC` in a recorded run).
     @State private var socTarget: HostRecord?
+    /// The pushed hub machine's detail.
+    @State private var hubDetail: HubMachine?
     /// The recorded-run demo switch: render synthetic process rows
     /// instead of the live ones (screenshots carry fake values only).
     @State private var demoProcesses = false
@@ -103,9 +105,17 @@ struct FleetContent: View {
             .navigationDestination(item: $socTarget) { record in
                 SocView(store: store, record: record)
             }
+            .navigationDestination(item: $hubDetail) { machine in
+                if let hub = store.records.first(where: { $0.id == machine.hubID }) {
+                    HubDetailView(store: store, hub: hub, machine: machine)
+                } else {
+                    Text("The hub was removed.")
+                        .foregroundStyle(.secondary)
+                }
+            }
             .sheet(isPresented: $showingAdd) {
-                AddHostSheet { name, host, port, pin, code in
-                    _ = try await store.add(name: name, host: host, port: port, pin: pin, code: code)
+                AddHostSheet { name, host, port, pin, code, isHub in
+                    _ = try await store.add(name: name, host: host, port: port, pin: pin, code: code, isHub: isHub)
                 }
             }
             .sheet(item: $pairing) { record in
@@ -119,6 +129,11 @@ struct FleetContent: View {
                 // then the live state is rendered to the snapshot path.
                 if let seeds = ProcessInfo.processInfo.environment["ZTOP_PAIR"], !seeds.isEmpty {
                     await store.seed(from: seeds)
+                }
+                // The hub seed pairs a hub record the same way, so a
+                // recorded run reaches the fleet through one hub.
+                if let hubSeeds = ProcessInfo.processInfo.environment["ZTOP_HUB_PAIR"], !hubSeeds.isEmpty {
+                    await store.seedHub(from: hubSeeds)
                 }
                 // The alert engine rides the store's published state
                 // from here on; recorded runs may seed rules by host
@@ -395,13 +410,26 @@ struct FleetContent: View {
                     .foregroundStyle(.secondary)
             }
             Divider()
-            ForEach(store.records) { record in
+            ForEach(store.records.filter { !$0.isHub }) { record in
                 HostCard(record: record, live: store.live[record.id], onPair: {}, onForget: {})
+            }
+            if !store.hubMachines.isEmpty {
+                Text("Through the hub")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.secondary)
+                ForEach(store.hubMachines) { machine in
+                    HubMachineCard(machine: machine)
+                }
             }
             Spacer(minLength: 0)
         }
         .padding(24)
-        .frame(width: 820, height: 200 + 56 * CGFloat(store.records.count), alignment: .top)
+        .frame(
+            width: 820,
+            height: 200 + 56 * CGFloat(store.records.filter { !$0.isHub }.count)
+                + (store.hubMachines.isEmpty ? 0 : 46 + 56 * CGFloat(store.hubMachines.count)),
+            alignment: .top
+        )
         .background(backdrop)
         let renderer = ImageRenderer(content: content)
         renderer.scale = 2
@@ -423,7 +451,7 @@ struct FleetContent: View {
 
     private var cards: some View {
         List {
-            ForEach(store.records) { record in
+            ForEach(store.records.filter { !$0.isHub }) { record in
                 HostCard(record: record, live: store.live[record.id]) {
                     pairing = record
                 } onForget: {
@@ -434,7 +462,26 @@ struct FleetContent: View {
             }
             .onDelete { indexSet in
                 for index in indexSet {
-                    store.remove(store.records[index])
+                    store.remove(store.records.filter { !$0.isHub }[index])
+                }
+            }
+            // The saved hubs and the machines they watch. A hub is
+            // reached the same way everywhere: pair with it once, and
+            // its fleet shows here, states and samples read through
+            // it (`?host=`).
+            ForEach(store.records.filter { $0.isHub }) { hub in
+                Section("Through \(hub.name)") {
+                    let machines = store.hubMachines.filter { $0.hubID == hub.id }
+                    if machines.isEmpty {
+                        Text(store.live[hub.id] == nil ? "Reading the hub…" : "The hub watches no agents.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    ForEach(machines) { machine in
+                        HubMachineCard(machine: machine)
+                            .contentShape(Rectangle())
+                            .onTapGesture { hubDetail = machine }
+                    }
                 }
             }
         }

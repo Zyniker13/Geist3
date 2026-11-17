@@ -29,7 +29,15 @@ targets:
           set -e
           case "$PLATFORM_NAME" in
             macos*) ;;
-            *) exit 0 ;;
+            *)
+              # Xcode pre-creates the phase's declared output paths on
+              # every platform, including the Contents/ directory this
+              # phase only fills on macOS — and a flat iOS bundle must
+              # not contain a Contents/ directory (simctl then fails
+              # to read its bundle ID).
+              rm -rf "$BUILT_PRODUCTS_DIR/ZTop.app/Contents"
+              exit 0
+              ;;
           esac
           BIN="$SRCROOT/../target/release/ztop"
           if [ ! -x "$BIN" ]; then
