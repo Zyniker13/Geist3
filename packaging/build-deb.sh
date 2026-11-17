@@ -35,7 +35,7 @@ case "$ARCH" in
 esac
 
 # Build the binary
-cd "$(dirname "$0")/../.."
+cd "$(dirname "$0")/.."
 cargo build --release --target "$TARGET"
 
 # Create the package structure
