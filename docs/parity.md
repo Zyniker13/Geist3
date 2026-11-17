@@ -354,9 +354,8 @@ Check an item only when it works and a test or a recorded check shows it. Add th
 - [x] Process list: search, sort and, where allowed, signals — a Processes section on the detail page fed by the agent's `/v1/processes` (5 s loop): a search box matching name/user case-insensitively plus pid prefix, a sort menu over cpu/memory/pid/name/user with a pid-ascending tie-break that holds in both directions (`ProcessTable`, 6 ZTopKit tests), rows with user·state, pid and cpu/mem columns, and a per-row menu of every signal the TARGET agent's catalog numbers (`GET /v1/control`, so macOS STOP 17 / Linux STOP 19 is always the target's own numbering) plus renice ±; SIGKILL asks for confirmation, and a refusal (agent without `--allow-control`, or a read-only token) surfaces as an alert with the agent's wording (`AgentError.refused`). End-to-end control is tested over real TLS in ZTopKit (`controlRefusesWithoutTheGrantAndActsThroughTheCatalog`: refusal wording, catalog read with a read-only token, then a real STOP/CONT/TERM delivered to a process the test owns). Recorded live with synthetic rows (`ZTOP_PROCESSES_DEMO`, so no real process list is committed) in `docs/screenshots/m6-mac-detail-processes.png` (decision 0052).
 - [x] Disks, network, temperatures and fans — recorded live in `docs/screenshots/m6-mac-detail-disks-net.png`: the detail page shows a network section (aggregate chart with a real burst, per-interface rx/tx rows: en0/en1/anpi0/anpi1/lo0) and a disks section (per-device rows with mount path, usage bar and percent, read/write rate lines), alongside the existing CPU/memory/load/temperatures/fans/Apple-Silicon sections. macOS disk/network data comes from decision 0051's collectors; temperatures, fans and power were already live (decision 0013 sources).
 - [x] Alerts with thresholds and local notifications — `AlertRule`/`AlertEngine` in ZTopKit (kinds cpu/memory/load/disk/unreachable, fleet-wide or per-host, duration before firing, clear events, per-(rule, host) timers; 11 tests with fixed clocks) and `AlertCenter` in the app (rules in `alerts.json`, evaluation off `HostStore.$live`, UNUserNotificationCenter posts only for an authorized user — authorization is requested from the add-alert sheet). The alerts screen shows rules with condition text and firing badges; recorded live: a fleet-wide CPU rule fired and then an unreachable rule fired after an agent was killed — `docs/screenshots/m6-mac-alert-firing.png`, `m6-mac-alerts-two-firing.png` (decision 0050).
-- [ ] Mac app installs and runs the hub as a login item; iPad works through the hub
-  - Partial (14a done, the iPad-through-hub half still open): the app
-    runs the hub itself — the `ztop` binary is embedded in the app
+- [x] Mac app installs and runs the hub as a login item; iPad works through the hub
+  - The app runs the hub itself — the `ztop` binary is embedded in the app
     bundle (`Contents/MacOS/ztop-embedded`, a build phase), the hub
     screen (`HubView`, toolbar "Hub") shows the endpoint
     `127.0.0.1:7101 · TLS · pairing on`, the hub's printed TLS
@@ -379,9 +378,17 @@ Check an item only when it works and a test or a recorded check shows it. Add th
     `docs/screenshots/m6-mac-hub.png`: the app starts the embedded
     hub, both agents read back **Live** through it over TLS with
     their own pins. `ZTOP_HUB=1` recorded-run hook; decision 0054.
-    Remaining: the iPad side — connecting the app through one hub
-    endpoint (`?host=` selects the machine) and the three-agent
-    recorded check.
+    The iPad side (14b): the app connects through one hub endpoint —
+    `HostStore.seedHub` pairs with the hub's printed code (env
+    `ZTOP_HUB_PAIR` for recorded runs) and stores the hub as a
+    `HostRecord(isHub: true)`; `FleetView` shows a "Through the hub"
+    section with one card per watched agent (live CPU/MEM from the
+    hub's `/v1/hosts` poll); tapping a card opens `HubDetailView`,
+    which reads the machine's history through the hub's `?host=`
+    endpoint. `HostStore.save()` falls back to file-stored tokens
+    when the Keychain is unavailable (simulator). Recorded live in
+    `docs/screenshots/m6-ipad-hub.png`: three agents (host-a, host-b,
+    host-c) read back **Live** through one hub endpoint on the iPad.
 - [ ] iPad split view and Stage Manager sizes; Mac window sizes
 - [ ] VoiceOver, Dynamic Type and contrast pass
 
