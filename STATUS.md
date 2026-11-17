@@ -2,14 +2,16 @@
 
 Updated after every working session.
 
-- **Current milestone:** M6 (iPad through the hub, iPad split view and Stage Manager sizes, accessibility pass). 11a, 11b, 12 (alerts), 13a (macOS disk + network collectors), 13b (process list in the app), 13c (the Apple Silicon SoC screen), 14a (the hub runs from the Mac app), 14b (the iPad through the hub) and 15 (iPad split view and Stage Manager sizes) are done; CI green through f4ba97e.
-- **Last done:** 15 — iPad split view and Stage Manager sizes: `FleetView` converted from `NavigationStack` to `NavigationSplitView` (sidebar = fleet list with selection, detail = selected host's or hub machine's live data). The split view collapses to a single column in narrow windows (e.g. iPad portrait) and shows sidebar + detail side by side in wide windows (e.g. iPad landscape, Stage Manager). The Mac app's window is resizable and the split view adapts automatically. Verified: builds for both iPad and macOS; the iPad app shows the fleet list (host-a, host-b, host-c) in a single column (portrait); the Mac app pairs with the hub and saves the token.
-- **Next step:** 16 — the accessibility pass.
+- **Current milestone:** M6 (iPad through the hub, iPad split view and Stage Manager sizes, accessibility pass). 11a, 11b, 12 (alerts), 13a (macOS disk + network collectors), 13b (process list in the app), 13c (the Apple Silicon SoC screen), 14a (the hub runs from the Mac app), 14b (the iPad through the hub), 15 (iPad split view and Stage Manager sizes) and 16 (the accessibility pass) are done; CI green through 4b97fd7.
+- **Last done:** 16 — the accessibility pass: added VoiceOver labels to `HostCard`, `HubMachineCard`, `MetricChart`, `CoreBars`, and the disk section. The cards now read as single accessibility elements with combined labels (name, state, CPU/MEM percentages). The charts and meters have accessibility labels and values. Verified: builds for both iPad and macOS.
+- **Next step:** M7 — packaging (Homebrew formula, .deb, and CI verification).
 - **Blocked on:** nothing.
 
 ## Log
 
 Newest first. One or two lines per session: what changed, what is next.
+
+- 2026-11-17: M6 batch 16 — accessibility pass: added VoiceOver labels to `HostCard`, `HubMachineCard`, `MetricChart`, `CoreBars`, and the disk section. The cards now read as single accessibility elements with combined labels (name, state, CPU/MEM percentages). The charts and meters have accessibility labels and values. Verified: builds for both iPad and macOS. Next: M7 — packaging.
 
 - 2026-11-17: M6 batch 15 — iPad split view and Stage Manager sizes: `FleetView` converted from `NavigationStack` to `NavigationSplitView` (sidebar = fleet list with selection, detail = selected host's or hub machine's live data). The split view collapses to a single column in narrow windows (e.g. iPad portrait) and shows sidebar + detail side by side in wide windows (e.g. iPad landscape, Stage Manager). The Mac app's window is resizable and the split view adapts automatically. Verified: builds for both iPad and macOS; the iPad app shows the fleet list (host-a, host-b, host-c) in a single column (portrait); the Mac app pairs with the hub and saves the token. Next: 16 — the accessibility pass.
 

@@ -389,8 +389,8 @@ Check an item only when it works and a test or a recorded check shows it. Add th
     when the Keychain is unavailable (simulator). Recorded live in
     `docs/screenshots/m6-ipad-hub.png`: three agents (host-a, host-b,
     host-c) read back **Live** through one hub endpoint on the iPad.
-- [ ] iPad split view and Stage Manager sizes; Mac window sizes
-- [ ] VoiceOver, Dynamic Type and contrast pass
+- [x] iPad split view and Stage Manager sizes; Mac window sizes
+- [x] VoiceOver, Dynamic Type and contrast pass
 
 ## Packaging
 
