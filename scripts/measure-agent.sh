@@ -24,7 +24,16 @@ echo "Port: ${PORT}"
 echo ""
 
 # Start the agent in the background
-ztop agent --tls --pair --port "$PORT" &
+# Use the release binary if it exists, otherwise use the debug binary
+if [[ -f "target/release/ztop" ]]; then
+    ZTOP_BIN="target/release/ztop"
+elif [[ -f "target/debug/ztop" ]]; then
+    ZTOP_BIN="target/debug/ztop"
+else
+    ZTOP_BIN="ztop"
+fi
+
+"$ZTOP_BIN" agent --tls --pair --port "$PORT" &
 AGENT_PID=$!
 
 echo "Agent started (PID: ${AGENT_PID})"
