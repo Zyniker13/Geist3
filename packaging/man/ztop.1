@@ -1,0 +1,62 @@
+.\" SPDX-License-Identifier: MIT OR Apache-2.0
+.TH ZTOP 1 "November 2026" "zTop 0.1.0" "User Commands"
+.SH NAME
+ztop \- a lightweight system monitor for macOS and Linux
+.SH SYNOPSIS
+.B ztop
+[\fIOPTIONS\fR]
+.SH DESCRIPTION
+.B ztop
+is a lightweight system monitor that displays CPU, memory, disk, and network
+usage in real time. It runs as a local agent that collects metrics and
+serves them over a secure, paired connection.
+.SH OPTIONS
+.TP
+.B \-\-port <PORT>
+The port to listen on (default: 7102).
+.TP
+.B \-\-bind <ADDRESS>
+The address to bind to (default: 127.0.0.1).
+.TP
+.B \-\-tls
+Enable TLS (required for pairing).
+.TP
+.B \-\-pair
+Enable pairing (required for remote access).
+.TP
+.B \-\-allow\-control
+Allow paired clients to send signals and renice processes.
+.TP
+.B \-\-no\-advertise
+Do not advertise the agent on the local network.
+.SH SUBCOMMANDS
+.TP
+.B agent
+Run the zTop agent (default).
+.TP
+.B hub
+Run the zTop hub (for managing multiple agents).
+.SH EXAMPLES
+Run the agent with TLS and pairing:
+.PP
+.nf
+$ ztop agent \-\-tls \-\-pair
+.fi
+.PP
+Run the agent with control enabled:
+.PP
+.nf
+$ ztop agent \-\-tls \-\-pair \-\-allow\-control
+.fi
+.SH FILES
+.TP
+.B ~/.config/ztop/
+Configuration directory.
+.TP
+.B ~/.local/share/ztop/
+Data directory (tokens, logs).
+.SH SEE ALSO
+.BR ztop\-hub (1),
+.BR ztop\-agent (1)
+.SH AUTHOR
+zTop Maintainers <maintainers@ztop.dev>
