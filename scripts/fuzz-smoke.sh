@@ -31,11 +31,15 @@ for target in $(ls fuzz_targets/*.rs | sed 's|fuzz_targets/||; s|\.rs$||' | sort
         out="$(cargo +nightly fuzz run "$target" --sanitizer none -- \
             -runs="$runs" -max_len="$max_len" 2>&1 || true)"
         printf '%s\n' "$out"
+        # Join the tail of the output into one workflow-command message
+        # (newlines as %0A). awk, not sed: the label-loop idiom is GNU
+        # only, and the macOS runner's BSD sed would fail it, killing
+        # the script under set -e before the annotation is printed.
         msg="$(printf '%s\n' "$out" \
             | tr -d '\r' \
             | sed 's/%/%25/g' \
             | tail -c 1400 \
-            | sed -e ':a' -e 'N' -e '$!ba' -e 's/\n/%0A/g')"
+            | awk 'NR>1{printf "%0A"} {printf "%s", $0}')"
         printf '::error title=fuzz target %s::%s\n' "$target" "$msg"
         status=1
     fi

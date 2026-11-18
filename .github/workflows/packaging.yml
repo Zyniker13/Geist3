@@ -129,7 +129,21 @@ jobs:
           # A local tap must be trusted before its formulae load (older
           # brew versions have no such requirement; tolerate both).
           brew trust local/ztop 2>/dev/null || true
-          brew install --build-from-source local/ztop/ztop
+          # Capture the install output: if it fails, the reason must
+          # survive in the run's annotations, where the step log is not
+          # readable.
+          if brew install --build-from-source local/ztop/ztop \
+              > "$RUNNER_TEMP/brew-install.log" 2>&1
+          then
+            cat "$RUNNER_TEMP/brew-install.log"
+          else
+            cat "$RUNNER_TEMP/brew-install.log"
+            msg="$(tail -c 1400 "$RUNNER_TEMP/brew-install.log" \
+              | tr -d '\r' | sed 's/%/%25/g' \
+              | awk 'NR>1{printf "%0A"} {printf "%s", $0}')"
+            echo "::error title=brew install ztop::${msg}"
+            exit 1
+          fi
           "$(brew --prefix)/bin/ztop" --version
       - name: Upgrade the formula
         run: |
