@@ -4,11 +4,11 @@ Purpose: one line per plan task (`Pn.k`) with its state, so a fresh session can 
 
 | Task | Title | State | Notes |
 | --- | --- | --- | --- |
-| P0.1 | Repository bootstrap | done | package moved verbatim to `docs/plan/`; §3 skeleton + docs skeletons created |
-| P0.2 | XcodeGen project | pending | |
-| P0.3 | Packages | pending | 13 SPM packages |
-| P0.4 | Tooling | pending | Makefile, SwiftLint, swift-format, check-imports, rules-cli stub |
-| P0.5 | CI | pending | `.github/workflows/ci.yml` |
-| P0.6 | ADRs | pending | ADR-0001–0020 |
-| P0.7 | Competitor test sheet | pending | `docs/research/COMPETITORS.md`, blank columns |
-| P0.Z | Gate run G0 | pending | |
+| P0.1 | Repository bootstrap | done | package moved verbatim to `docs/plan/`; §3 skeleton + docs skeletons created (commit `29e82b4`) |
+| P0.2 | XcodeGen project | done | `project.yml`, app targets, Info.plists, tests; `make gen && make build` clean on iOS Simulator + macOS (commit `bcb54ae`) |
+| P0.3 | Packages | done | 13 SPM packages, placeholder types, Swift Testing tests; `swift test` green in each (commit `bcb54ae`) |
+| P0.4 | Tooling | done | Makefile (15 targets), SwiftLint whitelist configs + banned-API rules, swift-format, `check-imports.sh` (bash 3.2, 3 violation classes proven), `rules-cli`/`net-fuzz` stubs |
+| P0.5 | CI | done | `.github/workflows/ci.yml` per CONVENTIONS §7; `reports/` gitignored |
+| P0.6 | ADRs | done | ADR-0001–0020 in `docs/DECISIONS.md`, all Accepted |
+| P0.7 | Competitor test sheet | done | `docs/research/COMPETITORS.md`: 8 apps, blank columns + instructions |
+| P0.Z | Gate run G0 | in progress | `make test` rerun for evidence; then `make gate PHASE=P0`, push, CI green, tag `gate-G0-pass` |
