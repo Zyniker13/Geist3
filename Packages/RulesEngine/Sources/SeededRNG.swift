@@ -12,43 +12,68 @@ public struct SplitMix64: Sendable {
 
     public mutating func next() -> UInt64 {
         state = state &+ 0x9E37_79B9_7F4A_7C15
-        var z = state
-        z = (z ^ (z >> 30)) &* 0xBF58_476D_1CE4_E5B9
-        z = (z ^ (z >> 27)) &* 0x94D0_49BB_1331_11EB
-        return z ^ (z >> 31)
+        var mixed = state
+        mixed = (mixed ^ (mixed >> 30)) &* 0xBF58_476D_1CE4_E5B9
+        mixed = (mixed ^ (mixed >> 27)) &* 0x94D0_49BB_1331_11EB
+        return mixed ^ (mixed >> 31)
     }
 
     /// Pure function form used for deal seeds.
     public static func derive(from seed: UInt64) -> UInt64 {
-        var sm = SplitMix64(seed: seed)
-        return sm.next()
+        var splitmix = SplitMix64(seed: seed)
+        return splitmix.next()
     }
 }
 
 public struct SeededRNG: Codable, Hashable, Sendable {
-    public var s0: UInt64
-    public var s1: UInt64
-    public var s2: UInt64
-    public var s3: UInt64
+    /// Encoded keys stay `s0`–`s3` so serialized RNG state (and therefore
+    /// golden replay hashes) do not change with the Swift property names.
+    private enum CodingKeys: String, CodingKey {
+        case s0, s1, s2, s3
+    }
 
-    public init(s0: UInt64, s1: UInt64, s2: UInt64, s3: UInt64) {
-        self.s0 = s0
-        self.s1 = s1
-        self.s2 = s2
-        self.s3 = s3
-        if self.s0 == 0 && self.s1 == 0 && self.s2 == 0 && self.s3 == 0 {
-            self.s3 = 1 // xoshiro256** must not start all-zero
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        lane0 = try container.decode(UInt64.self, forKey: .s0)
+        lane1 = try container.decode(UInt64.self, forKey: .s1)
+        lane2 = try container.decode(UInt64.self, forKey: .s2)
+        lane3 = try container.decode(UInt64.self, forKey: .s3)
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(lane0, forKey: .s0)
+        try container.encode(lane1, forKey: .s1)
+        try container.encode(lane2, forKey: .s2)
+        try container.encode(lane3, forKey: .s3)
+    }
+
+    public var lane0: UInt64
+    public var lane1: UInt64
+    public var lane2: UInt64
+    public var lane3: UInt64
+
+    public init(lane0: UInt64, lane1: UInt64, lane2: UInt64, lane3: UInt64) {
+        self.lane0 = lane0
+        self.lane1 = lane1
+        self.lane2 = lane2
+        self.lane3 = lane3
+        if lane0 == 0 && lane1 == 0 && lane2 == 0 && lane3 == 0 {
+            self.lane3 = 1  // xoshiro256** must not start all-zero
         }
     }
 
     /// SplitMix64 expansion of a 64-bit seed (§10.1). Never all-zero.
     public init(seed: UInt64) {
-        var sm = SplitMix64(seed: seed)
-        var s0 = sm.next(), s1 = sm.next(), s2 = sm.next(), s3 = sm.next()
-        if s0 == 0 && s1 == 0 && s2 == 0 && s3 == 0 {
-            s3 = 1 // xoshiro256** must not start all-zero
+        var splitmix = SplitMix64(seed: seed)
+        var state0 = splitmix.next()
+        var state1 = splitmix.next()
+        var state2 = splitmix.next()
+        var state3 = splitmix.next()
+        if state0 == 0 && state1 == 0 && state2 == 0 && state3 == 0 {
+            state3 = 1  // xoshiro256** must not start all-zero
         }
-        self.init(s0: s0, s1: s1, s2: s2, s3: s3)
+        self.init(lane0: state0, lane1: state1, lane2: state2, lane3: state3)
     }
 
     /// `dealSeed(i) = splitmix64(sessionSeed ^ UInt64(i))` (§10.2).
@@ -57,36 +82,36 @@ public struct SeededRNG: Codable, Hashable, Sendable {
     }
 
     @inline(__always)
-    private static func rotl(_ x: UInt64, _ k: UInt64) -> UInt64 {
-        (x << k) | (x >> (64 &- k))
+    private static func rotl(_ value: UInt64, _ amount: UInt64) -> UInt64 {
+        (value << amount) | (value >> (64 &- amount))
     }
 
     /// One xoshiro256** step; returns the output word.
     public mutating func nextUInt64() -> UInt64 {
-        let result = SeededRNG.rotl(s1 &* 5, 7) &* 9
-        let t = s1 << 17
-        s2 ^= s0
-        s3 ^= s1
-        s1 ^= s2
-        s0 ^= s3
-        s2 ^= t
-        s3 = SeededRNG.rotl(s3, 45)
+        let result = SeededRNG.rotl(lane1 &* 5, 7) &* 9
+        let scratch = lane1 << 17
+        lane2 ^= lane0
+        lane3 ^= lane1
+        lane1 ^= lane2
+        lane0 ^= lane3
+        lane2 ^= scratch
+        lane3 = SeededRNG.rotl(lane3, 45)
         return result
     }
 
     /// Lemire's nearly-divisionless bounded integer in `0..<bound`.
     public mutating func below(_ bound: UInt64) -> UInt64 {
         precondition(bound > 0, "bound must be positive")
-        var x = nextUInt64()
-        var m = x.multipliedFullWidth(by: bound)
-        if m.low < bound {
-            let threshold = (0 &- bound) % bound // 2^64 mod bound
-            while m.low < threshold {
-                x = nextUInt64()
-                m = x.multipliedFullWidth(by: bound)
+        var draw = nextUInt64()
+        var product = draw.multipliedFullWidth(by: bound)
+        if product.low < bound {
+            let threshold = (0 &- bound) % bound  // 2^64 mod bound
+            while product.low < threshold {
+                draw = nextUInt64()
+                product = draw.multipliedFullWidth(by: bound)
             }
         }
-        return m.high
+        return product.high
     }
 
     public mutating func below(_ bound: Int) -> Int {
@@ -103,11 +128,11 @@ public struct SeededRNG: Codable, Hashable, Sendable {
     /// Fisher–Yates shuffle, from the top (§10.1).
     public mutating func shuffle<T>(_ array: inout [T]) {
         guard array.count > 1 else { return }
-        var i = array.count - 1
-        while i > 0 {
-            let j = below(i + 1)
-            array.swapAt(i, j)
-            i -= 1
+        var cursor = array.count - 1
+        while cursor > 0 {
+            let pick = below(cursor + 1)
+            array.swapAt(cursor, pick)
+            cursor -= 1
         }
     }
 

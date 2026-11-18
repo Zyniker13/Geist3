@@ -31,7 +31,7 @@ public struct SeatSet: Hashable, Codable, Sendable, Sequence {
         var bits: UInt64
         mutating public func next() -> Seat? {
             guard bits != 0 else { return nil }
-            let low = bits & (~bits &+ 1) // isolate lowest set bit
+            let low = bits & (~bits &+ 1)  // isolate lowest set bit
             bits &= bits &- 1
             return Seat(low.trailingZeroBitCount)
         }
@@ -69,5 +69,5 @@ public struct SeatSet: Hashable, Codable, Sendable, Sequence {
     public func intersection(_ other: SeatSet) -> SeatSet { SeatSet(bits: bits & other.bits) }
     public func subtracting(_ other: SeatSet) -> SeatSet { SeatSet(bits: bits & ~other.bits) }
 
-    public static func union(_ a: SeatSet, _ b: SeatSet) -> SeatSet { a.union(b) }
+    public static func union(_ first: SeatSet, _ second: SeatSet) -> SeatSet { first.union(second) }
 }

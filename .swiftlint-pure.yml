@@ -2,6 +2,8 @@
 # Scope: CardModel, CardExpr, RulesEngine, RulesetKit, CardAI, Teaching
 # (Sources and Tests). UI packages legitimately use Float/CGFloat and are
 # excluded on purpose.
+disabled_rules:
+  - trailing_comma
 included:
   - Packages/CardModel/Sources
   - Packages/CardModel/Tests
@@ -17,6 +19,23 @@ included:
   - Packages/Teaching/Tests
 excluded:
   - .build
+# Same identifier-name policy as the main config (CONVENTIONS §7): the
+# deterministic packages use short loop variables (i, n, s, x, y, z) and
+# id/x/y/z coordinate names; keep the two configs in lockstep so the
+# banned-API lint and the style lint never disagree.
+identifier_name:
+  min_length:
+    warning: 2
+  excluded:
+    - id
+    - x
+    - y
+    - z
+    - i
+    - n
+    - s
+large_tuple:
+  warning: 3
 custom_rules:
   banned-date:
     name: "Banned API: Date()"

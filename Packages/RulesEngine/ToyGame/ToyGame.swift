@@ -20,20 +20,24 @@ import CardModel
     }
 
     public static func engine() -> Engine {
-        let deal = AnyMechanic(DealMechanic.self, params: DealParams(
-            source: "stock",
-            packets: [DealPacket(to: Seat(0), each: 5), DealPacket(to: Seat(1), each: 5)],
-            shuffleFirst: true,
-            deckFaces: stockFaces()
-        ))
-        let trick = AnyMechanic(TrickPlayMechanic.self, params: TrickPlayParams(
-            seatCount: seatCount,
-            tricks: tricks,
-            activeSeats: [Seat(0), Seat(1)],
-            firstLeader: Seat(1), // left of dealer (seat 0) in a two-hand game
-            winnerRule: .highestOfLed,
-            followRuleId: "toy.follow"
-        ))
+        let deal = AnyMechanic(
+            DealMechanic.self,
+            params: DealParams(
+                source: "stock",
+                packets: [DealPacket(to: Seat(0), each: 5), DealPacket(to: Seat(1), each: 5)],
+                shuffleFirst: true,
+                deckFaces: stockFaces()
+            ))
+        let trick = AnyMechanic(
+            TrickPlayMechanic.self,
+            params: TrickPlayParams(
+                seatCount: seatCount,
+                tricks: tricks,
+                activeSeats: [Seat(0), Seat(1)],
+                firstLeader: Seat(1),  // left of dealer (seat 0) in a two-hand game
+                winnerRule: .highestOfLed,
+                followRuleId: "toy.follow"
+            ))
         return Engine(
             phases: [
                 PhaseConfig(id: "deal", mechanic: deal),
@@ -58,7 +62,7 @@ import CardModel
                 let action = Action(seat: seat, intent: legal[pick], expectedVersion: state.version)
                 state = try engine.apply(action, to: state).state
                 acted = true
-                break // exactly one seat is pending at a time in this game
+                break  // exactly one seat is pending at a time in this game
             }
             if !acted {
                 // No pending seat but not done: stall (should not happen).

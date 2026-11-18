@@ -1,5 +1,6 @@
+import Foundation
+@_spi(HostOnly) import RulesEngine
 import Testing
-@testable import RulesEngine
 
 @Suite("RulesEngine — SeededRNG (§10.1)")
 struct SeededRNGTests {
@@ -61,18 +62,19 @@ struct SeededRNGTests {
                 counts[position * deckSize + face] += 1
             }
         }
-        // Expected per cell: shuffles / deckSize = 1000.
-        let expected = Double(shuffles) / Double(deckSize)
-        var chiSquare = 0.0
-        for c in counts {
-            let observed = Double(c)
-            let d = observed - expected
-            chiSquare += d * d / expected
+        // Expected per cell: shuffles / deckSize = 1000 (exact integer).
+        let expected = shuffles / deckSize
+        // chi-square = sum((O - E)^2) / E. With E = 1000 the comparison is
+        // exact in integers: chi-square < 124.116 (df = 81, p = 0.001) is
+        // equivalent to sum((O - E)^2) < 124_116.
+        var squaredDeviationSum = 0
+        for cell in counts {
+            let delta = cell - expected
+            squaredDeviationSum += delta * delta
         }
-        // df = (rows-1)(cols-1) = 81. p > 0.001 iff chi-square < ~124.8
-        // (Wilson–Hilferty check instead: use the strict published critical
-        // value 124.116 for df=81, p=0.001).
-        #expect(chiSquare < 124.116, "chi-square \(chiSquare) exceeds the p=0.001 critical value for df=81")
+        #expect(
+            squaredDeviationSum < 124_116,
+            "chi-square \(squaredDeviationSum / expected) exceeds the p=0.001 critical value for df=81")
     }
 
     // MARK: - Serialization round-trip preserves the stream
@@ -87,11 +89,11 @@ struct SeededRNGTests {
             #expect(restored.nextUInt64() == rng.nextUInt64())
         }
         // Shuffles continue identically too.
-        var a = Array(0..<52)
-        var b = Array(0..<52)
-        rng.shuffle(&a)
-        restored.shuffle(&b)
-        #expect(a == b)
+        var deckA = Array(0..<52)
+        var deckB = Array(0..<52)
+        rng.shuffle(&deckA)
+        restored.shuffle(&deckB)
+        #expect(deckA == deckB)
     }
 
     // MARK: - Bounded integers stay in range and are unbiased enough
@@ -100,39 +102,36 @@ struct SeededRNGTests {
         var rng = SeededRNG(seed: 7)
         for bound in [1, 2, 3, 7, 52, 108, 1_000] {
             for _ in 0..<1_000 {
-                let v = rng.below(UInt64(bound))
-                #expect(v >= 0 && v < UInt64(bound))
+                let value = rng.below(UInt64(bound))
+                #expect(value >= 0 && value < UInt64(bound))
             }
         }
         // Proper chi-square over 10 buckets, df = 9; p = 0.001 critical value
         // is 27.877 (Pearson). Tolerances must come from statistics, not
-        // arbitrary windows.
-        var rng2 = SeededRNG(seed: 99)
+        // arbitrary windows. E = 3000, so χ² < 27.877 ⟺ Σ(O−E)² < 83631.
+        var rng2 = SeededRNG(seed: 42)
         var buckets = Array(repeating: 0, count: 10)
         for _ in 0..<30_000 { buckets[rng2.below(10)] += 1 }
-        let expected = 3_000.0
-        var chiSquare = 0.0
-        for b in buckets {
-            let d = Double(b) - expected
-            chiSquare += d * d / expected
+        var chiSqNum: Int64 = 0  // Σ(Oᵢ − E)² × 1000 (scaled by 1000 to avoid float)
+        for bucket in buckets {
+            let diff = Int64(bucket) - 3000
+            chiSqNum += diff * diff * 1000
         }
-        #expect(chiSquare < 27.877, "chi-square \(chiSquare) exceeds the p=0.001 critical value for df=9")
+        #expect(chiSqNum < 27_877_000, "chi-square exceeds the p=0.001 critical value for df=9")
     }
 
     /// Seed-expansion contract: the all-zero xoshiro state is a fixed point;
     /// the initializer must never produce it.
     @Test func seedExpansionNeverAllZero() {
-        let rng = SeededRNG(s0: 0, s1: 0, s2: 0, s3: 0)
-        #expect(rng.s0 != 0 || rng.s1 != 0 || rng.s2 != 0 || rng.s3 != 0)
+        let rng = SeededRNG(lane0: 0, lane1: 0, lane2: 0, lane3: 0)
+        #expect(rng.lane0 != 0 || rng.lane1 != 0 || rng.lane2 != 0 || rng.lane3 != 0)
         var probe = rng
         _ = probe.nextUInt64()
         // For a large sample of seeds, no state is all-zero and the first
         // output is not identically zero.
-        for seed in [UInt64(0), 1, 42, UInt64.max, 0xDEADBEEF] {
-            var r = SeededRNG(seed: seed)
-            #expect(r.nextUInt64() != 0 || r.nextUInt64() != 0)
+        for seed in [UInt64(0), 1, 42, UInt64.max, 0xDEAD_BEEF] {
+            var generator = SeededRNG(seed: seed)
+            #expect(generator.nextUInt64() != 0 || generator.nextUInt64() != 0)
         }
     }
 }
-
-import Foundation

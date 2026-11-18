@@ -1,10 +1,10 @@
 // Golden-replay generator: plays 20 toy-game deals and writes JSON replay
 // files into the repository. Run via Tools/make-golden-replays.sh.
 
-import Foundation
 import CardModel
-@_spi(HostOnly) import ToyGame
+import Foundation
 @_spi(HostOnly) import RulesEngine
+@_spi(HostOnly) import ToyGame
 
 struct Golden: Codable {
     let format: String
@@ -26,8 +26,10 @@ func hex(_ data: Data) -> String {
 }
 
 // Deterministic seed list: 20 fixed seeds.
-let seeds: [UInt64] = [0, 1, 7, 42, 99, 123, 555, 777, 1024, 2024, 31_337, 65_535,
-                       100_001, 250_000, 500_001, 750_003, 999_999, 1_234_567, 8_765_432, UInt64.max - 1]
+let seeds: [UInt64] = [
+    0, 1, 7, 42, 99, 123, 555, 777, 1024, 2024, 31_337, 65_535,
+    100_001, 250_000, 500_001, 750_003, 999_999, 1_234_567, 8_765_432, UInt64.max - 1,
+]
 
 let engine = ToyGame.engine()
 var out: [String: Data] = [:]

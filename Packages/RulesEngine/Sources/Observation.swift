@@ -107,7 +107,9 @@ public enum Redactor {
     }
 
     /// Redact one zone per viewer.
-    public static func redact(_ cards: [CardInstance], key: ZoneKey, viewer: Viewer, knowledge: KnowledgeStore) -> ObservedZone {
+    public static func redact(
+        _ cards: [CardInstance], key: ZoneKey, viewer: Viewer, knowledge: KnowledgeStore
+    ) -> ObservedZone {
         ObservedZone.redactCards(cards, key: key, viewer: viewer, knowledge: knowledge)
     }
 

@@ -33,6 +33,8 @@ included:
   - Packages/Persistence/Tests
   - Packages/Platform/Sources
   - Packages/Platform/Tests
+disabled_rules:
+  - trailing_comma
 line_length:
   warning: 140
   error: 200
@@ -57,3 +59,5 @@ identifier_name:
     - i
     - n
     - s
+large_tuple:
+  warning: 3

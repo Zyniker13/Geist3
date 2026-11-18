@@ -24,7 +24,10 @@ public struct TrickPlayParams: Codable, Hashable, Sendable {
     /// Rule ID reported when a seat must follow suit and does not.
     public let followRuleId: String
 
-    public init(seatCount: Int, tricks: Int, activeSeats: [Seat], firstLeader: Seat, winnerRule: TrickWinnerRule, followRuleId: String) {
+    public init(
+        seatCount: Int, tricks: Int, activeSeats: [Seat], firstLeader: Seat, winnerRule: TrickWinnerRule,
+        followRuleId: String
+    ) {
         self.seatCount = seatCount
         self.tricks = tricks
         self.activeSeats = activeSeats
@@ -65,12 +68,16 @@ public enum TrickPlayMechanic: Mechanic {
 
     public typealias Params = TrickPlayParams
 
-    public static func enter(_ params: Params, state: inout GameState, ctx: EvalContext) throws(RuleViolation) -> [GameEvent] {
+    public static func enter(
+        _ params: Params, state: inout GameState, ctx: EvalContext
+    ) throws(RuleViolation) -> [GameEvent] {
         state.setSubstate(TrickSubstate(leader: params.firstLeader, seatCount: params.seatCount))
         return [.phaseStarted("trick-play")]
     }
 
-    public static func legalIntents(_ params: Params, state: GameState, seat: Seat, ctx: EvalContext) -> [ActionIntent] {
+    public static func legalIntents(
+        _ params: Params, state: GameState, seat: Seat, ctx: EvalContext
+    ) -> [ActionIntent] {
         guard pendingSeats(params, state: state, ctx: ctx).contains(seat) else { return [] }
         let hand = state.zones.cards(in: handKey(seat))
         if let led = ledSuit(state) {
@@ -80,7 +87,9 @@ public enum TrickPlayMechanic: Mechanic {
         return hand.map { .play($0.id) }
     }
 
-    public static func apply(_ params: Params, intent: ActionIntent, by seat: Seat, state: inout GameState, ctx: EvalContext) throws(RuleViolation) -> [GameEvent] {
+    public static func apply(
+        _ params: Params, intent: ActionIntent, by seat: Seat, state: inout GameState, ctx: EvalContext
+    ) throws(RuleViolation) -> [GameEvent] {
         guard case .play(let cardID) = intent else {
             throw RuleViolation.illegal(ruleId: "trick.playOnly", detail: .custom("trick-play accepts .play intents"))
         }
@@ -102,7 +111,7 @@ public enum TrickPlayMechanic: Mechanic {
         }
         let sub = state.trickSubstate()
         let trickKey = ZoneKey(scope: .shared, id: "trick\(sub.trickIndex)")
-        state.zones.ensureDeclared(trickKey) // fresh pile for this trick
+        state.zones.ensureDeclared(trickKey)  // fresh pile for this trick
         do {
             try state.zones.move(cardID, from: hand, to: trickKey)
         } catch {
@@ -172,7 +181,7 @@ public enum TrickPlayMechanic: Mechanic {
         }
         let ledSuit = pile.first { $0.id == plays.first?.card }?.face.suit?.code
         let trumpSuit: String?
-        if case .highestWithTrump(let t) = params.winnerRule { trumpSuit = t } else { trumpSuit = nil }
+        if case .highestWithTrump(let suit) = params.winnerRule { trumpSuit = suit } else { trumpSuit = nil }
         var best: (seat: Seat, strength: Int)?
         for play in plays {
             guard let instance = pile.first(where: { $0.id == play.card }) else { continue }

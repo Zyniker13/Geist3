@@ -13,7 +13,8 @@ public protocol Mechanic: Sendable {
     associatedtype Params: Codable & Sendable
     static func enter(_ params: Params, state: inout GameState, ctx: EvalContext) throws(RuleViolation) -> [GameEvent]
     static func legalIntents(_ params: Params, state: GameState, seat: Seat, ctx: EvalContext) -> [ActionIntent]
-    static func apply(_ params: Params, intent: ActionIntent, by seat: Seat, state: inout GameState, ctx: EvalContext) throws(RuleViolation) -> [GameEvent]
+    static func apply(_ params: Params, intent: ActionIntent, by seat: Seat, state: inout GameState, ctx: EvalContext)
+        throws(RuleViolation) -> [GameEvent]
     static func isComplete(_ params: Params, state: GameState, ctx: EvalContext) -> PhaseOutcome
     static func pendingSeats(_ params: Params, state: GameState, ctx: EvalContext) -> SeatSet
 }

@@ -32,7 +32,9 @@ public struct DealParams: Codable, Hashable, Sendable {
     /// Swift-configured games; JSON rulesets set zones up instead).
     public let deckFaces: [CardFace]?
 
-    public init(source: String, packets: [DealPacket], shuffleFirst: Bool, cutDepth: Int = 0, deckFaces: [CardFace]? = nil) {
+    public init(
+        source: String, packets: [DealPacket], shuffleFirst: Bool, cutDepth: Int = 0, deckFaces: [CardFace]? = nil
+    ) {
         self.source = source
         self.packets = packets
         self.shuffleFirst = shuffleFirst
@@ -47,7 +49,9 @@ public enum DealMechanic: Mechanic {
 
     public typealias Params = DealParams
 
-    public static func enter(_ params: Params, state: inout GameState, ctx: EvalContext) throws(RuleViolation) -> [GameEvent] {
+    public static func enter(
+        _ params: Params, state: inout GameState, ctx: EvalContext
+    ) throws(RuleViolation) -> [GameEvent] {
         var events: [GameEvent] = []
         let sourceKey = ZoneKey(scope: .shared, id: params.source)
         if state.zones.cards(in: sourceKey).isEmpty, let faces = params.deckFaces {
@@ -55,7 +59,8 @@ public enum DealMechanic: Mechanic {
             // IDs; real CardIDs are assigned post-shuffle below).
             state.zones.declare(sourceKey)
             for (index, face) in faces.enumerated() {
-                try? state.zones.place(CardInstance(id: CardID(UInt16(0xFF00 + UInt16(index))), face: face), in: sourceKey)
+                try? state.zones.place(
+                    CardInstance(id: CardID(UInt16(0xFF00 + UInt16(index))), face: face), in: sourceKey)
             }
         }
         if params.shuffleFirst {
@@ -92,11 +97,15 @@ public enum DealMechanic: Mechanic {
         return events
     }
 
-    public static func legalIntents(_ params: Params, state: GameState, seat: Seat, ctx: EvalContext) -> [ActionIntent] {
-        [] // dealing is automatic
+    public static func legalIntents(
+        _ params: Params, state: GameState, seat: Seat, ctx: EvalContext
+    ) -> [ActionIntent] {
+        []  // dealing is automatic
     }
 
-    public static func apply(_ params: Params, intent: ActionIntent, by seat: Seat, state: inout GameState, ctx: EvalContext) throws(RuleViolation) -> [GameEvent] {
+    public static func apply(
+        _ params: Params, intent: ActionIntent, by seat: Seat, state: inout GameState, ctx: EvalContext
+    ) throws(RuleViolation) -> [GameEvent] {
         throw RuleViolation.illegal(ruleId: "deal.automatic", detail: .custom("dealing is not player-driven"))
     }
 
@@ -105,7 +114,7 @@ public enum DealMechanic: Mechanic {
     }
 
     public static func pendingSeats(_ params: Params, state: GameState, ctx: EvalContext) -> SeatSet {
-        SeatSet() // nobody acts during dealing
+        SeatSet()  // nobody acts during dealing
     }
 }
 

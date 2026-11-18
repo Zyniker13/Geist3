@@ -103,15 +103,6 @@ public struct VarPath: Hashable, Codable, Sendable {
         index.map { "\(name)@\($0)" } ?? name
     }
 
-    init(storageKey: String) {
-        if let at = storageKey.firstIndex(of: "@") {
-            name = String(storageKey[..<at])
-            index = Int(storageKey[storageKey.index(after: at)...])
-        } else {
-            name = storageKey
-            index = nil
-        }
-    }
 }
 
 public struct VarStore: Codable, Hashable, Sendable {
@@ -142,7 +133,7 @@ public struct VarStore: Codable, Hashable, Sendable {
         switch values[path.storageKey] {
         case .int(let current): values[path.storageKey] = .int(current + delta)
         case nil: values[path.storageKey] = .int(delta)
-        default: break // type mismatch: silently ignored in P1; P2 validator owns this
+        default: break  // type mismatch: silently ignored in P1; P2 validator owns this
         }
     }
 }

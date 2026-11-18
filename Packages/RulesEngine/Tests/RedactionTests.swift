@@ -1,18 +1,14 @@
-import Foundation
-import Testing
 import CardModel
-@testable import RulesEngine
-@_spi(HostOnly) import ToyGame
+import Foundation
 @_spi(HostOnly) import RulesEngine
+import Testing
+@_spi(HostOnly) import ToyGame
 
-/// P1.6: Observation and Redactor. The redaction property test (ROADMAP
-/// §3.3 test 1) scans the JSON encoding of every observation and every
-/// redacted event for face IDs the viewer must not see.
 @Suite("RulesEngine — Observation and Redactor (§9.6)")
 struct RedactionTests {
 
     private static func encodedScannable(_ data: Data) -> String {
-        String(decoding: data, as: UTF8.self)
+        String(data: data, encoding: .utf8) ?? ""
     }
 
     /// All face IDs a viewer must NOT see in this state.
@@ -23,7 +19,7 @@ struct RedactionTests {
         case .seat(let s), .coachOf(let s):
             seat = s
         case .table, .spectator, .replayAll:
-            return forbidden // table/spectator/replay see public cards only
+            return forbidden  // table/spectator/replay see public cards only
         }
         for (key, cards) in state.zones.zones {
             for card in cards {
@@ -69,7 +65,9 @@ struct RedactionTests {
                     let legal = engine.legalIntents(for: seat, in: state)
                     guard !legal.isEmpty else { continue }
                     let pick = rng.below(legal.count)
-                    state = try engine.apply(Action(seat: seat, intent: legal[pick], expectedVersion: state.version), to: state).state
+                    state = try engine.apply(
+                        Action(seat: seat, intent: legal[pick], expectedVersion: state.version), to: state
+                    ).state
                     acted = true
                     break
                 }

@@ -1,8 +1,8 @@
+import CardModel
 import Foundation
-import Testing
-@testable import RulesEngine
-@_spi(HostOnly) import ToyGame
 @_spi(HostOnly) import RulesEngine
+import Testing
+@_spi(HostOnly) import ToyGame
 
 @Suite("RulesEngine — state, zones, and reducer (P1.3–P1.5)")
 struct EngineTests {
@@ -18,7 +18,8 @@ struct EngineTests {
         zones.declare(hand)
         zones.declare(pile)
         for i in 0..<10 {
-            try zones.place(CardInstance(id: CardID(UInt16(i)), face: CardFace(suit: .spades, rank: Rank(String(i)))), in: stock)
+            try zones.place(
+                CardInstance(id: CardID(UInt16(i)), face: CardFace(suit: .spades, rank: Rank(String(i)))), in: stock)
         }
         #expect(zones.allInstances.count == 10)
         try zones.move(CardID(3), from: stock, to: hand)
@@ -59,19 +60,19 @@ struct EngineTests {
     /// different dictionary insertion orders hash identically.
     @Test func gameStateHashOrderStable() throws {
         let engine = ToyGame.engine()
-        let a = try engine.start(seed: 7).state
+        let stateA = try engine.start(seed: 7).state
         // Rebuild the same state with reversed zone insertion order.
-        var b = a
-        b.zones = a.zones // identical content; dictionary layout may differ
-        #expect(a == b)
+        var stateB = stateA
+        stateB.zones = stateA.zones  // identical content; dictionary layout may differ
+        #expect(stateA == stateB)
         var hasherA = Hasher()
-        a.hash(into: &hasherA)
+        stateA.hash(into: &hasherA)
         var hasherB = Hasher()
-        b.hash(into: &hasherB)
+        stateB.hash(into: &hasherB)
         #expect(hasherA.finalize() == hasherB.finalize())
         // Distinct states must not collide trivially.
-        let c = try engine.start(seed: 8).state
-        #expect(a != c)
+        let stateC = try engine.start(seed: 8).state
+        #expect(stateA != stateC)
     }
 
     // MARK: - P1.4: the toy game plays to completion for 10,000 seeds
@@ -93,10 +94,10 @@ struct EngineTests {
     /// Determinism: same seed → identical transitions.
     @Test func determinismSameSeedSameGame() throws {
         let engine = ToyGame.engine()
-        let a = try ToyGame.play(engine: engine, seed: 12345)
-        let b = try ToyGame.play(engine: engine, seed: 12345)
-        #expect(a == b)
-        #expect(Engine.finalStateHash(a) == Engine.finalStateHash(b))
+        let first = try ToyGame.play(engine: engine, seed: 12345)
+        let second = try ToyGame.play(engine: engine, seed: 12345)
+        #expect(first == second)
+        #expect(Engine.finalStateHash(first) == Engine.finalStateHash(second))
     }
 
     /// Every illegal intent is rejected with a rule ID.
@@ -106,7 +107,8 @@ struct EngineTests {
         // Seat 0 plays while seat 1 must lead.
         do {
             let hand = state.zones.cards(in: ZoneKey(scope: .seat, owner: 0, id: "hand"))
-            _ = try engine.apply(Action(seat: Seat(0), intent: .play(hand[0].id), expectedVersion: state.version), to: state)
+            _ = try engine.apply(
+                Action(seat: Seat(0), intent: .play(hand[0].id), expectedVersion: state.version), to: state)
             Issue.record("out-of-turn play was accepted")
         } catch {
             guard case RuleViolation.notYourTurn = error else {
@@ -116,7 +118,8 @@ struct EngineTests {
         }
         // Playing a card not in hand.
         do {
-            _ = try engine.apply(Action(seat: Seat(1), intent: .play(CardID(999)), expectedVersion: state.version), to: state)
+            _ = try engine.apply(
+                Action(seat: Seat(1), intent: .play(CardID(999)), expectedVersion: state.version), to: state)
             Issue.record("playing a foreign card was accepted")
         } catch {
             guard case RuleViolation.illegal(let ruleId, _) = error else {
@@ -125,7 +128,7 @@ struct EngineTests {
             }
             #expect(ruleId == "trick.notInHand")
         }
-        _ = state // silence unused warning in the non-throwing path
+        _ = state  // silence unused warning in the non-throwing path
     }
 
     /// Must-follow-suit is enforced: a seat holding the led suit cannot dump.
@@ -134,7 +137,8 @@ struct EngineTests {
         var state = try engine.start(seed: 2).state
         // Seat 1 leads; pick its first legal card.
         let legal1 = engine.legalIntents(for: Seat(1), in: state)
-        state = try engine.apply(Action(seat: Seat(1), intent: legal1[0], expectedVersion: state.version), to: state).state
+        state = try engine.apply(Action(seat: Seat(1), intent: legal1[0], expectedVersion: state.version), to: state)
+            .state
         let ledSuit = state.zones.cards(in: ZoneKey(scope: .shared, id: "trick0")).first!.face.suit!.code
         // Seat 0 must follow if it holds that suit.
         let hand0 = state.zones.cards(in: ZoneKey(scope: .seat, owner: 0, id: "hand"))
@@ -143,7 +147,8 @@ struct EngineTests {
             let illegal = hand0.first { $0.face.suit?.code != ledSuit }
             if let illegal {
                 do {
-                    _ = try engine.apply(Action(seat: Seat(0), intent: .play(illegal.id), expectedVersion: state.version), to: state)
+                    _ = try engine.apply(
+                        Action(seat: Seat(0), intent: .play(illegal.id), expectedVersion: state.version), to: state)
                     Issue.record("illegal discard of \(illegal.face.id) was accepted")
                 } catch {
                     guard case RuleViolation.illegal(let ruleId, .mustFollow(let suit)) = error else {
@@ -176,14 +181,14 @@ struct EngineTests {
         }
         // Expectation per (face, ID) cell = deals × (1 face per ID per deal).
         // 1,000 deals × 10 cards / 100 cells = 100.
-        let expectation = Double(deals) / 10.0
+        // No floating point: `maxFrequency * 10 < 3 * deals` is the exact
+        // integer form of `maxFrequency < 3 * (deals / 10)`.
         var maxFrequency = 0
         for row in histogram {
             for count in row where count > maxFrequency { maxFrequency = count }
         }
-        #expect(Double(maxFrequency) < 3.0 * expectation,
-                "a face appeared with one ID \(maxFrequency) times (expectation \(expectation))")
+        #expect(
+            maxFrequency * 10 < 3 * deals,
+            "a face appeared with one ID \(maxFrequency) times (expectation \(deals / 10))")
     }
 }
-
-import CardModel

@@ -5,16 +5,16 @@ import CardModel
 /// What a seat asks to do (§9.2).
 public enum ActionIntent: Codable, Hashable, Sendable {
     case play(CardID)
-    case call(String)              // bid / contract call (P1: opaque tag)
-    case pass([CardID])            // exchange.pass
-    case discard([CardID])         // exchange.kitty / discardTo
-    case drawFrom(String)          // ZoneKey id
+    case call(String)  // bid / contract call (P1: opaque tag)
+    case pass([CardID])  // exchange.pass
+    case discard([CardID])  // exchange.kitty / discardTo
+    case drawFrom(String)  // ZoneKey id
     case meld([CardID])
     case choose(String)
     case claim(Int)
     case acceptClaim(Bool)
-    case cut(depth: Int)           // reveal.starter
-    case count(points: Int)        // count-play
+    case cut(depth: Int)  // reveal.starter
+    case count(points: Int)  // count-play
     case confirm
 }
 

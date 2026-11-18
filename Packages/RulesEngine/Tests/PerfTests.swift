@@ -1,14 +1,9 @@
-import Foundation
-import XCTest
 import CardModel
-@_spi(HostOnly) import ToyGame
-@testable import RulesEngine
+import Foundation
 @_spi(HostOnly) import RulesEngine
+@_spi(HostOnly) import ToyGame
+import XCTest
 
-/// P1.8: Performance harness (ROADMAP §P1.8). XCTest `measure` for
-/// `apply` and `observation`, plus explicit p99 sampling against the
-/// acceptance thresholds: p99 apply < 1 ms, p99 observation < 0.5 ms on
-/// the CI Mac (device numbers are recorded again in P4).
 final class PerfTests: XCTestCase {
 
     /// A mid-deal state to measure against: the deal plus one play.
@@ -55,43 +50,51 @@ final class PerfTests: XCTestCase {
         }
     }
 
+    /// Samples one operation, returning its duration in nanoseconds.
+    private func sampleNanos(_ body: () throws -> Void) rethrows -> Int {
+        let t0 = DispatchTime.now().uptimeNanoseconds
+        try body()
+        let t1 = DispatchTime.now().uptimeNanoseconds
+        return Int(t1 - t0)
+    }
+
+    /// Integer p99: the sample at index `(count * 99) / 100` of the sorted
+    /// nanosecond timings (no floating point anywhere, per CONVENTIONS §5).
+    private func p99Nanos(_ samples: [Int]) -> Int {
+        samples[(samples.count * 99) / 100]
+    }
+
     /// p99 of `apply` must stay under 1 ms on this machine.
     func testApplyP99UnderOneMillisecond() throws {
         let (engine, state, seat) = try midDealState()
         let legal = engine.legalIntents(for: seat, in: state)
         guard let first = legal.first else { throw XCTSkip("no legal action in mid-deal state") }
         let action = Action(seat: seat, intent: first, expectedVersion: state.version)
-        var samples: [Double] = []
+        var samples: [Int] = []
         samples.reserveCapacity(2_000)
         // Warm-up.
         for _ in 0..<50 { _ = try engine.apply(action, to: state) }
         for _ in 0..<2_000 {
-            let t0 = DispatchTime.now().uptimeNanoseconds
-            _ = try engine.apply(action, to: state)
-            let t1 = DispatchTime.now().uptimeNanoseconds
-            samples.append(Double(t1 - t0) / 1_000.0) // microseconds
+            samples.append(try sampleNanos { try engine.apply(action, to: state) })
         }
         samples.sort()
-        let p99 = samples[Int(Double(samples.count - 1) * 0.99)]
-        XCTAssertLessThan(p99, 1_000.0, "p99 apply = \(p99) µs (threshold 1000 µs)")
-        print("PERF: apply p99 = \(p99) µs (\(samples.count) samples)")
+        let p99 = p99Nanos(samples)
+        XCTAssertLessThan(p99, 1_000_000, "p99 apply = \(p99) ns (threshold 1_000_000 ns)")
+        print("PERF: apply p99 = \(p99 / 1_000) µs (\(samples.count) samples)")
     }
 
     /// p99 of `observation` must stay under 0.5 ms on this machine.
     func testObservationP99UnderHalfMillisecond() throws {
         let (engine, state, _) = try midDealState()
-        var samples: [Double] = []
+        var samples: [Int] = []
         samples.reserveCapacity(2_000)
         for _ in 0..<50 { _ = engine.observation(of: state, for: .seat(Seat(0))) }
         for _ in 0..<2_000 {
-            let t0 = DispatchTime.now().uptimeNanoseconds
-            _ = engine.observation(of: state, for: .seat(Seat(0)))
-            let t1 = DispatchTime.now().uptimeNanoseconds
-            samples.append(Double(t1 - t0) / 1_000.0)
+            samples.append(sampleNanos { engine.observation(of: state, for: .seat(Seat(0))) })
         }
         samples.sort()
-        let p99 = samples[Int(Double(samples.count - 1) * 0.99)]
-        XCTAssertLessThan(p99, 500.0, "p99 observation = \(p99) µs (threshold 500 µs)")
-        print("PERF: apply/observation p99 = \(samples[Int(Double(samples.count - 1) * 0.99)]) µs (observation, \(samples.count) samples)")
+        let p99 = p99Nanos(samples)
+        XCTAssertLessThan(p99, 500_000, "p99 observation = \(p99) ns (threshold 500_000 ns)")
+        print("PERF: observation p99 = \(p99 / 1_000) µs (\(samples.count) samples)")
     }
 }

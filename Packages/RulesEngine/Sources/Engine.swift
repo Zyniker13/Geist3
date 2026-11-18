@@ -30,7 +30,9 @@ public struct AnyMechanic: Sendable {
     public init<M: Mechanic>(_ mechanic: M.Type, params: M.Params) {
         enter = { state, ctx in try mechanic.enter(params, state: &state, ctx: ctx) }
         legal = { state, seat, ctx in mechanic.legalIntents(params, state: state, seat: seat, ctx: ctx) }
-        act = { intent, seat, state, ctx in try mechanic.apply(params, intent: intent, by: seat, state: &state, ctx: ctx) }
+        act = { intent, seat, state, ctx in
+            try mechanic.apply(params, intent: intent, by: seat, state: &state, ctx: ctx)
+        }
         complete = { state, ctx in mechanic.isComplete(params, state: state, ctx: ctx) }
         pending = { state, ctx in mechanic.pendingSeats(params, state: state, ctx: ctx) }
     }
@@ -181,7 +183,8 @@ public struct Engine: Sendable {
             let start = try start(seed: replay.seed)
             var state = start.state
             for logged in replay.actions {
-                let transition = try apply(Action(seat: logged.seat, intent: logged.intent, expectedVersion: logged.version), to: state)
+                let transition = try apply(
+                    Action(seat: logged.seat, intent: logged.intent, expectedVersion: logged.version), to: state)
                 state = transition.state
             }
             return state
@@ -259,8 +262,10 @@ extension ObservedZone {
     /// Redact a zone's cards for a viewer (§9.6 rule 1): a face is included
     /// only if the viewer knows it (knowledge contains the viewer's seat) or
     /// the card is public; `.replayAll` sees everything.
-    static func redactCards(_ cards: [CardInstance], key: ZoneKey, viewer: Viewer, knowledge: KnowledgeStore) -> ObservedZone {
-        _ = key // zone-level visibility defaults arrive with ruleset-driven zones in P2
+    @_spi(HostOnly) public static func redactCards(
+        _ cards: [CardInstance], key: ZoneKey, viewer: Viewer, knowledge: KnowledgeStore
+    ) -> ObservedZone {
+        _ = key  // zone-level visibility defaults arrive with ruleset-driven zones in P2
         let known = cards.filter { Redactor.maySee($0.id, viewer: viewer, knowledge: knowledge, publicCard: false) }
         if known.count == cards.count { return .visible(cards) }
         return .hidden(count: cards.count, known: known)

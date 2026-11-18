@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+
 @testable import CardModel
 
 @Suite("CardModel — card identity and decks")
@@ -152,8 +153,8 @@ struct CardModelTests {
         // CardIDs are assigned independently later (§9.5) — the two arrays are
         // not aliased or identified with each other.
         #expect(first.count == second.count)
-        for (a, b) in zip(first, second) {
-            #expect(a == b) // same face
+        for (left, right) in zip(first, second) {
+            #expect(left == right)  // same face
         }
     }
 
