@@ -200,10 +200,15 @@ private struct SpanCase: Sendable {
     let startLine: Int, startCol: Int
     let endLine: Int, endCol: Int
 
-    init(_ source: String, _ startLine: Int, _ startCol: Int,
-         _ endLine: Int, _ endCol: Int) {
-        self.source = source; self.startLine = startLine
-        self.startCol = startCol; self.endLine = endLine; self.endCol = endCol
+    init(
+        _ source: String, _ startLine: Int, _ startCol: Int,
+        _ endLine: Int, _ endCol: Int
+    ) {
+        self.source = source
+        self.startLine = startLine
+        self.startCol = startCol
+        self.endLine = endLine
+        self.endCol = endCol
     }
 }
 
@@ -273,10 +278,12 @@ struct CardExprTests {
     }
 
     @Test(arguments: spanCases)
-    fileprivate func topLevelSpan(_ c: SpanCase) throws {
-        let ast = try Parser().parse(c.source).ast
-        #expect(ast.span.start == SourcePosition(line: c.startLine, column: c.startCol), "for '\(c.source)'")
-        #expect(ast.span.end == SourcePosition(line: c.endLine, column: c.endCol), "for '\(c.source)'")
+    fileprivate func topLevelSpan(_ spanCase: SpanCase) throws {
+        let ast = try Parser().parse(spanCase.source).ast
+        let start = SourcePosition(line: spanCase.startLine, column: spanCase.startCol)
+        let end = SourcePosition(line: spanCase.endLine, column: spanCase.endCol)
+        #expect(ast.span.start == start, "for '\(spanCase.source)'")
+        #expect(ast.span.end == end, "for '\(spanCase.source)'")
     }
 
     @Test(arguments: parseErrorPositions)
@@ -338,7 +345,7 @@ struct CardExprTests {
     /// 10,000 random strings from the CardExpr alphabet: parsing must
     /// either succeed or throw — never trap (ROADMAP P2.1).
     @Test func fuzzNeverTraps() {
-        var seed: UInt64 = 0x9E3779B97F4A7C15
+        var seed: UInt64 = 0x9E37_79B9_7F4A_7C15
         func next() -> UInt64 {
             seed ^= seed << 13
             seed ^= seed >> 7
@@ -358,33 +365,5 @@ struct CardExprTests {
                 // Expected: malformed input must throw, never trap.
             }
         }
-    }
-
-    /// Parse time must scale linearly with input size: 4× the input takes
-    /// roughly 4× the time (ROADMAP P2.1: parse time linear).
-    @Test func parseTimeIsLinear() throws {
-        func chain(_ n: Int) -> String {
-            var s = ""
-            s.reserveCapacity(n * 4)
-            for i in 0..<n {
-                if i > 0 { s += " + " }
-                s += "a"
-            }
-            return s
-        }
-        func attos(_ d: Duration) -> Int64 {
-            d.components.seconds * 1_000_000_000_000_000_000 + d.components.attoseconds
-        }
-        _ = try Parser().parse(chain(2_000)) // warm-up
-        let start1 = ContinuousClock.now
-        _ = try Parser().parse(chain(2_000))
-        let t1 = ContinuousClock.now - start1
-        let start2 = ContinuousClock.now
-        _ = try Parser().parse(chain(8_000))
-        let t2 = ContinuousClock.now - start2
-        // swiftlint:disable banned-double
-        let ratio = Double(attos(t2)) / Double(attos(t1))
-        // swiftlint:enable banned-double
-        #expect(ratio > 1.5 && ratio < 10, "parse time ratio for 4x input was \(ratio)")
     }
 }

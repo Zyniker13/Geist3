@@ -29,8 +29,8 @@ public struct Lexer: Sendable {
         var ctx = LexContext(count: scalars.count)
 
         while ctx.i < ctx.count {
-            let c = scalars[ctx.i]
-            if skipWhitespace(&ctx, c) { continue }
+            let current = scalars[ctx.i]
+            if skipWhitespace(&ctx, current) { continue }
             let startLine = ctx.line
             let startCol = ctx.column
 
@@ -40,8 +40,9 @@ public struct Lexer: Sendable {
             if try twoCharToken(&ctx, &tokens) { continue }
             if try oneCharToken(&ctx, &tokens) { continue }
 
-            throw LexerError(message: "unexpected character '\(c)'",
-                             position: ctx.makePos(startLine, startCol))
+            throw LexerError(
+                message: "unexpected character '\(current)'",
+                position: ctx.makePos(startLine, startCol))
         }
 
         let end = ctx.makePos(ctx.line, ctx.column)
@@ -58,22 +59,30 @@ public struct Lexer: Sendable {
         let count: Int
 
         init(count: Int) {
-            self.i = 0; self.line = 1; self.column = 1; self.count = count
+            self.i = 0
+            self.line = 1
+            self.column = 1
+            self.count = count
         }
 
-        func makePos(_ l: Int, _ c: Int) -> SourcePosition {
-            SourcePosition(line: l, column: c)
+        func makePos(_ line: Int, _ column: Int) -> SourcePosition {
+            SourcePosition(line: line, column: column)
         }
     }
 
     // MARK: - Tokenization helpers
 
-    private func skipWhitespace(_ ctx: inout LexContext, _ c: Unicode.Scalar) -> Bool {
-        if c == " " || c == "\t" || c == "\r" {
-            ctx.i += 1; ctx.column += 1; return true
+    private func skipWhitespace(_ ctx: inout LexContext, _ char: Unicode.Scalar) -> Bool {
+        if char == " " || char == "\t" || char == "\r" {
+            ctx.i += 1
+            ctx.column += 1
+            return true
         }
-        if c == "\n" {
-            ctx.i += 1; ctx.line += 1; ctx.column = 1; return true
+        if char == "\n" {
+            ctx.i += 1
+            ctx.line += 1
+            ctx.column = 1
+            return true
         }
         return false
     }
@@ -81,45 +90,55 @@ public struct Lexer: Sendable {
     private func intToken(_ ctx: inout LexContext, _ tokens: inout [Token]) throws -> Bool {
         guard scalars[ctx.i] >= "0" && scalars[ctx.i] <= "9" else { return false }
         var value: Int64 = 0
-        var j = ctx.i
-        while j < ctx.count, scalars[j] >= "0" && scalars[j] <= "9" {
-            let d = Int64(scalars[j].value - 48)
-            if value > (Int64.max - d) / 10 {
-                throw LexerError(message: "integer literal out of range",
-                                 position: ctx.makePos(ctx.line, ctx.column))
+        var end = ctx.i
+        while end < ctx.count, scalars[end] >= "0" && scalars[end] <= "9" {
+            let digit = Int64(scalars[end].value - 48)
+            if value > (Int64.max - digit) / 10 {
+                throw LexerError(
+                    message: "integer literal out of range",
+                    position: ctx.makePos(ctx.line, ctx.column))
             }
-            value = value * 10 + d
-            j += 1
+            value = value * 10 + digit
+            end += 1
         }
-        let text = String(scalars[ctx.i..<j].map { Character($0) })
-        tokens.append(Token(kind: .int, text: text,
-            span: SourceSpan(start: ctx.makePos(ctx.line, ctx.column),
-                             end: ctx.makePos(ctx.line, ctx.column + text.count - 1))))
-        ctx.i = j; ctx.column = ctx.column + text.count
+        let text = String(scalars[ctx.i..<end].map { Character($0) })
+        tokens.append(
+            Token(
+                kind: .int, text: text,
+                span: SourceSpan(
+                    start: ctx.makePos(ctx.line, ctx.column),
+                    end: ctx.makePos(ctx.line, ctx.column + text.count - 1))))
+        ctx.i = end
+        ctx.column += text.count
         return true
     }
 
     private func stringToken(_ ctx: inout LexContext, _ tokens: inout [Token]) throws -> Bool {
         guard scalars[ctx.i] == "'" else { return false }
-        var j = ctx.i + 1
-        while j < ctx.count, scalars[j] != "'", scalars[j] != "\n" { j += 1 }
-        guard j < ctx.count, scalars[j] == "'" else {
-            throw LexerError(message: "unterminated string literal",
-                             position: ctx.makePos(ctx.line, ctx.column))
+        var end = ctx.i + 1
+        while end < ctx.count, scalars[end] != "'", scalars[end] != "\n" { end += 1 }
+        guard end < ctx.count, scalars[end] == "'" else {
+            throw LexerError(
+                message: "unterminated string literal",
+                position: ctx.makePos(ctx.line, ctx.column))
         }
-        let text = String(scalars[ctx.i...j].map { Character($0) })
-        tokens.append(Token(kind: .string, text: text,
-            span: SourceSpan(start: ctx.makePos(ctx.line, ctx.column),
-                             end: ctx.makePos(ctx.line, ctx.column + text.count - 1))))
-        ctx.i = j + 1; ctx.column = ctx.column + text.count
+        let text = String(scalars[ctx.i...end].map { Character($0) })
+        tokens.append(
+            Token(
+                kind: .string, text: text,
+                span: SourceSpan(
+                    start: ctx.makePos(ctx.line, ctx.column),
+                    end: ctx.makePos(ctx.line, ctx.column + text.count - 1))))
+        ctx.i = end + 1
+        ctx.column += text.count
         return true
     }
 
     private func identToken(_ ctx: inout LexContext, _ tokens: inout [Token]) throws -> Bool {
         guard isLetter(scalars[ctx.i]) else { return false }
-        var j = ctx.i + 1
-        while j < ctx.count, isIdentChar(scalars[j]) { j += 1 }
-        let text = String(scalars[ctx.i..<j].map { Character($0) })
+        var end = ctx.i + 1
+        while end < ctx.count, isIdentChar(scalars[end]) { end += 1 }
+        let text = String(scalars[ctx.i..<end].map { Character($0) })
         let kind: Token.Kind
         switch text {
         case "true": kind = .keywordTrue
@@ -128,10 +147,14 @@ public struct Lexer: Sendable {
         case "in": kind = .keywordIn
         default: kind = .ident
         }
-        tokens.append(Token(kind: kind, text: text,
-            span: SourceSpan(start: ctx.makePos(ctx.line, ctx.column),
-                             end: ctx.makePos(ctx.line, ctx.column + text.count - 1))))
-        ctx.i = j; ctx.column = ctx.column + text.count
+        tokens.append(
+            Token(
+                kind: kind, text: text,
+                span: SourceSpan(
+                    start: ctx.makePos(ctx.line, ctx.column),
+                    end: ctx.makePos(ctx.line, ctx.column + text.count - 1))))
+        ctx.i = end
+        ctx.column += text.count
         return true
     }
 
@@ -139,19 +162,27 @@ public struct Lexer: Sendable {
         guard ctx.i + 1 < ctx.count else { return false }
         let two = String([Character(scalars[ctx.i]), Character(scalars[ctx.i + 1])])
         guard let kind: Token.Kind = Self.twoChar[two] else { return false }
-        tokens.append(Token(kind: kind, text: two,
-            span: SourceSpan(start: ctx.makePos(ctx.line, ctx.column),
-                             end: ctx.makePos(ctx.line, ctx.column + 1))))
-        ctx.i += 2; ctx.column += 2
+        tokens.append(
+            Token(
+                kind: kind, text: two,
+                span: SourceSpan(
+                    start: ctx.makePos(ctx.line, ctx.column),
+                    end: ctx.makePos(ctx.line, ctx.column + 1))))
+        ctx.i += 2
+        ctx.column += 2
         return true
     }
 
     private func oneCharToken(_ ctx: inout LexContext, _ tokens: inout [Token]) throws -> Bool {
         guard let kind: Token.Kind = Self.oneChar[scalars[ctx.i]] else { return false }
-        tokens.append(Token(kind: kind, text: String(scalars[ctx.i]),
-            span: SourceSpan(start: ctx.makePos(ctx.line, ctx.column),
-                             end: ctx.makePos(ctx.line, ctx.column))))
-        ctx.i += 1; ctx.column += 1
+        tokens.append(
+            Token(
+                kind: kind, text: String(scalars[ctx.i]),
+                span: SourceSpan(
+                    start: ctx.makePos(ctx.line, ctx.column),
+                    end: ctx.makePos(ctx.line, ctx.column))))
+        ctx.i += 1
+        ctx.column += 1
         return true
     }
 

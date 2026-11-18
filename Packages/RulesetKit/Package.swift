@@ -7,8 +7,11 @@ let package = Package(
     products: [
         .library(name: "RulesetKit", targets: ["RulesetKit"])
     ],
+    dependencies: [
+        .package(path: "../CardExpr")
+    ],
     targets: [
-        .target(name: "RulesetKit", path: "Sources"),
+        .target(name: "RulesetKit", dependencies: ["CardExpr"], path: "Sources"),
         .testTarget(name: "RulesetKitTests", dependencies: ["RulesetKit"], path: "Tests"),
     ]
 )

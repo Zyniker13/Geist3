@@ -34,10 +34,10 @@ public struct Parser: Sendable {
     /// Parses a single expression. The whole input must be consumed.
     public func parse(_ source: String) throws -> ParsedExpression {
         let tokens = try Lexer(source: source).tokenize()
-        var p = Cursor(tokens: tokens)
-        let ast = try p.parseTernary()
-        guard p.peek().kind == .eof else {
-            throw ParseError(message: p.peek().unexpected, position: p.peek().span.start)
+        var cursor = Cursor(tokens: tokens)
+        let ast = try cursor.parseTernary()
+        guard cursor.peek().kind == .eof else {
+            throw ParseError(message: cursor.peek().unexpected, position: cursor.peek().span.start)
         }
         return ParsedExpression(ast: ast, nodeCount: ast.nodeCount)
     }
@@ -57,17 +57,19 @@ private struct Cursor {
     }
 
     mutating func advance() -> Token {
-        let t = tokens[index]
+        let current = tokens[index]
         if index < tokens.count - 1 {
             index += 1
         }
-        return t
+        return current
     }
 
     mutating func expect(_ kind: Token.Kind, _ what: String) throws -> Token {
-        let t = peek()
-        guard t.kind == kind else {
-            throw ParseError(message: "expected \(what) but found \(t.describe)", position: t.span.start)
+        let current = peek()
+        guard current.kind == kind else {
+            throw ParseError(
+                message: "expected \(what) but found \(current.describe)",
+                position: current.span.start)
         }
         return advance()
     }
@@ -77,7 +79,7 @@ private struct Cursor {
     mutating func parseTernary() throws -> AST {
         let cond = try parseOr()
         if peek().kind == .question {
-            let q = advance()
+            _ = advance()
             let then = try parseTernary()
             _ = try expect(.colon, "':'")
             let els = try parseTernary()
@@ -166,16 +168,16 @@ private struct Cursor {
     }
 
     mutating func parseUnary() throws -> AST {
-        let t = peek()
-        if t.kind == .bang {
+        let token = peek()
+        if token.kind == .bang {
             advance()
             let operand = try parseUnary()
-            return .unary(.not, operand, SourceSpan(start: t.span.start, end: operand.span.end))
+            return .unary(.not, operand, SourceSpan(start: token.span.start, end: operand.span.end))
         }
-        if t.kind == .minus {
+        if token.kind == .minus {
             advance()
             let operand = try parseUnary()
-            return .unary(.negate, operand, SourceSpan(start: t.span.start, end: operand.span.end))
+            return .unary(.negate, operand, SourceSpan(start: token.span.start, end: operand.span.end))
         }
         return try parsePostfix()
     }
@@ -206,7 +208,7 @@ private struct Cursor {
     }
 
     mutating func makeCall(_ callee: AST) throws -> AST {
-        _ = advance() // lParen
+        _ = advance()  // lParen
         var args: [AST] = []
         if peek().kind != .rParen {
             args.append(try parseTernary())
@@ -220,34 +222,34 @@ private struct Cursor {
     }
 
     mutating func parsePrimary() throws -> AST {
-        let t = peek()
-        return try parsePrimary(for: t)
+        let token = peek()
+        return try parsePrimary(for: token)
     }
 
-    private mutating func parsePrimary(for t: Token) throws -> AST {
-        switch t.kind {
+    private mutating func parsePrimary(for token: Token) throws -> AST {
+        switch token.kind {
         case .int:
             advance()
-            return .int(t.intValue!, t.span)
+            return .int(token.intValue!, token.span)
         case .string:
             advance()
-            return .string(t.stringValue!, t.span)
+            return .string(token.stringValue!, token.span)
         case .keywordTrue:
             advance()
-            return .bool(true, t.span)
+            return .bool(true, token.span)
         case .keywordFalse:
             advance()
-            return .bool(false, t.span)
+            return .bool(false, token.span)
         case .keywordNull:
             advance()
-            return .null(t.span)
+            return .null(token.span)
         case .ident:
             advance()
-            return .ident(t.text, t.span)
+            return .ident(token.text, token.span)
         default:
             break
         }
-        switch t.kind {
+        switch token.kind {
         case .lBracket:
             return try parseList()
         case .lParen:
@@ -256,7 +258,7 @@ private struct Cursor {
             _ = try expect(.rParen, "')'")
             return inner
         default:
-            throw ParseError(message: t.unexpected, position: t.span.start)
+            throw ParseError(message: token.unexpected, position: token.span.start)
         }
     }
 

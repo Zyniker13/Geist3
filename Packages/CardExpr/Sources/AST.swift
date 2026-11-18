@@ -76,9 +76,9 @@ public indirect enum AST: Sendable {
     public var span: SourceSpan {
         switch self {
         case .int(_, let s), .string(_, let s), .bool(_, let s), .null(let s), .ident(_, let s),
-             .list(_, let s), .unary(_, _, let s), .binary(_, _, _, let s),
-             .ternary(_, _, _, let s), .member(_, _, let s), .index(_, _, let s),
-             .call(_, _, let s):
+            .list(_, let s), .unary(_, _, let s), .binary(_, _, _, let s),
+            .ternary(_, _, _, let s), .member(_, _, let s), .index(_, _, let s),
+            .call(_, _, let s):
             s
         }
     }
@@ -99,12 +99,12 @@ public indirect enum AST: Sendable {
     /// form (round-trip property).
     public var canonical: String {
         switch self {
-        case .int(let v, _):
-            return String(v)
+        case .int(let value, _):
+            return String(value)
         case .string(let s, _):
             return "'\(s)'"
-        case .bool(let b, _):
-            return b ? "true" : "false"
+        case .bool(let flag, _):
+            return flag ? "true" : "false"
         case .null:
             return "null"
         case .ident(let name, _):
@@ -115,50 +115,63 @@ public indirect enum AST: Sendable {
             let s = operand.canonical
             return operand.precedence < 8 ? "\(op.symbol)(\(s))" : "\(op.symbol)\(s)"
         case .binary(let op, let lhs, let rhs, _):
-            let p = op.precedence
-            let l = lhs.canonical
-            let r = rhs.canonical
-            let lPart = lhs.precedence < p ? "(\(l))" : l
-            let rPart = rhs.precedence <= p ? "(\(r))" : r
+            let level = op.precedence
+            let left = lhs.canonical
+            let right = rhs.canonical
+            let lPart = lhs.precedence < level ? "(\(left))" : left
+            let rPart = rhs.precedence <= level ? "(\(right))" : right
             return "\(lPart) \(op.symbol) \(rPart)"
         case .ternary(let cond, let then, let els, _):
-            let c = cond.canonical
-            let cPart = cond.precedence <= 1 ? "(\(c))" : c
+            let condition = cond.canonical
+            let cPart = cond.precedence <= 1 ? "(\(condition))" : condition
             return "\(cPart) ? \(then.canonical) : \(els.canonical)"
         case .member(let base, let name, _):
-            let b = base.canonical
-            let bPart = base.precedence < 8 ? "(\(b))" : b
+            let text = base.canonical
+            let bPart = base.precedence < 8 ? "(\(text))" : text
             return "\(bPart).\(name)"
         case .index(let base, let idx, _):
-            let b = base.canonical
-            let bPart = base.precedence < 8 ? "(\(b))" : b
+            let text = base.canonical
+            let bPart = base.precedence < 8 ? "(\(text))" : text
             return "\(bPart)[\(idx.canonical)]"
         case .call(let callee, let args, _):
-            let c = callee.canonical
-            let cPart = callee.precedence < 8 ? "(\(c))" : c
+            let calleeText = callee.canonical
+            let cPart = callee.precedence < 8 ? "(\(calleeText))" : calleeText
             return "\(cPart)(\(args.map(\.canonical).joined(separator: ", ")))"
         }
     }
 
-    /// Number of AST nodes in this subtree (this node included).
+    /// Number of AST nodes in this subtree (this node included). Iterative
+    /// with an explicit stack so that long chains — and any deep tree a
+    /// caller may hand in — cannot overflow the thread's call stack.
     public var nodeCount: Int {
-        switch self {
-        case .int, .string, .bool, .null, .ident:
-            return 1
-        case .list(let items, _):
-            return 1 + items.reduce(0) { $0 + $1.nodeCount }
-        case .unary(_, let operand, _):
-            return 1 + operand.nodeCount
-        case .binary(_, let lhs, let rhs, _):
-            return 1 + lhs.nodeCount + rhs.nodeCount
-        case .ternary(let cond, let then, let els, _):
-            return 1 + cond.nodeCount + then.nodeCount + els.nodeCount
-        case .member(let base, _, _):
-            return 1 + base.nodeCount
-        case .index(let base, let idx, _):
-            return 1 + base.nodeCount + idx.nodeCount
-        case .call(let callee, let args, _):
-            return 1 + callee.nodeCount + args.reduce(0) { $0 + $1.nodeCount }
+        var total = 0
+        var pending: [AST] = [self]
+        while let node = pending.popLast() {
+            total += 1
+            switch node {
+            case .int, .string, .bool, .null, .ident:
+                break
+            case .list(let items, _):
+                pending.append(contentsOf: items)
+            case .unary(_, let operand, _):
+                pending.append(operand)
+            case .binary(_, let lhs, let rhs, _):
+                pending.append(lhs)
+                pending.append(rhs)
+            case .ternary(let cond, let then, let els, _):
+                pending.append(cond)
+                pending.append(then)
+                pending.append(els)
+            case .member(let base, _, _):
+                pending.append(base)
+            case .index(let base, let idx, _):
+                pending.append(base)
+                pending.append(idx)
+            case .call(let callee, let args, _):
+                pending.append(callee)
+                pending.append(contentsOf: args)
+            }
         }
+        return total
     }
 }
