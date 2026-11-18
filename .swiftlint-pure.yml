@@ -4,6 +4,7 @@
 # excluded on purpose.
 disabled_rules:
   - trailing_comma
+  - shorthand_operator
 included:
   - Packages/CardModel/Sources
   - Packages/CardModel/Tests
@@ -34,6 +35,16 @@ identifier_name:
     - i
     - n
     - s
+    - c
+    - d
+    - l
+    - p
+    - r
+    - v
+    - b
+    - j
+    - t
+    - q
 large_tuple:
   warning: 3
 custom_rules:
