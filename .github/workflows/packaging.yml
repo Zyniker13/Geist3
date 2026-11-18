@@ -140,7 +140,7 @@ jobs:
             cat "$RUNNER_TEMP/brew-install.log"
             msg="$(tail -c 1400 "$RUNNER_TEMP/brew-install.log" \
               | tr -d '\r' | sed 's/%/%25/g' \
-              | awk 'NR>1{printf "%0A"} {printf "%s", $0}')"
+              | awk 'NR>1{printf "%%0A"} {printf "%s", $0}')"
             echo "::error title=brew install ztop::${msg}"
             exit 1
           fi
@@ -162,7 +162,7 @@ jobs:
             cat "$RUNNER_TEMP/brew-upgrade.log"
             msg="$(tail -c 1400 "$RUNNER_TEMP/brew-upgrade.log" \
               | tr -d '\r' | sed 's/%/%25/g' \
-              | awk 'NR>1{printf "%0A"} {printf "%s", $0}')"
+              | awk 'NR>1{printf "%%0A"} {printf "%s", $0}')"
             echo "::error title=brew upgrade ztop::${msg}"
             exit 1
           fi

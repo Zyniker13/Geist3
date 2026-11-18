@@ -48,7 +48,7 @@ for target in $(ls fuzz_targets/*.rs | sed 's|fuzz_targets/||; s|\.rs$||' | sort
             | tr -d '\r' \
             | sed 's/%/%25/g' \
             | tail -c 1400 \
-            | awk 'NR>1{printf "%0A"} {printf "%s", $0}')"
+            | awk 'NR>1{printf "%%0A"} {printf "%s", $0}')"
         printf '::error title=fuzz target %s::%s\n' "$target" "$msg"
         status=1
     fi
