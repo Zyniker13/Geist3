@@ -1,0 +1,80 @@
+# Parlor CI (CONVENTIONS §7). Runs on every push and pull request.
+# Steps that have nothing to run yet succeed as no-ops with a printed
+# notice (rules-cli / net-fuzz stubs until P3 / P8).
+name: CI
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    name: build-test-lint
+    runs-on: macos-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install fixed toolchain (Homebrew)
+        run: brew install xcodegen swiftlint swift-format
+
+      - name: Toolchain report
+        run: |
+          xcodebuild -version
+          swift --version
+          xcodegen --version
+          swiftlint version
+          swift-format version
+          xcrun simctl list devices available
+
+      - name: Preflight required simulators
+        run: |
+          xcrun simctl list devices available | grep -E "iPhone 17|iPad Pro 13-inch \(M5\)"
+
+      - name: make bootstrap
+        run: make bootstrap
+
+      - name: make lint (zero warnings) and check-imports
+        run: make lint
+
+      - name: Package tests with coverage
+        run: make coverage
+
+      - name: make conformance
+        run: make conformance
+
+      - name: make validate
+        run: make validate
+
+      - name: make sim N=200
+        run: make sim N=200
+
+      - name: make fuzz-quick
+        run: make fuzz-quick
+
+      - name: "make gen and make build (iPhone 17, iPad Pro 13-inch, macOS; warnings as errors)"
+        env:
+          SWIFT_TREAT_WARNINGS_AS_ERRORS: "YES"
+          GCC_TREAT_WARNINGS_AS_ERRORS: "YES"
+        run: |
+          make gen
+          make build
+
+      - name: "xcodebuild test (UI and snapshot: iPhone 17, iPad Pro 13-inch, macOS)"
+        run: make test-apps
+
+      - name: make snapshot
+        run: make snapshot
+
+      - name: Upload reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: parlor-ci-reports
+          path: |
+            reports/
+          if-no-files-found: ignore

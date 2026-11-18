@@ -6,3 +6,6 @@ Parlor.xcodeproj/
 DerivedData/
 *.xcresult
 xcuserdata/
+
+# Local measurement/report artifacts (CI uploads them as artifacts)
+reports/
