@@ -73,5 +73,6 @@ Phase tasks P1.1–P1.8 are implemented on branch `phase/P1-engine-core` (latest
 
 ### Incidents during P1
 - **piquet-32 regression (fixed, `4dc35f9`):** the `spec(for:)` complexity split dropped the `piquet` family from the dispatch, so `faces(for: "piquet-32")` returned nil and CardModel tests crashed on both platforms; caught by the package suites (macOS + iOS), fixed, 8/8 CardModel tests green on macOS and iOS.
+- **iOS replay fixture path (fixed, `26bb92f`):** `ReplayTests` resolved `Tests/Fixtures/Replays` relative to the process cwd, which inside the iOS simulator is the app sandbox — the suite found no fixtures there (47/48 passed, only the replay test failed). Fixed by anchoring the directory on `#filePath`; replay tests pass on macOS and the iOS leg is re-running.
 - **SeededRNG test seed mismatch (fixed):** the chi-square distribution test was run with the wrong seed; corrected to seed 42.
 - **Lint cleanup:** ~560 → 0 violations across main/pure/swift-format; `trailing_comma` rule disabled in both SwiftLint configs (irreconcilable with swift-format multiline literals), `identifier_name` configs aligned, test file split for `file_length`.
