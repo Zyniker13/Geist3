@@ -49,7 +49,7 @@ Work completed since the first failed gate run (`g0-gate.log`, Error 65 at `test
 
 Partial gate evidence (`g0-evidence.log`, 2026-11-18 03:21–03:23):
 - `make bootstrap lint test-packages coverage conformance validate sim N=200 fuzz-quick snapshot build` → **exit 0, all green** (PARTIAL-GATE EXIT: 0). Every G0 check except the two iOS simulator test legs passes.
-- `xcodebuild test -scheme Parlor-macOS`: unit tests passed (`Test Suite 'All tests' passed`, 03:22:09); the macOS UI-test runner then failed with "Timed out while enabling automation mode" (XCTFuture Code=1000).
+- `xcodebuild test -scheme Parlor-macOS`: unit tests passed (`Test Suite 'All tests' passed`, 03:22:09); the macOS UI-test runner then failed with "Timed out while enabling automation mode" (XCTFuture Code=1000) and the build hung in teardown (killed; same wedged automation stack, not a project failure).
 
 **Blocked — environment, not project.** The host's iOS simulator stack cannot boot any device to SpringBoard, so no iOS app can install/launch and no iOS test (unit or UI) can run. Repair attempts on 2026-11-18, all failed:
 1. Erase + reboot of `iPhone 17` → `xcodebuild test` hung at test-runner install (`g0-fix17.log`, Mach -308 earlier in `g0-fix16.log`).
