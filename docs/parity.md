@@ -394,6 +394,13 @@ Check an item only when it works and a test or a recorded check shows it. Add th
 
 ## Packaging
 
-- [ ] Homebrew formula with a `brew services` agent
-- [ ] `.deb` for amd64 and arm64 with a systemd unit and a dedicated user
-- [ ] Install, upgrade and uninstall tested in CI on both
+- [x] Homebrew formula with a `brew services` agent
+  (`packaging/homebrew/ztop.rb`: builds the tagged source, `service do`
+  block runs a read-only agent — TLS + pairing, no `--allow-control`).
+- [x] `.deb` for amd64 and arm64 with a systemd unit and a dedicated user
+  (`packaging/build-deb.sh` packages `lib/systemd/user/ztop-agent.service`;
+  postinst creates the `ztop` system user, best-effort).
+- [x] Install, upgrade and uninstall tested in CI on both
+  (`.github/workflows/packaging.yml`: the `.deb` matrix amd64/arm64 and the
+  Homebrew job each install, upgrade, pair a test client with the installed
+  agent, and uninstall; green on 0e54b69).
