@@ -60,16 +60,19 @@ Resolution path after the pre-reboot blocker (`g0-gate.log`, `g0-evidence.log`, 
 
 **Pre-reboot partial evidence kept for the record** (`g0-evidence.log`, 03:21–03:23): all non-simulator checks green; macOS unit tests passed; macOS UI-test runner timed out ("Timed out while enabling automation mode", XCTFuture Code=1000) — later superseded by ADR-0022. Pre-reboot simulator repair attempts (all failed, superseded by the reboot): device erase, CoreSimulatorService restart, `dyld_shared_cache update --force`, full runtime re-download (24B8117 verified 8.32 GB), second boot retry frozen at the boot logo (`simwatch.log`, `simwatch2.log`).
 
-## G1 — P1 Card Model and Engine Core (GLM-SELF; ASYNC REVIEW: CLAUDE on engine API) — IN PROGRESS
+## G1 — P1 Card Model and Engine Core (GLM-SELF; ASYNC REVIEW: CLAUDE on engine API) — IN PROGRESS (final gate running)
 
-Phase tasks P1.1–P1.8 are implemented on branch `phase/P1-engine-core` (latest commits: `a8c89d0` P1.8 perf harness, `01f5d5c` P1.6 redaction fix, `4dc35f9` piquet dispatch fix + iOS/coverage gate legs).
+Phase tasks P1.1–P1.8 are implemented on branch `phase/P1-engine-core` (latest commits: `a8c89d0` P1.8 perf harness, `01f5d5c` P1.6 redaction fix, `4dc35f9` piquet dispatch fix + iOS/coverage gate legs, `26bb92f` replay fixture anchor).
 
 ### G1 checks and evidence (accumulating)
 - **Coverage ≥ 90%** — `Tools/coverage-report.sh` with both test binaries merged: **CardModel 94.3%**, **RulesEngine 97.3%**, **ToyGame 96.6%** (line coverage). `make coverage-check` added to the Makefile and CI to enforce the threshold; report also at `reports/coverage/summary.txt`.
-- **RNG vectors** — xoshiro256** reference vectors, SplitMix64 seeding, Lemire bounded-integer and shuffle tests pass in `Packages/RulesEngine` (`swift test` 47/47, 10 suites, macOS).
+- **RNG vectors** — xoshiro256** reference vectors, SplitMix64 seeding, Lemire bounded-integer and shuffle tests pass in `Packages/RulesEngine` (`swift test` 48/48, 10 suites, macOS).
 - **0 redaction leaks** — byte-scan property test over 2,000 toy games (`RedactionTests`) passes; redaction made strictly knowledge-driven per ARCHITECTURE §9.6 Rule 1 (`01f5d5c`).
-- **20 golden replays match cross-platform** — macOS: `ReplayTests` green (47/47 suite). iOS simulator: `make test-replays-ios` (new) runs the RulesEngine scheme on `iPhone 17`; local run on `zGeist3_bot-iPhone-17` in progress — evidence to be appended.
+- **20 golden replays match cross-platform** — macOS: `swift test` 48/48 incl. Replays suite. iOS simulator: `make test-replays-ios` on `zGeist3_bot-iPhone-17` (`RulesEngine-Package` scheme) → **48/48 in 10 suites passed, `** TEST SUCCEEDED **`** (`replays-ios3.log`, after the `#filePath` fixture-anchor fix `26bb92f`); earlier attempts failed on the cwd-relative path (see incidents).
 - **Banned-API lint clean** — SwiftLint main 0 violations (48 files), SwiftLint pure 0 (30 files), swift-format `--strict` 0, `check-imports.sh` 0.
+- **CardModel on iOS simulator** — `xcodebuild test -scheme CardModel` on `zGeist3_bot-iPhone-17` → 8/8 Swift Testing tests, `TEST SUCCEEDED`, EXIT=0 (post-piquet-fix run, `/tmp/cardmodel-ios2.log`).
+
+**Consolidated final gate** `make gate PHASE=P1` — running; result to be appended.
 
 ### Incidents during P1
 - **piquet-32 regression (fixed, `4dc35f9`):** the `spec(for:)` complexity split dropped the `piquet` family from the dispatch, so `faces(for: "piquet-32")` returned nil and CardModel tests crashed on both platforms; caught by the package suites (macOS + iOS), fixed, 8/8 CardModel tests green on macOS and iOS.
