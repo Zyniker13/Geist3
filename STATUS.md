@@ -2,9 +2,9 @@
 
 Updated after every working session.
 
-- **Current milestone:** M8 (hardening and 0.1.0) — done: CI green on main (0e54b69), every parity item checked, budget met and recorded; the 0.1.0 tag is the last step.
-- **Last done:** M8 CI repair round 2: the fuzz smoke's annotation path died on a BSD-awk `printf "%0A"` (a bad conversion, exit 2, killed by set -e before the annotation printed) — now `%%0A`; the annotation then revealed the real failure: cargo-fuzz installed via taiki-e/install-action was x86_64 (the runner's preinstalled rust runs under Rosetta) and targeted `x86_64-apple-darwin`, which the arm64 nightly has no std for (E0463, all 17 targets) — now installed with the nightly toolchain so it targets the native triple (decision 0059). The brew job's remaining failure was the upgrade step bumping the tap's source directory while brew reads the installed clone — now bumps the clone. Result: the full run on 0e54b69 is green (macOS, Linux, Fuzz smoke, Packaging). The three packaging parity items are checked with the green run as evidence.
-- **Next step:** Tag v0.1.0 at the green commit and push the tag; then a final STATUS line.
+- **Current milestone:** M8 (hardening and 0.1.0) — complete. CI green on main, every parity item checked, budget met and recorded, `v0.1.0` tagged and pushed at e9a98df.
+- **Last done:** Tagged and pushed `v0.1.0` (annotated, at e9a98df — the commit with the fully green CI run: macOS, Linux, Fuzz smoke, Packaging). The Homebrew formula's real `tag: "v0.1.0"` URL now resolves.
+- **Next step:** none for 0.1.0.
 - **Blocked on:** nothing. Note for any session working here: `app/Sources/Info.plist` was found overwritten back to `1.0` several times by a process outside this session; the correct value is `0.1.0` (commit 34023d8). Re-check `git status` and the version immediately before every commit.
 
 ## Log
@@ -12,6 +12,8 @@ Updated after every working session.
 Newest first. One or two lines per session: what changed, what is next.
 
 - 2026-11-17 (late): M8 closed out — CI fully green on 0e54b69 (macOS, Linux, Fuzz smoke, Packaging) after the cargo-fuzz native-arch fix (decision 0059) and the brew clone-bump fix; the three packaging parity items checked with the green run as evidence. Next: tag v0.1.0.
+
+- 2026-11-17 (final): v0.1.0 tagged and pushed (annotated tag at e9a98df, the green commit). M0–M8 complete; zTop 0.1.0 is released.
 
 - 2026-11-17 (evening): M8 CI repair — pushed the fuzzing (14b1762) and packaging (6f6d24c) batches, then fixed the three failures their first CI runs exposed: best-effort postinst (the amd64 "Install .deb" step then passed), the Homebrew tap formula path corrected to `local/ztop/ztop` plus `brew trust` for the local tap, and measure-agent.sh rewritten to measure the window CPU delta (cputime before/after; macOS and Linux formats; loud failure if the agent exits; --no-advertise). Fuzzing count corrected to 17 everywhere. Next: green CI on 2ecded5, then the 0.1.0 tag.
 
