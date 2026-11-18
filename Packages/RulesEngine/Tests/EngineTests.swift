@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 @testable import RulesEngine
+@_spi(HostOnly) import ToyGame
 @_spi(HostOnly) import RulesEngine
 
 @Suite("RulesEngine — state, zones, and reducer (P1.3–P1.5)")

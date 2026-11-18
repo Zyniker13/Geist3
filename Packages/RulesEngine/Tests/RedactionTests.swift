@@ -2,6 +2,7 @@ import Foundation
 import Testing
 import CardModel
 @testable import RulesEngine
+@_spi(HostOnly) import ToyGame
 @_spi(HostOnly) import RulesEngine
 
 /// P1.6: Observation and Redactor. The redaction property test (ROADMAP

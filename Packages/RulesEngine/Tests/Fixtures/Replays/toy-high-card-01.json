@@ -1,0 +1,59 @@
+{
+  "actions" : [
+    {
+      "intent" : "play:9",
+      "seat" : 1,
+      "version" : 0
+    },
+    {
+      "intent" : "play:0",
+      "seat" : 0,
+      "version" : 1
+    },
+    {
+      "intent" : "play:7",
+      "seat" : 1,
+      "version" : 2
+    },
+    {
+      "intent" : "play:4",
+      "seat" : 0,
+      "version" : 3
+    },
+    {
+      "intent" : "play:8",
+      "seat" : 1,
+      "version" : 4
+    },
+    {
+      "intent" : "play:3",
+      "seat" : 0,
+      "version" : 5
+    },
+    {
+      "intent" : "play:2",
+      "seat" : 0,
+      "version" : 6
+    },
+    {
+      "intent" : "play:5",
+      "seat" : 1,
+      "version" : 7
+    },
+    {
+      "intent" : "play:6",
+      "seat" : 1,
+      "version" : 8
+    },
+    {
+      "intent" : "play:1",
+      "seat" : 0,
+      "version" : 9
+    }
+  ],
+  "finalStateHash" : "75d68fc8b13cf59cbbe565508c8d5091496024dee3c3250a4e33773d1743ed39",
+  "format" : "parlor.replay\/1",
+  "rulesetHash" : "54b104e6f3f27d75f501c6e0e15f61f871d561a94f775f9322afd4293467009a",
+  "seatCount" : 2,
+  "seed" : 1
+}

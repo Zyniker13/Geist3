@@ -12,6 +12,10 @@ let package = Package(
     ],
     targets: [
         .target(name: "RulesEngine", dependencies: ["CardModel"], path: "Sources"),
-        .testTarget(name: "RulesEngineTests", dependencies: ["RulesEngine"], path: "Tests"),
+        // Package-internal: the P1 toy game shared by tests and the golden
+        // replay generator. Not shipped as a product.
+        .target(name: "ToyGame", dependencies: ["RulesEngine"], path: "ToyGame"),
+        .executableTarget(name: "golden-gen", dependencies: ["ToyGame"], path: "GoldenGen"),
+        .testTarget(name: "RulesEngineTests", dependencies: ["RulesEngine", "ToyGame"], path: "Tests"),
     ]
 )

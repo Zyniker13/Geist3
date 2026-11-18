@@ -4,14 +4,13 @@
 // wins the deal. Configured in Swift (the JSON DSL lands in P2).
 
 import CardModel
-@testable import RulesEngine
 @_spi(HostOnly) import RulesEngine
 
-enum ToyGame {
-    static let seatCount = 2
-    static let tricks = 5
+@_spi(HostOnly) public enum ToyGame {
+    public static let seatCount = 2
+    public static let tricks = 5
 
-    static func stockFaces() -> [CardFace] {
+    public static func stockFaces() -> [CardFace] {
         var faces: [CardFace] = []
         for rank in ["A", "K", "Q", "J", "10"] {
             faces.append(CardFace(suit: .spades, rank: Rank(rank)))
@@ -20,7 +19,7 @@ enum ToyGame {
         return faces
     }
 
-    static func engine() -> Engine {
+    public static func engine() -> Engine {
         let deal = AnyMechanic(DealMechanic.self, params: DealParams(
             source: "stock",
             packets: [DealPacket(to: Seat(0), each: 5), DealPacket(to: Seat(1), each: 5)],
@@ -45,7 +44,7 @@ enum ToyGame {
     }
 
     /// Play one full deal with random legal intents; returns the final state.
-    static func play(engine: Engine, seed: UInt64) throws -> GameState {
+    public static func play(engine: Engine, seed: UInt64) throws -> GameState {
         let start = try engine.start(seed: seed)
         var state = start.state
         var rng = SeededRNG(seed: seed ^ 0x5eed_5eed_5eed_5eed)
