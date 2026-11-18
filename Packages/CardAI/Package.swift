@@ -5,7 +5,7 @@ let package = Package(
     name: "CardAI",
     platforms: [.iOS("26.0"), .macOS("26.0")],
     products: [
-        .library(name: "CardAI", targets: ["CardAI"]),
+        .library(name: "CardAI", targets: ["CardAI"])
     ],
     targets: [
         .target(name: "CardAI", path: "Sources"),

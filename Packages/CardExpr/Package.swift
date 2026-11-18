@@ -5,7 +5,7 @@ let package = Package(
     name: "CardExpr",
     platforms: [.iOS("26.0"), .macOS("26.0")],
     products: [
-        .library(name: "CardExpr", targets: ["CardExpr"]),
+        .library(name: "CardExpr", targets: ["CardExpr"])
     ],
     targets: [
         .target(name: "CardExpr", path: "Sources"),

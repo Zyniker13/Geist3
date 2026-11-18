@@ -1,0 +1,59 @@
+# Parlor main SwiftLint config (P0.4).
+# Whitelist via `included` (SwiftLint 0.65 `excluded` does not match
+# subdirectory globs, so a blacklist would lint .build artifacts).
+# Banned-API rules for the deterministic packages live in .swiftlint-pure.yml
+# (CONVENTIONS §5.4) and are run separately so they cannot fire in UI code.
+included:
+  - App
+  - Tests
+  - UITests
+  - Packages/CardModel/Sources
+  - Packages/CardModel/Tests
+  - Packages/CardExpr/Sources
+  - Packages/CardExpr/Tests
+  - Packages/RulesEngine/Sources
+  - Packages/RulesEngine/Tests
+  - Packages/RulesetKit/Sources
+  - Packages/RulesetKit/Tests
+  - Packages/GameLibrary/Sources
+  - Packages/GameLibrary/Tests
+  - Packages/CardAI/Sources
+  - Packages/CardAI/Tests
+  - Packages/Teaching/Sources
+  - Packages/Teaching/Tests
+  - Packages/TableNet/Sources
+  - Packages/TableNet/Tests
+  - Packages/TableUI/Sources
+  - Packages/TableUI/Tests
+  - Packages/Library/Sources
+  - Packages/Library/Tests
+  - Packages/Accessibility/Sources
+  - Packages/Accessibility/Tests
+  - Packages/Persistence/Sources
+  - Packages/Persistence/Tests
+  - Packages/Platform/Sources
+  - Packages/Platform/Tests
+line_length:
+  warning: 140
+  error: 200
+  ignores_comments: true
+type_body_length:
+  warning: 400
+  error: 600
+file_length:
+  warning: 800
+  error: 1500
+function_body_length:
+  warning: 60
+  error: 120
+identifier_name:
+  min_length:
+    warning: 2
+  excluded:
+    - id
+    - x
+    - y
+    - z
+    - i
+    - n
+    - s

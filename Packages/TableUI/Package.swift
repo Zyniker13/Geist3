@@ -5,7 +5,7 @@ let package = Package(
     name: "TableUI",
     platforms: [.iOS("26.0"), .macOS("26.0")],
     products: [
-        .library(name: "TableUI", targets: ["TableUI"]),
+        .library(name: "TableUI", targets: ["TableUI"])
     ],
     targets: [
         .target(name: "TableUI", path: "Sources"),

@@ -1,5 +1,5 @@
-import Testing
 import TableNet
+import Testing
 
 @Suite("TableNet")
 struct TableNetTests {

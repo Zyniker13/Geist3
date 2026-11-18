@@ -1,0 +1,62 @@
+# Banned-API rules for the deterministic packages (CONVENTIONS §5.4).
+# Scope: CardModel, CardExpr, RulesEngine, RulesetKit, CardAI, Teaching
+# (Sources and Tests). UI packages legitimately use Float/CGFloat and are
+# excluded on purpose.
+included:
+  - Packages/CardModel/Sources
+  - Packages/CardModel/Tests
+  - Packages/CardExpr/Sources
+  - Packages/CardExpr/Tests
+  - Packages/RulesEngine/Sources
+  - Packages/RulesEngine/Tests
+  - Packages/RulesetKit/Sources
+  - Packages/RulesetKit/Tests
+  - Packages/CardAI/Sources
+  - Packages/CardAI/Tests
+  - Packages/Teaching/Sources
+  - Packages/Teaching/Tests
+excluded:
+  - .build
+custom_rules:
+  banned-date:
+    name: "Banned API: Date()"
+    id: "banned-date"
+    regex: "Date\\(\\)"
+    message: "Date() is banned in deterministic packages (CONVENTIONS §5.4); inject a clock."
+    severity: error
+  banned-uuid:
+    name: "Banned API: UUID()"
+    id: "banned-uuid"
+    regex: "UUID\\(\\)"
+    message: "UUID() is banned in deterministic packages (CONVENTIONS §5.4); derive IDs from the seed."
+    severity: error
+  banned-system-rng:
+    name: "Banned API: SystemRandomNumberGenerator"
+    id: "banned-system-rng"
+    regex: "SystemRandomNumberGenerator"
+    message: "SystemRandomNumberGenerator is banned (CONVENTIONS §5.4); use SeededRNG in state."
+    severity: error
+  banned-random-unseeded:
+    name: "Banned API: .random(in:) without using:"
+    id: "banned-random-unseeded"
+    regex: "\\.random\\(in:(?:(?!using:).)*\\)"
+    message: ".random(in:) must pass an explicit using: generator (CONVENTIONS §5.4)."
+    severity: error
+  banned-float:
+    name: "Banned API: Float"
+    id: "banned-float"
+    regex: "\\bFloat\\b"
+    message: "Float is banned in deterministic packages (CONVENTIONS §5.4); use fixed-point Int."
+    severity: error
+  banned-double:
+    name: "Banned API: Double"
+    id: "banned-double"
+    regex: "\\bDouble\\b"
+    message: "Double is banned in deterministic packages (CONVENTIONS §5.4); use fixed-point Int."
+    severity: error
+  banned-cgfloat:
+    name: "Banned API: CGFloat"
+    id: "banned-cgfloat"
+    regex: "\\bCGFloat\\b"
+    message: "CGFloat is banned in deterministic packages (CONVENTIONS §5.4); use fixed-point Int."
+    severity: error

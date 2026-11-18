@@ -1,5 +1,5 @@
-import Testing
 import RulesetKit
+import Testing
 
 @Suite("RulesetKit")
 struct RulesetKitTests {

@@ -5,7 +5,7 @@ let package = Package(
     name: "Teaching",
     platforms: [.iOS("26.0"), .macOS("26.0")],
     products: [
-        .library(name: "Teaching", targets: ["Teaching"]),
+        .library(name: "Teaching", targets: ["Teaching"])
     ],
     targets: [
         .target(name: "Teaching", path: "Sources"),

@@ -1,5 +1,5 @@
-import Testing
 import RulesEngine
+import Testing
 
 @Suite("RulesEngine")
 struct RulesEngineTests {

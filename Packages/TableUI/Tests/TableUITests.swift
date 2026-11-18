@@ -1,5 +1,5 @@
-import Testing
 import TableUI
+import Testing
 
 @Suite("TableUI")
 struct TableUITests {

@@ -1,5 +1,5 @@
-import Testing
 import Teaching
+import Testing
 
 @Suite("Teaching")
 struct TeachingTests {

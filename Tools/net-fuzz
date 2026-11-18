@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# net-fuzz (P0 stub) — the real protocol fuzzer lands in P8.
+set -eu
+cmd="${1:-help}"
+case "$cmd" in
+    quick)
+        echo "net-fuzz quick: no session protocol yet (lands in P8); nothing to fuzz"
+        ;;
+    fuzz)
+        echo "net-fuzz fuzz: not implemented yet (lands in P8)" >&2
+        exit 1
+        ;;
+    *)
+        echo "usage: net-fuzz quick | fuzz" >&2
+        exit 1
+        ;;
+esac

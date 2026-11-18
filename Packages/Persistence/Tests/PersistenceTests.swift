@@ -1,5 +1,5 @@
-import Testing
 import Persistence
+import Testing
 
 @Suite("Persistence")
 struct PersistenceTests {

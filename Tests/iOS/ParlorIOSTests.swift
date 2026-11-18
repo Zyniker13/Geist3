@@ -1,5 +1,5 @@
-import Testing
 import ParloriOS
+import Testing
 
 @Suite("Parlor iOS app")
 struct ParlorIOSTests {

@@ -1,5 +1,5 @@
-import Testing
 import Platform
+import Testing
 
 @Suite("Platform")
 struct PlatformTests {

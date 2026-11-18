@@ -1,5 +1,5 @@
-import Testing
 import CardAI
+import Testing
 
 @Suite("CardAI")
 struct CardAITests {

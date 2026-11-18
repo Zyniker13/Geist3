@@ -1,5 +1,5 @@
-import Testing
 import CardModel
+import Testing
 
 @Suite("CardModel")
 struct CardModelTests {

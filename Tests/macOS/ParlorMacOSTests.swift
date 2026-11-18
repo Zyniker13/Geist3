@@ -1,5 +1,5 @@
-import Testing
 import ParlorMacOS
+import Testing
 
 @Suite("Parlor macOS app")
 struct ParlorMacOSTests {

@@ -1,5 +1,5 @@
-import Testing
 import Library
+import Testing
 
 @Suite("Library")
 struct LibraryTests {

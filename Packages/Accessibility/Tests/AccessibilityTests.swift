@@ -1,5 +1,5 @@
-import Testing
 import Accessibility
+import Testing
 
 @Suite("Accessibility")
 struct AccessibilityTests {
