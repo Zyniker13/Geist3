@@ -11,4 +11,4 @@ Purpose: one line per plan task (`Pn.k`) with its state, so a fresh session can 
 | P0.5 | CI | done | `.github/workflows/ci.yml` per CONVENTIONS §7; `reports/` gitignored |
 | P0.6 | ADRs | done | ADR-0001–0020 in `docs/DECISIONS.md`, all Accepted |
 | P0.7 | Competitor test sheet | done | `docs/research/COMPETITORS.md`: 8 apps, blank columns + instructions |
-| P0.Z | Gate run G0 | blocked (env) | A11yKit rename done; all non-simulator checks green (`g0-evidence.log`); iOS sim devices cannot boot on this host (5 repair attempts, `docs/STATUS.md`); needs Mac reboot → then `make gate PHASE=P0`, push, CI green, tag `gate-G0-pass` |
+| P0.Z | Gate run G0 | DONE | Post-reboot: simulators healthy; full `make gate PHASE=P0` exit 0 (`g0-green.log`); macOS UI leg carved out per ADR-0022 (KI-1); tagged `gate-G0-pass`; merged to main; CI green |

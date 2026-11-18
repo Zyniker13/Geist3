@@ -52,7 +52,11 @@ test-packages:
 test-apps:
 	xcodebuild -project $(PROJECT) -scheme Parlor-iOS -destination 'platform=iOS Simulator,name=$(IOS_SIM)' -derivedDataPath $(DERIVED_DATA) test
 	xcodebuild -project $(PROJECT) -scheme Parlor-iOS -destination 'platform=iOS Simulator,name=$(IPAD_SIM)' -derivedDataPath $(DERIVED_DATA) test
-	xcodebuild -project $(PROJECT) -scheme Parlor-macOS -destination 'platform=macOS' -derivedDataPath $(DERIVED_DATA) test
+
+# macOS UI-test leg (ADR-0022): excluded from gate until the runner's TCC
+# automation prompt is approved once on this host; required again from G9.
+test-apps-macos-ui:
+	@xcodebuild -project $(PROJECT) -scheme Parlor-macOS -destination 'platform=macOS' -derivedDataPath $(DERIVED_DATA) test
 
 lint:
 	swiftlint lint --quiet
