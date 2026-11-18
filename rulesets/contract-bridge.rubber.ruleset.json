@@ -1,0 +1,113 @@
+{
+  "format": "parlor.ruleset/1",
+  "id": "contract-bridge.rubber",
+  "game": "contract-bridge",
+  "kind": "base",
+  "version": "1.0.0",
+  "engine": ">=1.0",
+  "name": { "key": "game.bridge.name", "default": "Contract Bridge (Rubber)" },
+  "summary": { "key": "game.bridge.summary", "default": "Partners bid for a contract, then the declarer plays both hands to make it." },
+  "classification": { "pagat": "outplay/trick-taking/plain/whist/bridge", "objective": "capture-tricks", "tags": ["trick-taking", "partnership", "auction", "dummy"] },
+  "sources": [
+    { "id": "pagat", "title": "Pagat: Contract Bridge", "url": "https://www.pagat.com/auctionwhist/bridge.html", "role": "primary" },
+    { "id": "acbl-rubber", "title": "ACBL: Laws of Rubber Bridge (2014)", "url": "https://cdn.acbl.org/wp-content/uploads/2015/02/Laws-of-Rubber-Bridge.pdf", "role": "official" },
+    { "id": "wbf-2017", "title": "WBF: 2017 Laws of Duplicate Bridge", "url": "https://www.worldbridge.org/regulations/2017-laws-of-duplicate-bridge/", "role": "official" }
+  ],
+  "players": { "counts": [4], "default": 4, "teams": "partnershipOpposite", "seatNames": ["N", "E", "S", "W"] },
+  "deck": { "base": "french-52" },
+  "orders": { "natural": ["2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A"], "strains": ["C", "D", "H", "S", "NT"] },
+  "options": [
+    { "id": "honors", "type": "bool", "default": true, "label": { "key": "opt.bridge.honors", "default": "Score honors" }, "rules": ["BRG-5.6"] },
+    { "id": "passOut", "type": "enum", "values": ["redealNextDealer", "redealSameDealer"], "default": "redealNextDealer", "label": { "key": "opt.bridge.passOut", "default": "After four passes" }, "rules": ["BRG-2.6"] },
+    { "id": "claims", "type": "bool", "default": true, "label": { "key": "opt.bridge.claims", "default": "Declarer may claim remaining tricks" }, "rules": ["BRG-4.6"] }
+  ],
+  "rules": [
+    { "id": "BRG-1.1", "text": { "key": "rule.brg.1.1", "default": "Four players in two partnerships each receive 13 cards." } },
+    { "id": "BRG-2.1", "text": { "key": "rule.brg.2.1", "default": "The dealer calls first; each player in turn passes, bids, doubles, or redoubles." } },
+    { "id": "BRG-2.2", "text": { "key": "rule.brg.2.2", "default": "A bid names a number of tricks over six (1 to 7) and a strain; each bid must be higher than the last, ranking clubs, diamonds, hearts, spades, then no trump." } },
+    { "id": "BRG-2.3", "text": { "key": "rule.brg.2.3", "default": "You may double only the opponents' last bid, if not already doubled; you may redouble only your side's doubled bid." } },
+    { "id": "BRG-2.4", "text": { "key": "rule.brg.2.4", "default": "The auction ends after three consecutive passes following a bid." } },
+    { "id": "BRG-2.5", "text": { "key": "rule.brg.2.5", "default": "The declarer is the player of the winning side who first named the final strain." } },
+    { "id": "BRG-2.6", "text": { "key": "rule.brg.2.6", "default": "If all four players pass, the deal is thrown in and redealt." } },
+    { "id": "BRG-3.1", "text": { "key": "rule.brg.3.1", "default": "The player to the declarer's left makes the opening lead." } },
+    { "id": "BRG-3.2", "text": { "key": "rule.brg.3.2", "default": "After the opening lead, the declarer's partner (dummy) spreads their hand face up, and the declarer plays it." } },
+    { "id": "BRG-4.1", "text": { "key": "rule.brg.4.1", "default": "You must follow suit if you can." } },
+    { "id": "BRG-4.2", "text": { "key": "rule.brg.4.2", "default": "The highest trump wins the trick, or the highest card of the suit led if no trump is played." } },
+    { "id": "BRG-4.6", "text": { "key": "rule.brg.4.6", "default": "The declarer may claim the remaining tricks; defenders may accept or play on." } },
+    { "id": "BRG-5.1", "text": { "key": "rule.brg.5.1", "default": "Making the contract scores trick points below the line; 100 or more below the line wins a game." } },
+    { "id": "BRG-5.2", "text": { "key": "rule.brg.5.2", "default": "Overtricks, slam bonuses, insult bonuses, and penalties for undertricks score above the line." } },
+    { "id": "BRG-5.5", "text": { "key": "rule.brg.5.5", "default": "The first side to win two games wins the rubber and its bonus." } },
+    { "id": "BRG-5.6", "text": { "key": "rule.brg.5.6", "default": "A player holding four or five trump honors, or all four aces at no trump, scores an honors bonus." } }
+  ],
+  "zones": [
+    { "id": "hand", "scope": "seat", "visibility": "owner", "sort": "bridgeSuits" },
+    { "id": "trick", "scope": "shared", "visibility": "public", "ordered": true },
+    { "id": "played", "scope": "seat", "visibility": "public", "faceDown": true }
+  ],
+  "vars": {
+    "below": { "scope": "teamMatch", "type": "int", "initial": "0" },
+    "above": { "scope": "teamMatch", "type": "int", "initial": "0" },
+    "games": { "scope": "teamMatch", "type": "int", "initial": "0" },
+    "contract": { "scope": "deal", "type": "contract?", "initial": "null" },
+    "declarer": { "scope": "deal", "type": "seat?", "initial": "null" }
+  },
+  "defs": {
+    "vulnerable(t: team) -> bool": "match.games[t] >= 1",
+    "strainSuit() -> suit?": "deal.contract.strain == 'NT' ? null : deal.contract.strain",
+    "declarerTricks() -> int": "tricksWon(team(deal.declarer))"
+  },
+  "setup": { "firstDealer": "highCut", "dealerRotation": "left" },
+  "phases": [
+    { "id": "deal", "mechanic": "deal", "rule": "BRG-1.1", "params": { "packets": [ { "to": "hand", "each": 13 } ] } },
+    {
+      "id": "auction", "mechanic": "auction.ladder",
+      "params": {
+        "firstBidder": "dealer",
+        "ladder": { "levels": [1, 7], "strains": "strains", "rule": "BRG-2.2" },
+        "calls": ["pass", "double", "redouble"],
+        "doubleRule": "BRG-2.3",
+        "end": { "consecutivePassesAfterBid": 3, "rule": "BRG-2.4" },
+        "allPass": { "action": "options.passOut == 'redealNextDealer' ? 'redealNextDealer' : 'redealSameDealer'", "rule": "BRG-2.6" },
+        "result": { "contract": "deal.contract", "declarer": { "set": "deal.declarer", "rule": "firstOfWinningSideToNameStrain", "ruleId": "BRG-2.5" } },
+        "alerts": "systemExplanations"
+      }
+    },
+    {
+      "id": "play", "mechanic": "trick-play",
+      "params": {
+        "tricks": 13,
+        "trump": "strainSuit()",
+        "order": "natural",
+        "follow": { "mustFollow": true, "rule": "BRG-4.1" },
+        "firstLeader": "left(deal.declarer, 1)",
+        "firstLeaderRule": "BRG-3.1",
+        "dummy": { "seat": "partner(deal.declarer)", "revealAfter": "openingLead", "controlledBy": "deal.declarer", "rule": "BRG-3.2" },
+        "winner": "highestTrumpElseLedSuit",
+        "winnerRule": "BRG-4.2",
+        "nextLeader": "winner",
+        "claims": { "enabled": "options.claims", "by": "deal.declarer", "acceptedBy": "defenders", "rule": "BRG-4.6" },
+        "onTrickEnd": [ { "forEach": "seat", "do": [ { "move": { "from": "trick", "to": "played", "toSeat": "s", "cards": "playedBy(s)" } } ] } ]
+      }
+    },
+    {
+      "id": "score", "mechanic": "score",
+      "when": "deal.contract != null",
+      "params": {
+        "effects": [
+          { "let": "dt", "be": "team(deal.declarer)" },
+          { "let": "r", "be": "bridge.score(deal.contract, declarerTricks(), vulnerable(dt), 'rubber')" },
+          { "add": "match.below[dt]", "value": "r.below", "rule": "BRG-5.1" },
+          { "add": "match.above[dt]", "value": "r.above", "rule": "BRG-5.2" },
+          { "add": "match.above[opponents(dt)]", "value": "r.defenders", "rule": "BRG-5.2" },
+          { "if": "options.honors", "then": [ { "forEach": "team", "do": [ { "add": "match.above[t]", "value": "bridge.honors(dealtHands(), strainSuit(), t)" } ] } ], "rule": "BRG-5.6" },
+          { "if": "match.below[dt] >= 100", "then": [ { "add": "match.games[dt]", "value": "1" }, { "forEach": "team", "do": [ { "add": "match.above[t]", "value": "match.below[t]" }, { "set": "match.below[t]", "to": "0" } ] } ], "rule": "BRG-5.1" },
+          { "if": "match.games[dt] == 2", "then": [ { "add": "match.above[dt]", "value": "match.games[opponents(dt)] == 0 ? 700 : 500" } ], "rule": "BRG-5.5" }
+        ]
+      }
+    }
+  ],
+  "end": { "check": "afterDeal", "when": "teams().exists(t, match.games[t] == 2)", "rank": "descending(match.above)", "ties": "shared", "rule": "BRG-5.5" },
+  "display": { "layout": "bridgeCompass", "scoreSheet": "bridgeRubber", "showContract": true, "showVulnerability": true, "trickHistory": "all", "auctionBox": true },
+  "ai": { "profile": "bridge", "params": { "biddingSystem": "parlor-standard-sayc", "playSolver": "dds-pimc" } },
+  "teaching": { "lessons": ["bridge.l1-tricks", "bridge.l2-trumps", "bridge.l3-dummy", "bridge.l4-opening-bids", "bridge.l5-responses", "bridge.l6-scoring"] }
+}

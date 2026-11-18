@@ -1,0 +1,13 @@
+{
+  "format": "parlor.overlay/1",
+  "id": "house.mahler.hearts-grandma",
+  "kind": "house",
+  "extends": "hearts.standard@^1.0",
+  "version": "1.0.0",
+  "author": { "displayName": "Mahler Family" },
+  "name": { "default": "Grandma's Hearts" },
+  "description": { "default": "Jack of diamonds is worth minus 10, passing goes left, right, then across with no hold deal, and the game ends at 50." },
+  "options": { "jackOfDiamonds": true, "passSchedule": "leftRightAcross", "target": 50 },
+  "patch": [],
+  "provenance": { "createdWith": "Parlor 1.0 (house-rules editor)", "tier": 1 }
+}
