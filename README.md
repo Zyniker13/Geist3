@@ -1,13 +1,3 @@
-# Geist3
-
-Working repository for the geist3 agent. The current project is **Parlor** (working title), an iOS/iPadOS card table app. The research and the GLM-ready development roadmap are at the repository root.
-
-Earlier projects: an end-to-end encrypted messenger, now [Thrum](https://github.com/BITS-Freeware/Thrum), and a fleet monitor, now [zTop](https://github.com/BITS-Freeware/zTop).
-
-This repository held only a stub README, so the Parlor package is at the root. `CONVENTIONS.md` §3 and `ROADMAP.md` P0.1 still describe the later app layout, which copies this package into `docs/plan/`.
-
----
-
 # Parlor: Roadmap Package for a Card-Game Catalogue, Rulebook, Teacher, and Table
 
 Version 1.0 · 2026-11-15 · Working title **Parlor** (alternatives: **Common Deck** and **Long Table**; see `ROADMAP.md` §0.3).
