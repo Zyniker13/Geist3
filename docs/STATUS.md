@@ -38,8 +38,27 @@ Criteria (`docs/plan/ROADMAP.md` §P0): CI green on both platforms; lint and imp
 
 - `docs/research/COMPETITORS.md` exists: structured checklist (setup steps, time-to-first-card, tap counts, accessibility audit notes, network behavior) for The Card Table, Stillwind Table, Play Table, Trickster, BBO, Funbridge, Card Shark, Accessible Solitaire; comparison table and per-app sections have blank columns and fill-in instructions. To be completed by Mahler or a reviewer on real devices.
 
-### G0 gate run — pending
+### P0.Z Gate G0 run — BLOCKED on simulator environment (2026-11-18)
 
-- `make test` rerun for evidence (background job, in progress at time of writing).
-- `make gate PHASE=P0` full sequence: pending.
+Work completed since the first failed gate run (`g0-gate.log`, Error 65 at `test-apps`):
+- Root cause of the original failure: the plan-named `Accessibility` package collides with Apple's `Accessibility.framework` during the `XCUIAutomation` module build for UI-test targets. Explicit and implicit module modes both fail. Fixed by renaming the package to `A11yKit` (ADR-0021); all references updated (`project.yml`, `Makefile`, `Tools/check-imports.sh`, `.swiftlint.yml`, docs).
+- `make test-packages` → 13/13 suites pass (`g0-fix6.log`, `TEST-PACKAGES EXIT: 0`).
+- `make build` → all three legs green, `** BUILD SUCCEEDED **` ×3 (`p02-build.log`, exit 0; only 2 `appintentsmetadataprocessor` warnings).
+- UI-test API fix: `XCUIApplication.isRunning` was removed in the iOS 27.2 SDK; `UITests/ParlorUITests.swift` now asserts `app.state != .notRunning` (compiles clean).
+- App targets: `GENERATE_INFOPLIST_FILE: YES` + explicit `CFBundleIdentifier` in `App/iOS/Info.plist` and `App/macOS/Info.plist` (fixed missing-`CFBundleExecutable` install failure).
+
+Partial gate evidence (`g0-evidence.log`, 2026-11-18 03:21–03:23):
+- `make bootstrap lint test-packages coverage conformance validate sim N=200 fuzz-quick snapshot build` → **exit 0, all green** (PARTIAL-GATE EXIT: 0). Every G0 check except the two iOS simulator test legs passes.
+- `xcodebuild test -scheme Parlor-macOS`: unit tests passed (`Test Suite 'All tests' passed`, 03:22:09); the macOS UI-test runner then failed with "Timed out while enabling automation mode" (XCTFuture Code=1000).
+
+**Blocked — environment, not project.** The host's iOS simulator stack cannot boot any device to SpringBoard, so no iOS app can install/launch and no iOS test (unit or UI) can run. Repair attempts on 2026-11-18, all failed:
+1. Erase + reboot of `iPhone 17` → `xcodebuild test` hung at test-runner install (`g0-fix17.log`, Mach -308 earlier in `g0-fix16.log`).
+2. `killall` + restart of `com.apple.CoreSimulator.CoreSimulatorService`; fresh device `Parlor-iPhone` → `simctl install` worked once, `simctl launch` hung; service wedged again afterward.
+3. `simctl runtime dyld_shared_cache update --force` → no effect.
+4. Full re-download of the iOS 27.2 runtime build 24B8117 (8.32 GB, verified by the installer) after deleting the old runtime; fresh `iPhone 17` + `iPad Pro 13-inch (M5)` devices → first boot stuck at the Apple-logo progress bar (~40% → ~90% over 35 min, then the device shut itself down mid-boot). A `(Seed)` runtime `24B91016s` fetched by an unqualified `-downloadPlatform iOS` was deleted (incompatible with this Xcode's device types); the correct `-buildVersion 24B8117` runtime is installed and Ready.
+5. Retry of the interrupted first boot → frozen at the boot logo for 12+ min, watcher stopped.
+
+Not attempted (needs Mahler): rebooting the Mac. A host reboot is the standard remaining fix for a wedged CoreSimulator/XPC automation stack; nothing else in the environment is suspect (89 GB free disk, runtime verified fresh, device types present).
+
+- `make gate PHASE=P0` full sequence: pending on the simulator fix (the two iOS `test-apps` legs; everything else has passing evidence above).
 - Push to `main` + CI green: pending.

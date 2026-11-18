@@ -5,7 +5,7 @@ PROJECT := Parlor.xcodeproj
 DERIVED_DATA := .build/xcode
 IOS_SIM ?= iPhone 17
 IPAD_SIM ?= iPad Pro 13-inch (M5)
-PACKAGES := CardModel CardExpr RulesEngine RulesetKit GameLibrary CardAI Teaching TableNet TableUI Library Accessibility Persistence Platform
+PACKAGES := CardModel CardExpr RulesEngine RulesetKit GameLibrary CardAI Teaching TableNet TableUI Library A11yKit Persistence Platform
 
 .PHONY: help bootstrap gen build test test-packages test-apps lint format validate conformance sim fuzz-quick snapshot coverage perf gate
 

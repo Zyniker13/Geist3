@@ -27,8 +27,8 @@ included:
   - Packages/TableUI/Tests
   - Packages/Library/Sources
   - Packages/Library/Tests
-  - Packages/Accessibility/Sources
-  - Packages/Accessibility/Tests
+  - Packages/A11yKit/Sources
+  - Packages/A11yKit/Tests
   - Packages/Persistence/Sources
   - Packages/Persistence/Tests
   - Packages/Platform/Sources

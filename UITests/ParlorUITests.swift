@@ -1,9 +1,10 @@
 import XCTest
 
+@MainActor
 final class ParlorUITests: XCTestCase {
     func testAppLaunches() throws {
         let app = XCUIApplication()
         app.launch()
-        XCTAssertTrue(app.isRunning)
+        XCTAssertFalse(app.state == .notRunning)
     }
 }

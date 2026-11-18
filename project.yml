@@ -34,8 +34,8 @@ packages:
     path: Packages/TableUI
   Library:
     path: Packages/Library
-  Accessibility:
-    path: Packages/Accessibility
+  A11yKit:
+    path: Packages/A11yKit
   Persistence:
     path: Packages/Persistence
   Platform:
@@ -58,7 +58,7 @@ targets:
       - package: TableNet
       - package: TableUI
       - package: Library
-      - package: Accessibility
+      - package: A11yKit
       - package: Persistence
       - package: Platform
     settings:
@@ -66,7 +66,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.zyniker.parlor
         PRODUCT_MODULE_NAME: ParloriOS
         INFOPLIST_FILE: App/iOS/Info.plist
-        GENERATE_INFOPLIST_FILE: NO
+        GENERATE_INFOPLIST_FILE: YES
         TARGETED_DEVICE_FAMILY: "1,2"
   Parlor-macOS:
     type: application
@@ -85,7 +85,7 @@ targets:
       - package: TableNet
       - package: TableUI
       - package: Library
-      - package: Accessibility
+      - package: A11yKit
       - package: Persistence
       - package: Platform
     settings:
@@ -93,7 +93,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.zyniker.parlor.macos
         PRODUCT_MODULE_NAME: ParlorMacOS
         INFOPLIST_FILE: App/macOS/Info.plist
-        GENERATE_INFOPLIST_FILE: NO
+        GENERATE_INFOPLIST_FILE: YES
   Parlor-iOS-Tests:
     type: bundle.unit-test
     platform: iOS
@@ -104,6 +104,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.zyniker.parlor.ios.tests
+        GENERATE_INFOPLIST_FILE: YES
         TEST_HOST: $(BUILT_PRODUCTS_DIR)/Parlor-iOS.app/Parlor-iOS
         BUNDLE_LOADER: $(TEST_HOST)
   Parlor-macOS-Tests:
@@ -116,6 +117,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.zyniker.parlor.macos.tests
+        GENERATE_INFOPLIST_FILE: YES
         TEST_HOST: $(BUILT_PRODUCTS_DIR)/Parlor-macOS.app/Contents/MacOS/Parlor-macOS
         BUNDLE_LOADER: $(TEST_HOST)
   Parlor-iOS-UITests:
@@ -128,6 +130,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.zyniker.parlor.ios.uitests
+        GENERATE_INFOPLIST_FILE: YES
   Parlor-macOS-UITests:
     type: bundle.ui-testing
     platform: macOS
@@ -138,3 +141,4 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.zyniker.parlor.macos.uitests
+        GENERATE_INFOPLIST_FILE: YES

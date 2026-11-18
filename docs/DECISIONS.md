@@ -100,7 +100,7 @@ Purpose: every decision made during the build as a numbered ADR (context, decisi
 ## ADR-0011 — SwiftUI for all card rendering; no SpriteKit
 
 - **Status:** Accepted (2026-11-17, P0.6)
-- **Context:** ARCHITECTURE §3 (Module Layout: TableUI, Library, Accessibility all on SwiftUI), §16 (Accessibility Architecture).
+- **Context:** ARCHITECTURE §3 (Module Layout: TableUI, Library, A11yKit (plan: Accessibility) all on SwiftUI), §16 (Accessibility Architecture).
 - **Decision:** All card and table rendering is SwiftUI. SpriteKit (and other scene-graph frameworks) are not used.
 - **Consequences:** One rendering stack across iPhone, iPad, Mac (and tvOS in P13); accessibility, Dynamic Type, and keyboard interaction come from the platform; card faces are rendered by `CardFaceRenderer` into SwiftUI views.
 
@@ -166,3 +166,10 @@ Purpose: every decision made during the build as a numbered ADR (context, decisi
 - **Context:** ARCHITECTURE §19 (Persistence, Stats, and Sync).
 - **Decision:** Local persistence is JSON files (`Saves/`, `HouseRules/`, `Profiles/`, `Stats/`, `Replays/`), each with a `schemaVersion`; loaders migrate forward with tested migrations and refuse unknown future versions. Sync (P15) uses the CloudKit private database. Host saves use `NSFileProtectionComplete`.
 - **Consequences:** Saves are inspectable and diffable; migration tests are part of the gate checks; no server infrastructure is required.
+
+## ADR-0021 — Rename `Accessibility` package to `A11yKit`
+
+- **Status:** Accepted (2026-11-17, P0.Z)
+- **Context:** Apple's `Accessibility.framework` ships a Swift interface (`arm64-apple-ios-simulator.swiftinterface`). Our SPM package named `Accessibility` collides with it: during the explicit-module build of `XCUIAutomation`'s Swift interface (target iOS 17.0), the compiler resolves `import Accessibility` to our module (min deployment iOS 26.0) instead of Apple's (min deployment iOS 17.0), failing the deployment-target check. Disabling explicit modules on the UI-test targets does not help because the implicit module build also resolves `import Accessibility` to our module.
+- **Decision:** Rename the package from `Accessibility` to `A11yKit`. Update `Package.swift`, `project.yml`, `Makefile`, `check-imports.sh`, `.swiftlint.yml`, and all import statements. The plan's verbatim copy in `docs/plan/` retains the original name `Accessibility`.
+- **Consequences:** The build no longer collides with Apple's framework. The module provides the same functionality (narration, comfort settings, audio cues, table summary). The plan's ARCHITECTURE.md references are documented in ADR-0011 as "A11yKit (plan: Accessibility)".
