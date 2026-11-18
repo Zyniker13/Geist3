@@ -4,3 +4,5 @@ Purpose: every ambiguity met during the build, logged with date, phase, the defa
 
 | Date | Phase | Question | Default applied | State |
 | --- | --- | --- | --- | --- |
+| 2026-11-17 | P0.6 | CONVENTIONS §2 says "latest stable Xcode 26.x" but the build machine has Xcode 27.2 stable (Swift 6.4.2); the plan itself references Xcode 27 (Multipeer deprecation per TN3213) | Use Xcode 27.2 stable (latest stable on the build machine); "do not adopt Xcode 27 betas" is satisfied (27.2 is stable). Recorded in ADR-0001 | Resolved by default; no play/scoring impact |
+| 2026-11-17 | P0.4 | SwiftLint 0.65 `excluded` does not match subdirectory globs (`.build/` artifacts inside packages would be linted, 728 false violations) | `.swiftlint.yml` and `.swiftlint-pure.yml` use an `included:` whitelist of source/test dirs instead of `excluded:`; intent (zero warnings, no linting of generated artifacts) preserved | Resolved by default; tooling constraint, not a plan ambiguity |
