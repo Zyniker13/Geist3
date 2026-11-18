@@ -1,0 +1,106 @@
+{
+  "format": "parlor.ruleset/1",
+  "id": "cribbage.six-card",
+  "game": "cribbage",
+  "kind": "base",
+  "version": "1.0.0",
+  "engine": ">=1.0",
+  "name": { "key": "game.cribbage.name", "default": "Cribbage" },
+  "summary": { "key": "game.cribbage.summary", "default": "Score combinations of fifteens, pairs, runs, and flushes in play and in hand; first to 121 wins." },
+  "classification": { "pagat": "outplay/adding/cribbage", "objective": "score-points", "tags": ["adding", "two-player", "board"] },
+  "sources": [
+    { "id": "acc", "title": "American Cribbage Congress: Cribbage Tournament Rules (2025)", "url": "https://cribbage.org/NewSite/rules/rulebook_2025.pdf", "role": "official" },
+    { "id": "pagat", "title": "Pagat: Cribbage", "url": "https://www.pagat.com/adders/crib6.html", "role": "primary" }
+  ],
+  "players": { "counts": [2], "default": 2, "teams": "none" },
+  "deck": { "base": "french-52" },
+  "orders": { "natural": ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"] },
+  "options": [
+    { "id": "target", "type": "enum", "values": ["121", "61"], "default": "121", "label": { "key": "opt.crib.target", "default": "Game length" }, "rules": ["CRB-6.1"] },
+    { "id": "muggins", "type": "bool", "default": false, "label": { "key": "opt.crib.muggins", "default": "Muggins (claim points your opponent misses)" }, "rules": ["CRB-5.4"] },
+    { "id": "manualCounting", "type": "bool", "default": false, "label": { "key": "opt.crib.manualCounting", "default": "Players count their own hands" }, "rules": ["CRB-5.4"] },
+    { "id": "skunks", "type": "bool", "default": true, "label": { "key": "opt.crib.skunks", "default": "Count skunks in match play" }, "rules": ["CRB-6.2"] }
+  ],
+  "rules": [
+    { "id": "CRB-1.1", "text": { "key": "rule.crb.1.1", "default": "Each player receives six cards." } },
+    { "id": "CRB-2.1", "text": { "key": "rule.crb.2.1", "default": "Each player lays away two cards face down to form the crib, which belongs to the dealer." } },
+    { "id": "CRB-3.1", "text": { "key": "rule.crb.3.1", "default": "The non-dealer cuts and the dealer turns the top card of the lower packet as the starter." } },
+    { "id": "CRB-3.2", "text": { "key": "rule.crb.3.2", "default": "If the starter is a jack, the dealer pegs 2 (his heels)." } },
+    { "id": "CRB-4.1", "text": { "key": "rule.crb.4.1", "default": "Players alternately play cards, announcing the running total, which may not exceed 31." } },
+    { "id": "CRB-4.2", "text": { "key": "rule.crb.4.2", "default": "A player who cannot play without passing 31 says go; the opponent continues if able." } },
+    { "id": "CRB-4.3", "text": { "key": "rule.crb.4.3", "default": "Fifteens, pairs, and runs formed in play score; reaching 31 scores 2, and the last card under 31 scores 1." } },
+    { "id": "CRB-5.1", "text": { "key": "rule.crb.5.1", "default": "Hands are counted in order: non-dealer, dealer, then the dealer's crib, each with the starter." } },
+    { "id": "CRB-5.2", "text": { "key": "rule.crb.5.2", "default": "Fifteens score 2, pairs 2, runs 1 per card, a four-card flush 4 (hand only), a five-card flush 5, and the jack of the starter's suit 1." } },
+    { "id": "CRB-5.4", "text": { "key": "rule.crb.5.4", "default": "With muggins, an opponent may claim points a player fails to count." } },
+    { "id": "CRB-6.1", "text": { "key": "rule.crb.6.1", "default": "The first player to reach the target wins immediately, even mid-play." } },
+    { "id": "CRB-6.2", "text": { "key": "rule.crb.6.2", "default": "A loser who fails to pass 90 (in a 121 game) is skunked." } }
+  ],
+  "zones": [
+    { "id": "stock", "scope": "shared", "visibility": "none" },
+    { "id": "hand", "scope": "seat", "visibility": "owner", "sort": "byRank" },
+    { "id": "crib", "scope": "shared", "visibility": "none", "owner": "dealer" },
+    { "id": "starter", "scope": "shared", "visibility": "public" },
+    { "id": "pegged", "scope": "seat", "visibility": "public" },
+    { "id": "count", "scope": "shared", "visibility": "public", "ordered": true }
+  ],
+  "vars": {
+    "score": { "scope": "seatMatch", "type": "int", "initial": "0" },
+    "games": { "scope": "seatMatch", "type": "int", "initial": "0" }
+  },
+  "defs": {
+    "target() -> int": "options.target == '61' ? 61 : 121",
+    "pone() -> seat": "left(dealer, 1)"
+  },
+  "setup": { "firstDealer": "lowCut", "dealerRotation": "alternate" },
+  "phases": [
+    { "id": "deal", "mechanic": "deal", "rule": "CRB-1.1", "params": { "source": "stock", "packets": [ { "to": "hand", "each": 6 } ] } },
+    { "id": "layAway", "mechanic": "exchange.discardTo", "rule": "CRB-2.1", "params": { "count": 2, "from": "hand", "to": "crib", "simultaneous": true, "revealTo": "nobody" } },
+    {
+      "id": "starter", "mechanic": "reveal.starter", "rule": "CRB-3.1",
+      "params": { "cutBy": "pone()", "from": "stock", "to": "starter", "minCutDepth": 4 },
+      "after": [ { "if": "zone('starter')[0].rank == 'J'", "then": [ { "add": "match.score[dealer]", "value": "2", "event": "hisHeels" } ], "rule": "CRB-3.2" } ]
+    },
+    {
+      "id": "pegging", "mechanic": "count-play",
+      "params": {
+        "from": "hand", "to": "pegged", "sequence": "count",
+        "firstPlayer": "pone()",
+        "valueOf": "c.rank == 'A' ? 1 : (['J', 'Q', 'K'].exists(r, r == c.rank) ? 10 : int(c.rank))",
+        "limit": 31,
+        "rule": "CRB-4.1",
+        "go": { "rule": "CRB-4.2", "lastCardPoints": 1, "exactLimitPoints": 2 },
+        "pointsOnPlay": "cribbage.pegPoints(zone('count'))",
+        "pointsRule": "CRB-4.3",
+        "award": "match.score[seat]",
+        "returnCards": true
+      }
+    },
+    {
+      "id": "show", "mechanic": "show", "rule": "CRB-5.1",
+      "params": {
+        "order": [
+          { "zone": "hand", "seat": "pone()", "award": "pone()" },
+          { "zone": "hand", "seat": "dealer", "award": "dealer" },
+          { "zone": "crib", "award": "dealer", "isCrib": true }
+        ],
+        "with": "starter",
+        "points": "cribbage.handScore(cards, zone('starter')[0], isCrib)",
+        "pointsRule": "CRB-5.2",
+        "manual": "options.manualCounting",
+        "muggins": "options.muggins",
+        "award": "match.score[awardee]"
+      }
+    }
+  ],
+  "end": {
+    "check": "continuous",
+    "when": "seats().exists(s, match.score[s] >= target())",
+    "rank": "descending(match.score)",
+    "ties": "impossible",
+    "rule": "CRB-6.1",
+    "matchEffects": [ { "if": "options.skunks && seats().exists(s, match.score[s] < (target() == 121 ? 91 : 46))", "then": [ { "emit": "skunk" } ], "rule": "CRB-6.2" } ]
+  },
+  "display": { "layout": "headToHead", "board": "cribbage121", "scoreSheet": ["score"], "announceCount": true },
+  "ai": { "profile": "cribbage", "params": { "discard": "expectedValue", "pegging": "minimax" } },
+  "teaching": { "lessons": ["cribbage.l1-fifteens", "cribbage.l2-pegging", "cribbage.l3-counting", "cribbage.l4-discarding"] }
+}
