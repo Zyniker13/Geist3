@@ -70,7 +70,7 @@ test-packages-ios:
 # Cross-platform golden replay leg (G1): the RulesEngine suite (replays, RNG
 # vectors, redaction) must pass on the iOS simulator, matching the macOS run.
 test-replays-ios:
-	cd Packages/RulesEngine && $(SIM_LOCK) xcodebuild test -scheme RulesEngine -destination 'platform=iOS Simulator,name=$(IOS_SIM)' -derivedDataPath ../../.build/xcode/RulesEngine-ios
+	cd Packages/RulesEngine && $(SIM_LOCK) xcodebuild test -scheme RulesEngine-Package -destination 'platform=iOS Simulator,name=$(IOS_SIM)' -derivedDataPath ../../.build/xcode/RulesEngine-ios
 
 # macOS UI-test leg (ADR-0022): excluded from gate until the runner's TCC
 # automation prompt is approved once on this host; required again from G9.
