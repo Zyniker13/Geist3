@@ -7,8 +7,11 @@ let package = Package(
     products: [
         .library(name: "RulesEngine", targets: ["RulesEngine"])
     ],
+    dependencies: [
+        .package(path: "../CardModel")
+    ],
     targets: [
-        .target(name: "RulesEngine", path: "Sources"),
+        .target(name: "RulesEngine", dependencies: ["CardModel"], path: "Sources"),
         .testTarget(name: "RulesEngineTests", dependencies: ["RulesEngine"], path: "Tests"),
     ]
 )
