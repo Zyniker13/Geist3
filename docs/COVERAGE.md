@@ -4,3 +4,4 @@ Purpose: line-coverage per package and overall, per gate. Thresholds (`docs/plan
 
 | Gate | CardModel | CardExpr | RulesEngine | Overall | Commit |
 | --- | --- | --- | --- | --- | --- |
+| G1 | **94.3%** | — (placeholder suite) | **97.3%** (ToyGame target 96.6%) | — | `4dc35f9`+ |

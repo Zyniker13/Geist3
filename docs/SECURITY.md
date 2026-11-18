@@ -6,3 +6,4 @@ Purpose: security posture of the build — redaction-test results (0 leaks acros
 
 | Gate | Games | Simulated games | Checks | Leaks | Commit |
 | --- | --- | --- | --- | --- | --- |
+| G1 | toy game | 2,000 | byte-scan of encoded observation for every hidden face ID | **0** | `01f5d5c`+ |
