@@ -4,13 +4,14 @@ Purpose: the running log of the Parlor build (phases P0–P11 per `docs/plan/ROA
 
 ## Current Phase
 
-**P0 — Setup and Tooling** · branch `phase/P0-bootstrap-tooling` · plan of record: `docs/plan/` (package moved verbatim from the repo root in P0.1; `docs/plan/` is followed and never edited).
+**P2 — Ruleset DSL and Validation** (starting) · G1 passed 2026-11-18 (branch `phase/P1-engine-core`, merged to `main`) · plan of record: `docs/plan/` (package moved verbatim from the repo root in P0.1; `docs/plan/` is followed and never edited).
 
 ## Gate Ledger
 
 | Gate | Phase | Mode | Status | Evidence |
 | --- | --- | --- | --- | --- |
 | G0 | P0 Setup and Tooling | GLM-SELF | **PASS** (2026-11-18) | below |
+| G1 | P1 Card Model and Engine Core | GLM-SELF; ASYNC: CLAUDE (engine API) | **PASS** (2026-11-18) | below |
 
 ## G0 — P0 Setup and Tooling (GLM-SELF) — PASSED (2026-11-18)
 
@@ -60,7 +61,7 @@ Resolution path after the pre-reboot blocker (`g0-gate.log`, `g0-evidence.log`, 
 
 **Pre-reboot partial evidence kept for the record** (`g0-evidence.log`, 03:21–03:23): all non-simulator checks green; macOS unit tests passed; macOS UI-test runner timed out ("Timed out while enabling automation mode", XCTFuture Code=1000) — later superseded by ADR-0022. Pre-reboot simulator repair attempts (all failed, superseded by the reboot): device erase, CoreSimulatorService restart, `dyld_shared_cache update --force`, full runtime re-download (24B8117 verified 8.32 GB), second boot retry frozen at the boot logo (`simwatch.log`, `simwatch2.log`).
 
-## G1 — P1 Card Model and Engine Core (GLM-SELF; ASYNC REVIEW: CLAUDE on engine API) — IN PROGRESS (final gate running)
+## G1 — P1 Card Model and Engine Core (GLM-SELF; ASYNC REVIEW: CLAUDE on engine API) — PASSED (2026-11-18)
 
 Phase tasks P1.1–P1.8 are implemented on branch `phase/P1-engine-core` (latest commits: `a8c89d0` P1.8 perf harness, `01f5d5c` P1.6 redaction fix, `4dc35f9` piquet dispatch fix + iOS/coverage gate legs, `26bb92f` replay fixture anchor).
 
@@ -72,7 +73,9 @@ Phase tasks P1.1–P1.8 are implemented on branch `phase/P1-engine-core` (latest
 - **Banned-API lint clean** — SwiftLint main 0 violations (48 files), SwiftLint pure 0 (30 files), swift-format `--strict` 0, `check-imports.sh` 0.
 - **CardModel on iOS simulator** — `xcodebuild test -scheme CardModel` on `zGeist3_bot-iPhone-17` → 8/8 Swift Testing tests, `TEST SUCCEEDED`, EXIT=0 (post-piquet-fix run, `/tmp/cardmodel-ios2.log`).
 
-**Consolidated final gate** `make gate PHASE=P1` — running; result to be appended.
+**Consolidated final gate** `make gate PHASE=P1` → **`gate: PHASE=P1 PASSED`, exit 0** (`gate-p1.log`, 2026-11-18 10:30–10:58, 934 KB). Sequence: bootstrap → lint (SwiftLint main + pure, swift-format `--strict`, check-imports OK) → test-packages (13 suites) → coverage (13 suites) → coverage-check (**all packages ≥ 90%**, line 650) → conformance/validate/sim N=200/fuzz-quick/snapshot → build (3 legs) → test-apps (iPhone `testAppLaunches` passed 124 s; iPad leg passed) → test-replays-ios (RulesEngine-Package on iPhone sim, `** TEST SUCCEEDED **`). One benign diagnostic after the passing UI test: xcodebuild's post-run diagnostics collector logged `xcrun: error: unable to find utility "simctl"` (DEVELOPER_DIR not visible to that subprocess); the test result was unaffected. Cosmetic Info.plist warning noted for P4: "Support for all orientations will soon be required".
+
+**G1 verdict:** all criteria met with evidence above; async review request for Claude on the engine API is filed in `docs/HANDOFF.md` (§ next steps) — non-blocking per ROADMAP §G1 mode GLM-SELF/ASYNC.
 
 ### Incidents during P1
 - **piquet-32 regression (fixed, `4dc35f9`):** the `spec(for:)` complexity split dropped the `piquet` family from the dispatch, so `faces(for: "piquet-32")` returned nil and CardModel tests crashed on both platforms; caught by the package suites (macOS + iOS), fixed, 8/8 CardModel tests green on macOS and iOS.
