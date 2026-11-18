@@ -16,8 +16,17 @@ cd "$(dirname "$0")/../fuzz"
 runs="${ZTOP_FUZZ_RUNS:-1000}"
 max_len="${ZTOP_FUZZ_MAX_LEN:-8192}"
 status=0
+# If the script dies for any reason (including a set -e kill inside the
+# annotation path itself), say in which phase, so the failure is visible
+# in the run's annotations even where the step log is not readable.
+where="setup"
+trap 'rc=$?
+  if [ "$rc" -ne 0 ]; then
+    printf "::error title=fuzz-smoke::script exited %s in %s\n" "$rc" "$where"
+  fi' EXIT
 
 for target in $(ls fuzz_targets/*.rs | sed 's|fuzz_targets/||; s|\.rs$||' | sort); do
+    where="target $target"
     printf 'fuzz-smoke: %s (-runs=%s)\n' "$target" "$runs"
     if cargo +nightly fuzz run "$target" --sanitizer none -- \
         -runs="$runs" -max_len="$max_len" >/dev/null 2>&1

@@ -147,11 +147,25 @@ jobs:
           "$(brew --prefix)/bin/ztop" --version
       - name: Upgrade the formula
         run: |
-          tap="$RUNNER_TEMP/ztop-tap"
-          sed -i '' 's/version "0.1.0"/version "0.1.1"/' "$tap/Formula/ztop.rb"
-          git -C "$tap" add Formula
-          git -C "$tap" -c user.name=ci -c user.email=ci@ztop.dev commit -qm "ztop 0.1.1"
-          brew upgrade --build-from-source local/ztop/ztop
+          # `brew tap` clones the tap into Homebrew's own tree, so the
+          # version bump must land in the installed clone, not in the
+          # source directory brew no longer reads; a bump only in the
+          # source leaves the clone at 0.1.0, the upgrade is a no-op,
+          # and the version check below fails.
+          tap_installed="$(brew --repository)/Library/Taps/local/homebrew-ztop"
+          sed -i '' 's/version "0.1.0"/version "0.1.1"/' "$tap_installed/Formula/ztop.rb"
+          if brew upgrade --build-from-source local/ztop/ztop \
+              > "$RUNNER_TEMP/brew-upgrade.log" 2>&1
+          then
+            cat "$RUNNER_TEMP/brew-upgrade.log"
+          else
+            cat "$RUNNER_TEMP/brew-upgrade.log"
+            msg="$(tail -c 1400 "$RUNNER_TEMP/brew-upgrade.log" \
+              | tr -d '\r' | sed 's/%/%25/g' \
+              | awk 'NR>1{printf "%0A"} {printf "%s", $0}')"
+            echo "::error title=brew upgrade ztop::${msg}"
+            exit 1
+          fi
           brew list --versions ztop | grep -q 0.1.1
       - name: Start the agent as a service and pair a test client
         run: |
