@@ -45,6 +45,9 @@ jobs:
       - name: Package tests with coverage
         run: make coverage
 
+      - name: Coverage threshold (CardModel and RulesEngine >= 90%)
+        run: make coverage-check
+
       - name: make conformance
         run: make conformance
 
@@ -67,6 +70,9 @@ jobs:
 
       - name: "xcodebuild test (UI and snapshot: iPhone 17, iPad Pro 13-inch, macOS)"
         run: make test-apps
+
+      - name: Golden replays and engine suite on the iOS simulator (cross-platform hashes)
+        run: make test-replays-ios
 
       - name: make snapshot
         run: make snapshot
