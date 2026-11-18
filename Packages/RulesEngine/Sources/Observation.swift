@@ -136,23 +136,3 @@ public enum Redactor {
         }
     }
 }
-
-extension ZoneKey {
-    /// Zone-level default visibility: `owner` zones show their owner; `public`
-    /// zones show everyone; `none` zones show nobody (§9.6 rule 2).
-    fileprivate func visibilityDefault(viewer: Viewer, knowledge: KnowledgeStore) -> ObservedZone {
-        // P1: zone visibility is carried by mechanics (hand = owner, trick
-        // pile = public after completion, stock = none). The ruleset-driven
-        // Visibility type arrives in P2.
-        switch id {
-        case "hand":
-            if case .seat(let s) = viewer, s.raw == owner { return .visible([]) }
-            return .hidden(count: 0, known: [])
-        case "stock", "deck":
-            return .hidden(count: 0, known: [])
-        default:
-            // Trick piles and other shared zones: public.
-            return .visible([])
-        }
-    }
-}

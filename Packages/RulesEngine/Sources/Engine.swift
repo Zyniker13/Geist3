@@ -256,33 +256,13 @@ extension ZoneKey {
 }
 
 extension ObservedZone {
-    /// Redact a zone's cards for a viewer (§9.6): hidden zones expose counts
-    /// plus already-known cards only.
+    /// Redact a zone's cards for a viewer (§9.6 rule 1): a face is included
+    /// only if the viewer knows it (knowledge contains the viewer's seat) or
+    /// the card is public; `.replayAll` sees everything.
     static func redactCards(_ cards: [CardInstance], key: ZoneKey, viewer: Viewer, knowledge: KnowledgeStore) -> ObservedZone {
-        let canSeeAll: Bool
-        switch (key.id, viewer) {
-        case ("hand", .table), ("hand", .spectator), ("hand", .replayAll):
-            canSeeAll = true
-        case ("hand", .seat(let s)), ("hand", .coachOf(let s)):
-            canSeeAll = s.raw == key.owner
-        case ("stock", _), ("deck", _):
-            canSeeAll = viewer == .replayAll
-        default:
-            // Shared zones: visible (trick piles are public once played).
-            canSeeAll = true
-        }
-        if canSeeAll { return .visible(cards) }
-        var known: [CardInstance] = []
-        if let seat = viewerSeat(viewer) {
-            known = cards.filter { knowledge.knows($0.id, seat) }
-        }
+        _ = key // zone-level visibility defaults arrive with ruleset-driven zones in P2
+        let known = cards.filter { Redactor.maySee($0.id, viewer: viewer, knowledge: knowledge, publicCard: false) }
+        if known.count == cards.count { return .visible(cards) }
         return .hidden(count: cards.count, known: known)
-    }
-
-    private static func viewerSeat(_ viewer: Viewer) -> Seat? {
-        switch viewer {
-        case .seat(let s), .coachOf(let s): return s
-        default: return nil
-        }
     }
 }
