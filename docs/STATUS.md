@@ -361,11 +361,11 @@ on this branch until the G2 merge):
   ARCHITECTURE §3-sanctioned use). `make lint` now exits 0 with
   SwiftLint errors 0 / swift-format 0.
 
-## G2 — P2 Ruleset DSL and Validation (GLM-SELF; ASYNC REVIEW: CLAUDE) — accumulating
+## G2 — P2 Ruleset DSL and Validation (GLM-SELF; ASYNC REVIEW: CLAUDE) — PASSED
 
 Phase tasks P2.1–P2.9 are implemented on branch `phase/P2-ruleset-dsl`.
 
-### G2 checks and evidence (accumulating)
+### G2 checks and evidence
 
 - **CardExpr coverage ≥ 95% (P2.1)** — `make coverage-check` with
   `COVERAGE_THRESHOLDS="CardExpr=95"`: **CardExpr 543/543 lines = 100.0%**;
@@ -389,5 +389,26 @@ Phase tasks P2.1–P2.9 are implemented on branch `phase/P2-ruleset-dsl`.
 - **CardExpr parser bar (P2.1)** — **339 parametrized parser cases** (≥ 300),
   including precedence, error codes with column numbers, and the 10,000-string
   fuzz (`fuzzNeverTraps`); 13/13 CardExpr tests.
-- **Consolidated final gate** — `make gate PHASE=P2`: running; final evidence
-  (log, exit, timings) recorded below when it completes.
+- **Consolidated final gate** — `make gate PHASE=P2` (2026-11-19 18:02–18:16
+  UTC−5, branch HEAD `1c29078`; no code changes during the run, only this
+  STATUS draft) → **`gate: PHASE=P2 PASSED`, exit 0**. Sequence:
+  bootstrap → `lint` (SwiftLint 0 errors / swift-format 0 / check-imports OK)
+  → `test-packages` (all package suites on macOS) → `coverage` +
+  `coverage-check` (CardExpr 100.0%, all packages ≥ 90%) → `validate`
+  (corpus **61 passed, 0 failed**) → `sim` (seeded toy-game simulation,
+  200 seeds) → `build` (Parlor-iOS + Parlor-Mac legs, BUILD SUCCEEDED) →
+  `test-apps` (UI smoke `testAppLaunches` 1/1 on iPhone 17 and 1/1 on
+  iPad Pro 13-inch M5, plus Swift Testing app-boot smoke 1/1 each;
+  TEST SUCCEEDED on both legs) → `test-replays-ios` (RulesEngine package
+  on iPhone 17: **48 tests in 10 suites passed**, incl. §10.4 replays and
+  §9.6 redaction byte-scan; TEST SUCCEEDED).
+  - Gate-defect fixes made during execution (each committed before the next
+    run): the `conformance` stub belonged to P3 and was dropped from the P2
+    gate case (`b1743b6`); the `sim` target now passes `--seeds` and the toy
+    fixture path matching the CLI signature (`c3686d3`).
+  - The sim-lock was held by another agent for ~10 min mid-run; sim-lock
+    queued the app-test legs as designed.
+
+**G2 verdict:** all P2 tasks and gate checks pass with the evidence above;
+async Claude review requested in `docs/HANDOFF.md` (non-blocking per G2 mode
+GLM-SELF/ASYNC). Merged to `main`, tagged `gate-G2-pass`.
