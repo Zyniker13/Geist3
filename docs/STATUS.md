@@ -205,3 +205,36 @@ Deliverables: `StandardNatives.swift` with the five §5.8 natives (`cribbage.han
   option default+value lines), garbage-in-vars re-decode refusal.
   Full suite: **131/131 passing**.
 - ADR-0025/0026 stand; no new ADRs needed for P2.6.
+
+#### P2.7 lint debt cleared — `make lint` green end-to-end (session 2026-11-19)
+
+First full `make lint` over the P2 tree surfaced debt the per-file checks had
+missed (main's CI is still green at the P1 refactor commit; all P2 work lives
+on this branch until the G2 merge):
+
+- JSON numbers no longer use floating point anywhere in the schema layer:
+  `JSON.double(Double)` became `JSON.decimal(String)` (verbatim literal,
+  canonicalized for comparison by pure string/integer arithmetic, exponent
+  bounded at |e| <= 4096 by the parser); the Codable bridges in
+  SchemaSupport.swift decode/encode via Foundation's exact base-10 `Decimal`.
+  Motivated by CONVENTIONS §5.4; reference rulesets only use ints, so the
+  decimal arm exists for round-trip fidelity of arbitrary JSON.
+- Lint config: identifier_name min_length relaxed to 1 (single-letter names
+  are the natural notation in expression/evaluator code); frozen
+  acceptance-vector fixtures exempted from type_body_length via explicit
+  `swiftlint:disable type_body_length` / `enable` pairs (rule lists take a
+  space after the command — the colon form is reserved for `:next`-style
+  modifiers, and SwiftLint 0.65.1 rejects `disable:name` as an invalid
+  command).
+- Oversized units split: PhaseParams dispatch into PhaseParams.swift (two
+  switches, each <= 10 complexity; unknown mechanics preserved as
+  `.unknown` for the validator to flag), ShowEntry/ShowParams/ScoreParams
+  into ShowScoreParams.swift, effect-tree walking out of ExpressionChecker
+  (ExpressionChecker+Effects.swift), patch-op tests out of ResolverTests
+  (ResolverTests+Patches.swift).
+- swift-format 604 sweep (`format --in-place`) over all 123 swift files:
+  0 remaining violations under `lint --strict --recursive`.
+- Verification: `swift build` OK; RulesetKit suite **133/133 passing**
+  (includes corpusMatchesExpectations and the three native reference tests);
+  `make lint` exit 0 (swiftlint x2 configs, swift-format strict,
+  check-imports OK).

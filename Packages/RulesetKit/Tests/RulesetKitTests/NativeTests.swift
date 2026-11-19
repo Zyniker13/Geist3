@@ -19,35 +19,39 @@ struct NativeTests {
 
     // MARK: - Helpers
 
-    private static func card(_ id: String) -> Value {
+    static func card(_ id: String) -> Value {
         .card(id: id, suit: String(id.last!), rank: String(id.dropLast()))
     }
 
-    private static func cards(_ ids: [String]) -> Value { .list(ids.map(card)) }
+    static func cards(_ ids: [String]) -> Value { .list(ids.map(card)) }
 
-    private static func rummyRules(
+    static func rummyRules(
         minSet: Int = 3, minRun: Int = 3, aceHigh: Bool = false,
         wrap: Bool = false, wildRanks: [String] = []
     ) -> Value {
-        .record(name: rummyRulesRecord.name!, fields: [
-            "minSet": .int(Int64(minSet)),
-            "minRun": .int(Int64(minRun)),
-            "aceHigh": .bool(aceHigh),
-            "wrap": .bool(wrap),
-            "wildRanks": .list(wildRanks.map { .string($0) }),
-        ])
+        .record(
+            name: rummyRulesRecord.name!,
+            fields: [
+                "minSet": .int(Int64(minSet)),
+                "minRun": .int(Int64(minRun)),
+                "aceHigh": .bool(aceHigh),
+                "wrap": .bool(wrap),
+                "wildRanks": .list(wildRanks.map { .string($0) }),
+            ])
     }
 
-    private static func contractValue(level: Int, strain: String, dbl: Int) -> Value {
-        .record(name: contractRecord.name!, fields: [
-            "level": .int(Int64(level)),
-            "strain": .string(strain),
-            "doubled": .bool(dbl == 1),
-            "redoubled": .bool(dbl == 2),
-        ])
+    static func contractValue(level: Int, strain: String, dbl: Int) -> Value {
+        .record(
+            name: contractRecord.name!,
+            fields: [
+                "level": .int(Int64(level)),
+                "strain": .string(strain),
+                "doubled": .bool(dbl == 1),
+                "redoubled": .bool(dbl == 2),
+            ])
     }
 
-    private static func call(
+    static func call(
         _ name: String, _ args: [Value], teams: [Value] = []
     ) throws -> Value {
         guard let impl = StandardNatives.all(teams: teams)[name] else {
@@ -56,7 +60,7 @@ struct NativeTests {
         return try impl(args)
     }
 
-    private static func faultOf(
+    static func faultOf(
         _ name: String, _ args: [Value], teams: [Value] = []
     ) -> EvaluationFault? {
         do {
@@ -70,7 +74,7 @@ struct NativeTests {
     }
 
     /// Contract score with the declarer-side fields as a triple.
-    private static func bridgeParts(_ result: Value) -> (below: Int, above: Int, defenders: Int, total: Int) {
+    static func bridgeParts(_ result: Value) -> (below: Int, above: Int, defenders: Int, total: Int) {
         guard case .record(_, let fields) = result,
             case .int(let below)? = fields["below"],
             case .int(let above)? = fields["above"],
@@ -80,7 +84,7 @@ struct NativeTests {
         return (Int(below), Int(above), Int(defenders), Int(total))
     }
 
-    private static func meldParts(_ result: Value) -> (melds: [[String]], deadwood: Int) {
+    static func meldParts(_ result: Value) -> (melds: [[String]], deadwood: Int) {
         guard case .record(_, let fields) = result,
             case .list(let meldValues)? = fields["melds"],
             case .int(let deadwood)? = fields["deadwood"]
@@ -90,812 +94,15 @@ struct NativeTests {
             guard case .list(let cards) = meldValue else {
                 fatalError("meld entry is not a list: \(meldValue)")
             }
-            melds.append(cards.map { card in
-                guard let id = card.cardID else {
-                    fatalError("meld element is not a card: \(card)")
-                }
-                return id
-            })
+            melds.append(
+                cards.map { card in
+                    guard let id = card.cardID else {
+                        fatalError("meld element is not a card: \(card)")
+                    }
+                    return id
+                })
         }
         return (melds, Int(deadwood))
-    }
-
-    // MARK: - cribbage.handScore: frozen acceptance vectors
-
-    @Test func handScoreFrozenVectors() throws {
-        for (index, row) in NativeTestData.cribRows.enumerated() {
-            let score = try Self.call("cribbage.handScore", [
-                Self.cards(row.hand), Self.card(row.starter), .bool(row.crib),
-            ])
-            guard case .int(let value) = score else {
-                Issue.record("handScore returned \(score) for row \(index)")
-                return
-            }
-            if Int(value) != row.score {
-                Issue.record("row \(index) \(row.hand)+\(row.starter) crib=\(row.crib): got \(value), want \(row.score)")
-                return
-            }
-        }
-    }
-
-    /// The famous hands, with the arithmetic worked out by hand.
-    @Test func handScoreFamousAnchors() throws {
-        // 29: three fives + nobs jack. Fifteens {5,J} ×3 = 6 pts? No — each
-        // fifteen is 2 points: {5,J} three ways (3 hand fives) = 6, plus the
-        // starter five gives a fourth five: {5,J} ×4 = 8 and {5,5,5} ×4 ways
-        // = 8 → 16; pairs C(4,2) = 12; nobs (JH + starter 5H) = 1 → 29.
-        var score = try Self.call("cribbage.handScore", [
-            Self.cards(["5D", "5C", "5S", "JH"]), Self.card("5H"), .bool(false),
-        ])
-        #expect(score == .int(29))
-
-        // 28: same shape, jack's suit ≠ starter suit → no nobs.
-        score = try Self.call("cribbage.handScore", [
-            Self.cards(["5D", "5C", "5S", "JD"]), Self.card("5H"), .bool(false),
-        ])
-        #expect(score == .int(28))
-
-        // 24: 4-4-5-5 + 6. Fifteens {4,5,6} ×4 = 8; runs 4-5-6 with
-        // multiplicities 2·2·1 → 4 runs of 3 = 12; pairs 2+2 = 4 → 24.
-        score = try Self.call("cribbage.handScore", [
-            Self.cards(["4D", "4C", "5D", "5C"]), Self.card("6H"), .bool(false),
-        ])
-        #expect(score == .int(24))
-
-        // 24 again, fives and sixes doubled: fifteens 8, runs 4·3 = 12,
-        // pairs 4 → 24.
-        score = try Self.call("cribbage.handScore", [
-            Self.cards(["5D", "5C", "6D", "6C"]), Self.card("4H"), .bool(false),
-        ])
-        #expect(score == .int(24))
-
-        // 21: 4-4-5-6 + 4. Fifteens {4,5,6} ×3 = 6; runs 3·3 = 9 (three
-        // fours); pairs C(3,2)·2 = 6 → 21.
-        score = try Self.call("cribbage.handScore", [
-            Self.cards(["4D", "4C", "5D", "6D"]), Self.card("4H"), .bool(false),
-        ])
-        #expect(score == .int(21))
-
-        // 4: two pairs only (4-4-5-5 + 8: no fifteens, no run of three).
-        score = try Self.call("cribbage.handScore", [
-            Self.cards(["4D", "4C", "5D", "5C"]), Self.card("8H"), .bool(false),
-        ])
-        #expect(score == .int(4))
-
-        // 0: A-2-6-10 + J. No fifteens (1+2+6+10=19; J pairs with nothing
-        // to 15), no pairs, runs only of length two (A-2 and 10-J).
-        score = try Self.call("cribbage.handScore", [
-            Self.cards(["AC", "2C", "6C", "10D"]), Self.card("JC"), .bool(false),
-        ])
-        #expect(score == .int(0))
-
-        // Flushes. Hand 2H 3H 4H 9H + 5S: fifteens 2+4+9 = 2; run
-        // 2-3-4-5 = 4; four-card flush = 4 → 10 non-crib. As a crib the
-        // four-card flush scores nothing → 2 + 4 = 6.
-        score = try Self.call("cribbage.handScore", [
-            Self.cards(["2H", "3H", "4H", "9H"]), Self.card("5S"), .bool(false),
-        ])
-        #expect(score == .int(10))
-
-        score = try Self.call("cribbage.handScore", [
-            Self.cards(["2H", "3H", "4H", "9H"]), Self.card("5S"), .bool(true),
-        ])
-        #expect(score == .int(6))  // crib: four-card flush scores nothing
-
-        // Five hearts as a crib (starter 6H): fifteens {6,9}, {2,4,9},
-        // {2,3,4,6} = 6; run 2-3-4 = 3 (no five present); five-card
-        // flush = 5 → 14.
-        score = try Self.call("cribbage.handScore", [
-            Self.cards(["2H", "3H", "4H", "9H"]), Self.card("6H"), .bool(true),
-        ])
-        #expect(score == .int(14))
-
-        // Nobs: jack of clubs in hand, starter a club. One fifteen
-        // (9+2+4) — the jack counts as ten, so 10+8+2+4 is not one —
-        // gives 2 + 1 nobs = 3.
-        score = try Self.call("cribbage.handScore", [
-            Self.cards(["JC", "9D", "8S", "2H"]), Self.card("4C"), .bool(false),
-        ])
-        #expect(score == .int(3))
-    }
-
-    @Test func handScoreFaults() throws {
-        // Wrong arity.
-        #expect(Self.faultOf("cribbage.handScore", [Self.cards(["5H", "5D", "5S", "JC"]), Self.card("5H")]) != nil)
-        // Hand must be exactly four cards.
-        #expect(Self.faultOf("cribbage.handScore", [Self.cards(["5H", "5D", "5S"]), Self.card("5H"), .bool(true)]) != nil)
-        #expect(Self.faultOf("cribbage.handScore", [
-            Self.cards(["5H", "5D", "5S", "JC", "2D"]), Self.card("5H"), .bool(true),
-        ]) != nil)
-        // Non-card list element.
-        #expect(Self.faultOf("cribbage.handScore", [.list([.int(1), .int(2), .int(3), .int(4)]), Self.card("5H"), .bool(true)]) != nil)
-        // Duplicate card ids are ambiguous.
-        #expect(Self.faultOf("cribbage.handScore", [Self.cards(["5H", "5H", "5S", "JC"]), Self.card("5D"), .bool(true)]) != nil)
-        #expect(Self.faultOf("cribbage.handScore", [
-            Self.cards(["5H", "5D", "5S", "JC"]), Self.card("5H"), .bool(true),
-        ]) != nil)
-        // Starter must be a card.
-        #expect(Self.faultOf("cribbage.handScore", [Self.cards(["5H", "5D", "5S", "JC"]), .int(3), .bool(true)]) != nil)
-    }
-
-    // MARK: - cribbage.pegPoints: fixed cases
-
-    @Test func pegPointsFixedCases() throws {
-        // (cards, expected) — arithmetic worked out by hand.
-        let cases: [(ids: [String], score: Int)] = [
-            // Empty pile scores nothing.
-            ([], 0),
-            // A lone card can make a fifteen or pair with nothing.
-            (["5H"], 0),
-            // Pairs: 2, 6, 12 for two/three/four of a kind; the third five
-            // also completes the fifteen 5+5+5, so 8 total.
-            (["5H", "5D"], 2),
-            (["5H", "5D", "5S"], 8),
-            (["9H", "9D", "9S", "9C"], 12),
-            // The jack makes the total 20 and creates nothing: the pair
-            // was the second five's award.
-            (["5H", "5D", "JH"], 0),
-            // The jack makes 25 and creates nothing: the pairs were
-            // earlier awards.
-            (["5C", "5D", "5H", "JH"], 0),
-            // Only the pair the last six forms: the {9,6} fifteen was
-            // the first six's award.
-            (["9H", "6S", "6D"], 2),
-            // Fifteen (4+5+6) plus the three-card run; ace low.
-            (["4S", "5H", "6D"], 5),
-            (["AC", "2D", "3H"], 3),
-            (["10H", "JH", "QH", "KH"], 4),
-            // Doubled run 4-5-6 (two ways) = 6; the pair was the second
-            // four's award and the total is 19.
-            (["4S", "4D", "5H", "6C"], 6),
-            // Q-K-A is not a run with the ace low.
-            (["QC", "KD", "AH"], 0),
-            // No fifteens (A+2+6+10=19, J pairs with nothing to 15), no
-            // pairs, no run of three (A-2 and 10-J only).
-            (["AC", "2C", "6C", "10D", "JC"], 0),
-        ]
-        for (index, testCase) in cases.enumerated() {
-            let score = try Self.call("cribbage.pegPoints", [Self.cards(testCase.ids)])
-            guard case .int(let value) = score else {
-                Issue.record("pegPoints returned \(score) for case \(index)")
-                return
-            }
-            #expect(Int(value) == testCase.score, "case \(index) \(testCase.ids)")
-        }
-    }
-
-    @Test func pegPointsFaults() throws {
-        #expect(Self.faultOf("cribbage.pegPoints", [.int(5)]) != nil)
-        #expect(Self.faultOf("cribbage.pegPoints", [.list([.string("5H")])]) != nil)
-        #expect(Self.faultOf("cribbage.pegPoints", []) != nil)
-    }
-
-    // MARK: - handScore: independent 31-subset cross-check (100k hands)
-
-    /// Cribbage pip value: A=1, 2–10 face value, J/Q/K = 10.
-    private static func cribPip(_ id: String) -> Int {
-        switch String(id.dropLast()) {
-        case "A": return 1
-        case "J", "Q", "K": return 10
-        default: return Int(String(id.dropLast()))!
-        }
-    }
-
-    /// Reference show scorer: fifteens by enumerating all 31 non-empty
-    /// subsets; pairs, runs, flush and nobs by direct inspection. Written
-    /// against the rules, not against the native's algorithm.
-    private static func referenceHandScore(
-        _ hand: [String], starter: String, isCrib: Bool
-    ) -> Int {
-        let all = hand + [starter]
-        let pips = all.map(cribPip)
-        var score = 0
-
-        for mask in 1..<(1 << all.count) {
-            var sum = 0
-            for (i, pip) in pips.enumerated() where mask & (1 << i) != 0 {
-                sum += pip
-            }
-            if sum == 15 { score += 2 }
-        }
-
-        for i in 0..<all.count {
-            for j in i + 1..<all.count
-            where String(all[i].dropLast()) == String(all[j].dropLast()) {
-                score += 2
-            }
-        }
-
-        // Runs: over the multiset of ranks, every maximal consecutive span
-        // of length ≥ 3 scores length × Π(multiplicities).
-        var counts: [String: Int] = [:]
-        for id in all { counts[String(id.dropLast()), default: 0] += 1 }
-        let aceLow = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"]
-        var runIndex = 0
-        while runIndex < aceLow.count {
-            if counts[aceLow[runIndex]] == nil {
-                runIndex += 1
-                continue
-            }
-            var end = runIndex
-            while end + 1 < aceLow.count && counts[aceLow[end + 1]] != nil {
-                end += 1
-            }
-            let length = end - runIndex + 1
-            if length >= 3 {
-                var multiplicity = 1
-                for k in runIndex...end { multiplicity *= counts[aceLow[k]]! }
-                score += length * multiplicity
-            }
-            runIndex = end + 1
-        }
-
-        // Flush: four hand cards of one suit; the starter's suit counts
-        // only outside the crib.
-        let handSuits = Set(hand.map { $0.last! })
-        if handSuits.count == 1 {
-            if isCrib {
-                if hand[0].last! == starter.last! { score += 5 }
-            } else {
-                score += hand[0].last! == starter.last! ? 5 : 4
-            }
-        }
-
-        // Nobs: a jack in the hand matching the starter's suit.
-        if hand.contains(where: { String($0.dropLast()) == "J" && $0.last! == starter.last! }) {
-            score += 1
-        }
-
-        return score
-    }
-
-    /// Deterministic LCG shuffle (same generator family as the vector
-    /// tool), used to deal the cross-check hands.
-    private static func lcgDeal(seed: UInt64, deck: [String], take: Int) -> [String] {
-        var state = seed &* 6364136223846793005 &+ 1442695040888963407
-        var pool = deck
-        for i in stride(from: pool.count - 1, to: 0, by: -1) {
-            state = state &* 6364136223846793005 &+ 1442695040888963407
-            let j = Int((state >> 33) % UInt64(i + 1))
-            pool.swapAt(i, j)
-        }
-        return Array(pool.prefix(take))
-    }
-
-    private static let deck52: [String] = {
-        let ranks = ["2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A"]
-        let suits = ["C", "D", "H", "S"]
-        return suits.flatMap { suit in ranks.map { $0 + suit } }
-    }()
-
-    @Test func handScoreMatchesIndependentScorer() throws {
-        for seed in 1...100_000 {
-            let dealt = Self.lcgDeal(seed: UInt64(seed), deck: Self.deck52, take: 5)
-            let hand = Array(dealt.prefix(4))
-            let starter = dealt[4]
-            let isCrib = seed % 2 == 0
-            let expected = Self.referenceHandScore(hand, starter: starter, isCrib: isCrib)
-            let value = try Self.call("cribbage.handScore", [
-                Self.cards(hand), Self.card(starter), .bool(isCrib),
-            ])
-            guard case .int(let actual) = value else {
-                Issue.record("seed \(seed): handScore returned \(value)")
-                return
-            }
-            if Int(actual) != expected {
-                Issue.record("seed \(seed): hand \(hand)+\(starter) crib=\(isCrib): got \(actual), want \(expected)")
-                return
-            }
-        }
-    }
-
-    // MARK: - bridge.score: frozen table + fixed contracts
-
-    @Test func bridgeScoreFrozenTable() throws {
-        for (index, row) in NativeTestData.bridgeRows.enumerated() {
-            let result = try Self.call("bridge.score", [
-                Self.contractValue(level: row.level, strain: row.strain, dbl: row.dbl),
-                .int(Int64(row.tricks)),
-                .bool(row.vul),
-                .string(row.mode),
-            ])
-            let parts = Self.bridgeParts(result)
-            if parts.below != row.below || parts.above != row.above
-                || parts.defenders != row.defenders || parts.total != row.below + row.above {
-                // Single interpolated literal: Issue.record takes Comment?,
-                // which string literals convert to but `+`-chains do not.
-                Issue.record("row \(index): \(row.mode) \(row.level)\(row.strain) dbl=\(row.dbl) vul=\(row.vul) tricks=\(row.tricks): got (\(parts.below), \(parts.above), \(parts.defenders), \(parts.total)), want (\(row.below), \(row.above), \(row.defenders), \(row.below + row.above))")
-                return
-            }
-        }
-    }
-
-    /// Hand-checked contracts covering each line of the table.
-    @Test func bridgeScoreKeyContracts() throws {
-        func score(_ level: Int, _ strain: String, _ dbl: Int, _ vul: Bool, _ tricks: Int, _ mode: String) throws -> (Int, Int, Int, Int) {
-            do {
-                let parts = Self.bridgeParts(try Self.call("bridge.score", [
-                    Self.contractValue(level: level, strain: strain, dbl: dbl),
-                    .int(Int64(tricks)), .bool(vul), .string(mode),
-                ]))
-                return (parts.below, parts.above, parts.defenders, parts.total)
-            } catch let fault as EvaluationFault {
-                Issue.record("score fault: kind=\(fault.kind) pointer=\(fault.pointer) msg=\(fault.message)")
-                return (-1, -1, -1, -1)
-            }
-        }
-
-        // 4S making exactly, not vul: trick score 120 all below.
-        #expect(try score(4, "S", 0, false, 10, "rubber") == (120, 0, 0, 120))
-        // 2H doubled making: below 120 = 60 trick score doubled; insult 50
-        // above. Rubber has no per-deal game bonus: BRG-5.1 makes a game a
-        // below-line accumulation in the match store.
-        #expect(try score(2, "H", 1, false, 8, "rubber") == (120, 50, 0, 170))
-        // Same contract not doubled: 60 below, no bonus.
-        #expect(try score(2, "H", 0, false, 8, "rubber") == (60, 0, 0, 60))
-        // 3NT making: 100 below; no per-deal game bonus in rubber.
-        #expect(try score(3, "NT", 0, false, 9, "rubber") == (100, 0, 0, 100))
-        // 3NT chicago non-vul: partscore would be 50 but 100 ≥ 100 → 300.
-        #expect(try score(3, "NT", 0, false, 9, "chicago") == (100, 300, 0, 400))
-        // Small slam: level 6 bonus 500 non-vul.
-        #expect(try score(6, "S", 0, false, 12, "rubber") == (180, 500, 0, 680))
-        // Grand slam vulnerable: 1500 bonus.
-        #expect(try score(7, "NT", 0, true, 13, "rubber") == (220, 1500, 0, 1720))
-        // Overtricks are strain-specific: NT overtricks 30 each.
-        #expect(try score(1, "NT", 0, false, 8, "rubber") == (40, 30, 0, 70))
-        // Doubled undertricks: 5C down 6 non-vul = 100+200+200+300+300+300.
-        #expect(try score(5, "C", 1, false, 5, "rubber") == (0, 0, 1400, 0))
-        // Redoubled doubles it.
-        #expect(try score(5, "C", 2, false, 5, "rubber") == (0, 0, 2800, 0))
-        // Vulnerable doubled: 200 + 300×5.
-        #expect(try score(5, "C", 1, true, 5, "rubber") == (0, 0, 1700, 0))
-        // Undoubled undertricks: 50 each non-vul, 100 vul. Down 3 = 11
-        // needed, 8 made.
-        #expect(try score(5, "C", 0, false, 8, "rubber") == (0, 0, 150, 0))
-        #expect(try score(5, "C", 0, true, 8, "rubber") == (0, 0, 300, 0))
-    }
-
-    @Test func bridgeScoreFaults() throws {
-        let contract = Self.contractValue(level: 4, strain: "S", dbl: 0)
-        // Wrong arg counts and types.
-        #expect(Self.faultOf("bridge.score", [contract, .int(10), .bool(false)]) != nil)
-        #expect(Self.faultOf("bridge.score", [contract, .string("10"), .bool(false), .string("rubber")]) != nil)
-        #expect(Self.faultOf("bridge.score", [contract, .int(10), .bool(false), .int(7)]) != nil)
-        // Not a contract record.
-        #expect(Self.faultOf("bridge.score", [Self.rummyRules(), .int(10), .bool(false), .string("rubber")]) != nil)
-        // Level outside 1...7, tricks outside 0...13, unknown mode.
-        #expect(Self.faultOf("bridge.score", [Self.contractValue(level: 0, strain: "S", dbl: 0), .int(10), .bool(false), .string("rubber")]) != nil)
-        #expect(Self.faultOf("bridge.score", [Self.contractValue(level: 8, strain: "S", dbl: 0), .int(10), .bool(false), .string("rubber")]) != nil)
-        #expect(Self.faultOf("bridge.score", [contract, .int(14), .bool(false), .string("rubber")]) != nil)
-        #expect(Self.faultOf("bridge.score", [contract, .int(-1), .bool(false), .string("rubber")]) != nil)
-        #expect(Self.faultOf("bridge.score", [contract, .int(10), .bool(false), .string("chicagoan")]) != nil)
-    }
-
-    // MARK: - bridge.honors
-
-    private func honors(
-        _ hands: [[String]], _ trump: String?, _ team: String,
-        teams: [Value] = [.string("NS"), .string("EW")]
-    ) throws -> Int {
-        let result = try Self.call("bridge.honors", [
-            .list(hands.map(Self.cards)), trump.map { .string($0) } ?? .null,
-            .string(team),
-        ], teams: teams)
-        guard case .int(let value) = result else {
-            fatalError("honors returned \(result)")
-        }
-        return Int(value)
-    }
-
-    @Test func honorsFixedCases() throws {
-        // Four trump honors for NS: split 2-2 across N and S.
-        var value = try honors(
-            [["KS", "QS"], ["2H", "3H"], ["JS", "10S"], ["2D", "3D"]],
-            "S", "NS"
-        )
-        #expect(value == 100)
-
-        // Five honors → 150.
-        value = try honors(
-            [["KS", "QS", "AS"], ["2H", "3H"], ["JS", "10S"], ["2D", "3D"]],
-            "S", "NS"
-        )
-        #expect(value == 150)
-
-        // Two honors → nothing.
-        value = try honors(
-            [["KS", "QS"], ["2H", "3H"], ["4D", "5D"], ["2D", "3D"]],
-            "S", "NS"
-        )
-        #expect(value == 0)
-
-        // Five trump honors total: NS holds one, EW four.
-        let split = [["QS"], ["JS", "10S", "AS"], ["2H", "3H"], ["KS"]]
-        #expect(try honors(split, "S", "NS") == 0)
-        #expect(try honors(split, "S", "EW") == 100)
-
-        // Notrump: aces only; all four → 150.
-        #expect(try honors(
-            [["AC", "AD"], ["2H", "3H"], ["AH", "AS"], ["2D", "3D"]],
-            nil, "NS"
-        ) == 150)
-        #expect(try honors(
-            [["AC", "AD"], ["2H", "3H"], ["AH", "4H"], ["2D", "3D"]],
-            nil, "NS"
-        ) == 0)
-
-        // Team membership is by seat parity: honors in E and W count for EW.
-        #expect(try honors(
-            [["2H", "3H"], ["KS", "QS", "JS", "10S"], ["2D", "3D"], ["4H", "5H"]],
-            "S", "EW"
-        ) == 100)
-
-        // Empty hands score nothing.
-        #expect(try honors([[], [], [], []], "S", "NS") == 0)
-    }
-    @Test func honorsFaults() throws {
-        let hands: Value = .list([
-            Self.cards(["KS", "QS"]), Self.cards(["2H", "3H"]),
-            Self.cards(["JS", "10S"]), Self.cards(["2D", "3D"]),
-        ])
-        let teams: [Value] = [.string("NS"), .string("EW")]
-        // Team not installed in the host table.
-        #expect(Self.faultOf("bridge.honors", [hands, .string("S"), .string("E")], teams: teams) != nil)
-        #expect(Self.faultOf("bridge.honors", [hands, .string("S"), .string("NS")], teams: teams) == nil)
-        // Not four hands.
-        #expect(Self.faultOf("bridge.honors", [.list([Self.cards(["KS"]), Self.cards(["QS"]), Self.cards(["JS"])]), .string("S"), .string("NS")], teams: teams) != nil)
-        // Four elements but a flat card list, not a list of hands.
-        #expect(Self.faultOf("bridge.honors", [Self.cards(["KS", "QS", "JS", "10S"]), .string("S"), .string("NS")], teams: teams) != nil)
-        // Trump must be a suit string.
-        #expect(Self.faultOf("bridge.honors", [hands, .string("X"), .string("NS")], teams: teams) != nil)
-        #expect(Self.faultOf("bridge.honors", [hands, .int(4), .string("NS")], teams: teams) != nil)
-        // Hands must contain cards.
-        #expect(Self.faultOf("bridge.honors", [.list([.list([.int(1)]), Self.cards(["H2"]), Self.cards(["H3"]), Self.cards(["H4"])]), .string("S"), .string("NS")], teams: teams) != nil)
-    }
-
-    // MARK: - rummy.melds: fixed cases
-
-    /// The native returns card lists; sort ids alphabetically for
-    /// readable expectations.
-    private func meldGroups(_ deck: [String], rules: Value) throws -> (melds: [[String]], deadwood: Int) {
-        let result = try Self.call("rummy.melds", [Self.cards(deck), rules])
-        let parts = Self.meldParts(result)
-        return (parts.melds.map { $0.sorted() }, parts.deadwood)
-    }
-
-    @Test func meldsFixedCases() throws {
-        // Three fives are a set; 6-7 unsuited stay dead (13 points).
-        var result = try meldGroups(["5H", "5D", "5S", "6C", "7C"], rules: Self.rummyRules())
-        #expect(result.melds == [["5D", "5H", "5S"]])
-        #expect(result.deadwood == 13)
-
-        // The six and seven of clubs complete a second meld.
-        result = try meldGroups(["5H", "5D", "5S", "6C", "7C", "8C"], rules: Self.rummyRules())
-        #expect(result.melds == [["5D", "5H", "5S"], ["6C", "7C", "8C"]])
-        #expect(result.deadwood == 0)
-
-        // A four-card run beats leaving one behind: 5H-8H all melded.
-        result = try meldGroups(["5H", "6H", "7H", "8H"], rules: Self.rummyRules())
-        #expect(result.melds == [["5H", "6H", "7H", "8H"]])
-        #expect(result.deadwood == 0)
-
-        // A wild completes a set: 5-5 + wild two → deadwood 0.
-        result = try meldGroups(["2C", "5D", "5S"], rules: Self.rummyRules(wildRanks: ["2"]))
-        #expect(result.melds == [["2C", "5D", "5S"]])
-        #expect(result.deadwood == 0)
-
-        // Without enough naturals, minSet 4 cannot be met with one wild.
-        result = try meldGroups(["2C", "5D", "5S"], rules: Self.rummyRules(minSet: 4, wildRanks: ["2"]))
-        #expect(result.melds == [])
-        #expect(result.deadwood == 10)  // wilds are dead at face value 0
-
-        // Dead wilds contribute nothing to deadwood.
-        result = try meldGroups(["2H", "3D"], rules: Self.rummyRules(wildRanks: ["2"]))
-        #expect(result.melds == [])
-        #expect(result.deadwood == 3)
-
-        // minRun 4 rejects a three-card run.
-        result = try meldGroups(["5H", "6H", "7H"], rules: Self.rummyRules(minRun: 4))
-        #expect(result.melds == [])
-        #expect(result.deadwood == 18)
-
-        // Wrap runs: Q-K-A melds only when wrap is on.
-        result = try meldGroups(["QH", "KH", "AH"], rules: Self.rummyRules(wrap: true))
-        #expect(result.melds == [["AH", "KH", "QH"]])
-        #expect(result.deadwood == 0)
-        result = try meldGroups(["QH", "KH", "AH"], rules: Self.rummyRules())
-        #expect(result.melds == [])
-        #expect(result.deadwood == 21)
-
-        // Ace-high runs: Q-K-A of a suit melds only when the ace is high.
-        result = try meldGroups(["QD", "KD", "AD"], rules: Self.rummyRules(aceHigh: true))
-        #expect(result.melds == [["AD", "KD", "QD"]])
-        #expect(result.deadwood == 0)
-        result = try meldGroups(["QD", "KD", "AD"], rules: Self.rummyRules())
-        #expect(result.melds == [])
-        #expect(result.deadwood == 21)
-
-        // A full board: heart run A-4, the four fives, club run 9-J; the
-        // deuce of spades is dead. (A-5 run with three fives ties at the
-        // same deadwood; the deterministic search reaches this one first.)
-        result = try meldGroups(
-            ["AH", "2H", "3H", "4H", "5H", "5S", "5D", "5C", "9C", "10C", "JC", "2S"],
-            rules: Self.rummyRules()
-        )
-        #expect(result.melds == [
-            ["2H", "3H", "4H", "AH"], ["5C", "5D", "5H", "5S"], ["10C", "9C", "JC"],
-        ])
-        #expect(result.deadwood == 2)
-    }
-
-    @Test func meldsFaults() throws {
-        let hand = Self.cards(["5H", "5D", "5S"])
-        // Rules must be a record with the right shape.
-        #expect(Self.faultOf("rummy.melds", [hand, .int(3)]) != nil)
-        #expect(Self.faultOf("rummy.melds", [hand, .record(name: "contract", fields: [:])]) != nil)
-        // minSet/minRun below 3 or above 13.
-        #expect(Self.faultOf("rummy.melds", [hand, Self.rummyRules(minSet: 2)]) != nil)
-        #expect(Self.faultOf("rummy.melds", [hand, Self.rummyRules(minRun: 14)]) != nil)
-        // Duplicate ids are ambiguous.
-        #expect(Self.faultOf("rummy.melds", [Self.cards(["5H", "5H", "5D"]), Self.rummyRules()]) != nil)
-        // Unorderable, non-wild rank.
-        #expect(Self.faultOf("rummy.melds", [Self.cards(["5H", "XD", "5S"]), Self.rummyRules()]) != nil)
-        // Too many cards for the meld search (cap is 17).
-        let bigDeck = ["2C", "3C", "4C", "5C", "6C", "7C", "8C", "9C", "10C", "JC",
-                       "2D", "3D", "4D", "5D", "6D", "7D", "8D", "9D"]
-        #expect(bigDeck.count == 18)  // 18 distinct valid ids
-        #expect(Self.faultOf("rummy.melds", [Self.cards(bigDeck), Self.rummyRules()]) != nil)
-        // Wrong arg count.
-        #expect(Self.faultOf("rummy.melds", [hand]) != nil)
-    }
-
-    // MARK: - rummy.melds: deadwood-DP cross-check (10k hands)
-
-    private struct RummyConfig {
-        let minSet: Int
-        let minRun: Int
-        let aceHigh: Bool
-        let wrap: Bool
-        let wildRanks: [String]
-    }
-
-    private static func rummyOrder(_ aceHigh: Bool) -> [String] {
-        var order = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"]
-        if aceHigh {
-            order.removeFirst()
-            order.append("A")
-        }
-        return order
-    }
-
-    /// Mirror of the native's canonical deck order (ADR-0025): naturals in
-    /// (rank order, suit, id) order, then wilds in (suit, id) order.
-    private static func canonDeck(_ deck: [String], aceHigh: Bool, wild: Set<String>) -> [String] {
-        let order = Self.rummyOrder(aceHigh)
-        func rankIndex(_ id: String) -> Int {
-            order.firstIndex(of: String(id.dropLast())) ?? order.count
-        }
-        let naturals = deck.filter { !wild.contains(String($0.dropLast())) }
-            .sorted { (rankIndex($0), $0.last!, $0) < (rankIndex($1), $1.last!, $1) }
-        let wilds = deck.filter { wild.contains(String($0.dropLast())) }
-            .sorted { ($0.last!, $0) < ($1.last!, $1) }
-        return naturals + wilds
-    }
-
-    private static func combos(_ xs: [Int], _ k: Int) -> [[Int]] {
-        if k == 0 { return [[]] }
-        if xs.count < k { return [] }
-        var out: [[Int]] = []
-        for (i, x) in xs.enumerated() {
-            for rest in Self.combos(Array(xs[(i + 1)...]), k - 1) {
-                out.append([x] + rest)
-            }
-        }
-        return out
-    }
-
-    /// Reference meld engine: enumerate every legal meld exactly as §5.8
-    /// defines them (sets of naturals plus wilds to minSet; per-suit runs
-    /// spanning consecutive ranks with wilds in the gaps), then solve the
-    /// exact-cover minimum-deadwood problem by subset DP. Completely
-    /// independent of the native's memoized search.
-    private static func referenceMelds(
-        _ deck: [String], rules: RummyConfig
-    ) -> (optimum: Int, candidates: Set<Int>, pips: [Int]) {
-        let wild = Set(rules.wildRanks)
-        let ordered = Self.canonDeck(deck, aceHigh: rules.aceHigh, wild: wild)
-        let n = ordered.count
-        let order = Self.rummyOrder(rules.aceHigh)
-
-        func pip(_ id: String) -> Int {
-            let rank = String(id.dropLast())
-            if wild.contains(rank) { return 0 }
-            switch rank {
-            case "A": return 1
-            case "J", "Q", "K", "10": return 10
-            default: return Int(rank)!
-            }
-        }
-        let pips = ordered.map(pip)
-
-        var candidates: Set<Int> = []
-
-        // Sets: any 1...count naturals of one rank, padded with wilds up to
-        // minSet and beyond.
-        var byRank: [String: [Int]] = [:]
-        for (i, id) in ordered.enumerated() {
-            let rank = String(id.dropLast())
-            if !wild.contains(rank) { byRank[rank, default: []].append(i) }
-        }
-        let wildIndices = ordered.indices.filter { wild.contains(String(ordered[$0].dropLast())) }
-        for (_, naturals) in byRank {
-            for k in 1...naturals.count {
-                for naturalChoice in Self.combos(naturals, k) {
-                    // Skip when the deck does not carry enough wilds to
-                    // pad this rank up to minSet (non-wild configs make
-                    // the lower bound exceed wildIndices.count).
-                    let minWilds = max(rules.minSet - k, 0)
-                    guard wildIndices.count >= minWilds else { continue }
-                    for w in minWilds...wildIndices.count {
-                        for wildChoice in Self.combos(wildIndices, w) {
-                            var mask = 0
-                            for i in naturalChoice + wildChoice { mask |= 1 << i }
-                            candidates.insert(mask)
-                        }
-                    }
-                }
-            }
-        }
-
-        // Runs: per suit, windows of consecutive ranks (wrapping mod 13 when
-        // allowed), one natural per rank present, wilds in the gaps, length
-        // from minRun up; windows deduplicate by their rank set.
-        var bySuit: [Character: [Int: Int]] = [:]
-        for (i, id) in ordered.enumerated() {
-            let rank = String(id.dropLast())
-            if !wild.contains(rank) {
-                bySuit[id.last!, default: [:]][order.firstIndex(of: rank)!] = i
-            }
-        }
-        let rankCount = order.count
-        for (_, slots) in bySuit {
-            var seen: Set<[Int]> = []
-            for start in 0..<rankCount {
-                var window: [Int] = []
-                var cursor = start
-                while true {
-                    if window.count == rankCount { break }
-                    if !rules.wrap && cursor >= rankCount { break }
-                    if rules.wrap { cursor = cursor % rankCount }
-                    window.append(cursor)
-                    cursor += 1
-                    let key = window.sorted()
-                    guard window.count >= rules.minRun, !seen.contains(key) else { continue }
-                    seen.insert(key)
-                    let naturals = window.compactMap { slots[$0] }
-                    if naturals.isEmpty { continue }
-                    let missing = window.count - naturals.count
-                    if missing > wildIndices.count { continue }
-                    for wildChoice in Self.combos(wildIndices, missing) {
-                        var mask = 0
-                        for i in naturals + wildChoice { mask |= 1 << i }
-                        candidates.insert(mask)
-                    }
-                }
-            }
-        }
-
-        // Exact-cover DP: lowest unassigned card either stays dead or is
-        // melded away by a candidate containing it.
-        let candidateMasks = candidates.sorted()
-        var buckets: [[Int]] = .init(repeating: [], count: n)
-        for mask in candidateMasks {
-            for i in 0..<n where mask & (1 << i) != 0 { buckets[i].append(mask) }
-        }
-        var best = [Int](repeating: Int.max, count: 1 << n)
-        best[0] = 0
-        for mask in 1..<(1 << n) {
-            let pivot = mask.trailingZeroBitCount
-            var value = best[mask ^ (1 << pivot)] + pips[pivot]
-            for meld in buckets[pivot] where meld & mask == meld {
-                let rest = mask & ~meld
-                if best[rest] < value { value = best[rest] }
-            }
-            best[mask] = value
-        }
-        return (best[(1 << n) - 1], candidates, pips)
-    }
-
-    @Test func meldsMatchReferenceDP() throws {
-        let configs: [RummyConfig] = [
-            RummyConfig(minSet: 3, minRun: 3, aceHigh: false, wrap: false, wildRanks: []),
-            RummyConfig(minSet: 3, minRun: 3, aceHigh: true, wrap: false, wildRanks: []),
-            RummyConfig(minSet: 3, minRun: 3, aceHigh: false, wrap: true, wildRanks: []),
-            RummyConfig(minSet: 3, minRun: 3, aceHigh: true, wrap: true, wildRanks: []),
-            RummyConfig(minSet: 3, minRun: 4, aceHigh: false, wrap: false, wildRanks: ["2"]),
-            RummyConfig(minSet: 3, minRun: 3, aceHigh: true, wrap: false, wildRanks: ["7"]),
-        ]
-
-        for seed in 1...10_000 {
-            let size = seed <= 5_000 ? 10 : 11
-            let config = configs[(seed - 1) % configs.count]
-            let dealt = Self.lcgDeal(seed: UInt64(seed), deck: Self.deck52, take: size)
-            let rules = Self.rummyRules(
-                minSet: config.minSet, minRun: config.minRun,
-                aceHigh: config.aceHigh, wrap: config.wrap,
-                wildRanks: config.wildRanks
-            )
-            let reference = Self.referenceMelds(dealt, rules: config)
-            let result = try Self.call("rummy.melds", [Self.cards(dealt), rules])
-            let parts = Self.meldParts(result)
-
-            if parts.deadwood != reference.optimum {
-                Issue.record("seed \(seed) config \((seed - 1) % configs.count) \(dealt): native deadwood \(parts.deadwood), reference \(reference.optimum)")
-                return
-            }
-
-            // Map the native's card ids back to canonical deck indices so
-            // the structural checks below compare against the reference's
-            // index-space candidates.
-            let canon = Self.canonDeck(dealt, aceHigh: config.aceHigh, wild: Set(config.wildRanks))
-            let indexOf = Dictionary(uniqueKeysWithValues: canon.enumerated().map { ($1, $0) })
-            var mapped: [[Int]] = []
-            var unknownId = false
-            for ids in parts.melds {
-                var indices: [Int] = []
-                for id in ids {
-                    guard let index = indexOf[id] else {
-                        Issue.record("seed \(seed): unknown card id \(id)")
-                        unknownId = true
-                        break
-                    }
-                    indices.append(index)
-                }
-                mapped.append(indices)
-            }
-            if unknownId { return }
-
-            // Structural checks: melds are disjoint legal candidates
-            // covering everything except the dead cards, sorted
-            // lexicographically, and the deadwood value matches the dead
-            // cards' pips.
-            var used = 0
-            var previous: [Int]?
-            for meld in mapped {
-                if meld != meld.sorted() {
-                    Issue.record("seed \(seed): meld \(meld) not sorted")
-                    return
-                }
-                if let previous, !(previous.lexicographicallyPrecedes(meld) || previous == meld) {
-                    Issue.record("seed \(seed): melds not lexicographically ordered: \(previous) then \(meld)")
-                    return
-                }
-                previous = meld
-                var mask = 0
-                for i in meld { mask |= 1 << i }
-                if !reference.candidates.contains(mask) {
-                    Issue.record("seed \(seed): meld \(meld) is not a legal candidate")
-                    return
-                }
-                if used & mask != 0 {
-                    Issue.record("seed \(seed): meld \(meld) overlaps an earlier meld")
-                    return
-                }
-                used |= mask
-            }
-            var deadMask = 0
-            for i in 0..<dealt.count where used & (1 << i) == 0 { deadMask |= 1 << i }
-            if used | deadMask != (1 << dealt.count) - 1 {
-                Issue.record("seed \(seed): melds and deadwood do not cover the hand")
-                return
-            }
-            var deadSum = 0
-            for i in 0..<dealt.count where deadMask & (1 << i) != 0 { deadSum += reference.pips[i] }
-            if deadSum != parts.deadwood {
-                Issue.record("seed \(seed): deadwood sum \(deadSum) ≠ reported \(parts.deadwood)")
-                return
-            }
-        }
     }
 
     // MARK: - Registry wiring
@@ -903,24 +110,34 @@ struct NativeTests {
     @Test func nativeRegistrySignatures() {
         let context = TypeContext()
         // ExprSignature is not Equatable; compare its fields (ExprType is).
-        #expect(Self.sigMatches(context.native(named: "cribbage.handScore"),
-            params: [.list(.card), .card, .bool], result: .int))
-        #expect(Self.sigMatches(context.native(named: "cribbage.pegPoints"),
-            params: [.list(.card)], result: .int))
-        #expect(Self.sigMatches(context.native(named: "bridge.score"),
-            params: [.record(contractRecord), .int, .bool, .string],
-            result: .record(bridgeScoreRecord)))
-        #expect(Self.sigMatches(context.native(named: "bridge.honors"),
-            params: [.list(.list(.card)), .optional(.suit), .team], result: .int))
-        #expect(Self.sigMatches(context.native(named: "rummy.melds"),
-            params: [.list(.card), .record(rummyRulesRecord)],
-            result: .record(rummyMeldRecord)))
+        #expect(
+            Self.sigMatches(
+                context.native(named: "cribbage.handScore"),
+                params: [.list(.card), .card, .bool], result: .int))
+        #expect(
+            Self.sigMatches(
+                context.native(named: "cribbage.pegPoints"),
+                params: [.list(.card)], result: .int))
+        #expect(
+            Self.sigMatches(
+                context.native(named: "bridge.score"),
+                params: [.record(contractRecord), .int, .bool, .string],
+                result: .record(bridgeScoreRecord)))
+        #expect(
+            Self.sigMatches(
+                context.native(named: "bridge.honors"),
+                params: [.list(.list(.card)), .optional(.suit), .team], result: .int))
+        #expect(
+            Self.sigMatches(
+                context.native(named: "rummy.melds"),
+                params: [.list(.card), .record(rummyRulesRecord)],
+                result: .record(rummyMeldRecord)))
         // Unregistered names do not resolve.
         #expect(context.native(named: "cribbage.nonexistent") == nil)
         #expect(context.native(named: "handScore") == nil)
     }
 
-    private static func sigMatches(_ sig: NativeSignature?, params: [ExprType], result: ExprType) -> Bool {
+    static func sigMatches(_ sig: NativeSignature?, params: [ExprType], result: ExprType) -> Bool {
         guard let sig else { return false }
         return sig.params == params && sig.result == result
     }
@@ -974,16 +191,16 @@ struct NativeTests {
 
     @Test func nativesRejectBadTypes() throws {
         for source in [
-            "cribbage.handScore(cs, c)",                    // arity
-            "cribbage.handScore(cs, c, 7)",                 // bool arg
-            "cribbage.handScore(c, c, true)",               // hand type
-            "cribbage.pegPoints(c)",                        // list arg
-            "bridge.score(cs, 10, false, \"rubber\")",      // not a contract
+            "cribbage.handScore(cs, c)",  // arity
+            "cribbage.handScore(cs, c, 7)",  // bool arg
+            "cribbage.handScore(c, c, true)",  // hand type
+            "cribbage.pegPoints(c)",  // list arg
+            "bridge.score(cs, 10, false, \"rubber\")",  // not a contract
             "bridge.score(k, \"ten\", false, \"rubber\")",  // tricks type
-            "bridge.honors(hands, 4, t)",                   // trump type
-            "rummy.melds(cs, 5)",                           // rules type
-            "rummy.melds(cs)",                              // arity
-            "cribbage.nonexistent(cs)",                     // unregistered name
+            "bridge.honors(hands, 4, t)",  // trump type
+            "rummy.melds(cs, 5)",  // rules type
+            "rummy.melds(cs)",  // arity
+            "cribbage.nonexistent(cs)",  // unregistered name
         ] {
             do {
                 _ = try Eval.run(source, configure: Self.typeContext, env: Self.evalEnvironment)
@@ -996,44 +213,55 @@ struct NativeTests {
 
     @Test func nativesEvaluateConsistentlyWithDirectCalls() throws {
         // The expression path and the direct-impl path must agree exactly.
-        let directHand = try Self.call("cribbage.handScore", [
-            Self.cards(["5H", "5D", "5S", "6C"]), Self.card("7D"), .bool(true),
-        ])
-        #expect(try Eval.run(
-            "cribbage.handScore(cs, c, true)",
-            configure: Self.typeContext, env: Self.evalEnvironment
-        ) == directHand)
+        let directHand = try Self.call(
+            "cribbage.handScore",
+            [
+                Self.cards(["5H", "5D", "5S", "6C"]), Self.card("7D"), .bool(true),
+            ])
+        #expect(
+            try Eval.run(
+                "cribbage.handScore(cs, c, true)",
+                configure: Self.typeContext, env: Self.evalEnvironment
+            ) == directHand)
 
         let directPeg = try Self.call("cribbage.pegPoints", [Self.cards(["5H", "5D", "5S", "6C"])])
-        #expect(try Eval.run(
-            "cribbage.pegPoints(cs)",
-            configure: Self.typeContext, env: Self.evalEnvironment
-        ) == directPeg)
+        #expect(
+            try Eval.run(
+                "cribbage.pegPoints(cs)",
+                configure: Self.typeContext, env: Self.evalEnvironment
+            ) == directPeg)
 
-        let directScore = try Self.call("bridge.score", [
-            Self.contractValue(level: 4, strain: "S", dbl: 0), .int(10), .bool(false), .string("rubber"),
-        ])
-        #expect(try Eval.run(
-            "bridge.score(k, 10, false, 'rubber')",
-            configure: Self.typeContext, env: Self.evalEnvironment
-        ) == directScore)
+        let directScore = try Self.call(
+            "bridge.score",
+            [
+                Self.contractValue(level: 4, strain: "S", dbl: 0), .int(10), .bool(false), .string("rubber"),
+            ])
+        #expect(
+            try Eval.run(
+                "bridge.score(k, 10, false, 'rubber')",
+                configure: Self.typeContext, env: Self.evalEnvironment
+            ) == directScore)
 
-        let directHonors = try Self.call("bridge.honors", [
-            .list([
-                Self.cards(["KS", "QS"]), Self.cards(["2H", "3H"]),
-                Self.cards(["JS", "10S"]), Self.cards(["2D", "3D"]),
-            ]), .string("S"), .string("NS"),
-        ], teams: [.string("NS"), .string("EW")])
-        #expect(try Eval.run(
-            "bridge.honors(hands, 'S', t)",
-            configure: Self.typeContext, env: Self.evalEnvironment
-        ) == directHonors)
+        let directHonors = try Self.call(
+            "bridge.honors",
+            [
+                .list([
+                    Self.cards(["KS", "QS"]), Self.cards(["2H", "3H"]),
+                    Self.cards(["JS", "10S"]), Self.cards(["2D", "3D"]),
+                ]), .string("S"), .string("NS"),
+            ], teams: [.string("NS"), .string("EW")])
+        #expect(
+            try Eval.run(
+                "bridge.honors(hands, 'S', t)",
+                configure: Self.typeContext, env: Self.evalEnvironment
+            ) == directHonors)
 
         let directMelds = try Self.call("rummy.melds", [Self.cards(["5H", "5D", "5S", "6C"]), Self.rummyRules()])
-        #expect(try Eval.run(
-            "rummy.melds(cs, rr)",
-            configure: Self.typeContext, env: Self.evalEnvironment
-        ) == directMelds)
+        #expect(
+            try Eval.run(
+                "rummy.melds(cs, rr)",
+                configure: Self.typeContext, env: Self.evalEnvironment
+            ) == directMelds)
 
         // Result records carry the registered record names.
         let meldRecord = try Eval.run("rummy.melds(cs, rr)", configure: Self.typeContext, env: Self.evalEnvironment)

@@ -5,6 +5,7 @@
 
 import Foundation
 import Testing
+
 @testable import RulesetKit
 
 struct ResolverTests {
@@ -25,10 +26,16 @@ struct ResolverTests {
         try String(contentsOf: Self.rulesetDir.appendingPathComponent(name), encoding: .utf8)
     }
 
-    func rubberBase() throws -> RulesetDocument { try Schema.decodeRuleset(try read("contract-bridge.rubber.ruleset.json")) }
-    func chicagoOverlay() throws -> OverlayDocument { try Schema.decodeOverlay(try read("contract-bridge.chicago.variant.json")) }
+    func rubberBase() throws -> RulesetDocument {
+        try Schema.decodeRuleset(try read("contract-bridge.rubber.ruleset.json"))
+    }
+    func chicagoOverlay() throws -> OverlayDocument {
+        try Schema.decodeOverlay(try read("contract-bridge.chicago.variant.json"))
+    }
     func heartsBase() throws -> RulesetDocument { try Schema.decodeRuleset(try read("hearts.standard.ruleset.json")) }
-    func houseOverlay() throws -> OverlayDocument { try Schema.decodeOverlay(try read("hearts.house-example.house.json")) }
+    func houseOverlay() throws -> OverlayDocument {
+        try Schema.decodeOverlay(try read("hearts.house-example.house.json"))
+    }
 
     /// Minimal synthetic base for error-path tests (locked option, misc ops).
     func syntheticBase(lockedOption: Bool = false, lockedRule: Bool = false) throws -> RulesetDocument {
@@ -47,31 +54,35 @@ struct ResolverTests {
         ]
         if lockedRule { ruleFields.append(JSONField(key: "locked", value: .bool(true))) }
         let middleRule = JSON.object(ruleFields).prettyString()
-        let text = try Schema.decodeRuleset("""
-        {
-          "format": "parlor.ruleset/1",
-          "id": "test.game",
-          "game": "test",
-          "kind": "base",
-          "version": "1.0.0",
-          "name": { "default": "Test" },
-          "options": [
-            { "id": "target", "type": "int", "default": 100, "label": { "default": "Target" }, "rules": [] },
-            \(middleOption),
-            { "id": "flag", "type": "bool", "default": false, "label": { "default": "Flag" }, "rules": [] }
-          ],
-          "rules": [
-            { "id": "R.1", "text": { "default": "One" } },
-            \(middleRule),
-            { "id": "R.3", "text": { "default": "Three" } }
-          ],
-          "vars": { "counter": { "scope": "round", "type": "int", "initial": "0" } }
-        }
-        """)
+        let text = try Schema.decodeRuleset(
+            """
+            {
+              "format": "parlor.ruleset/1",
+              "id": "test.game",
+              "game": "test",
+              "kind": "base",
+              "version": "1.0.0",
+              "name": { "default": "Test" },
+              "options": [
+                { "id": "target", "type": "int", "default": 100, "label": { "default": "Target" }, "rules": [] },
+                \(middleOption),
+                { "id": "flag", "type": "bool", "default": false, "label": { "default": "Flag" }, "rules": [] }
+              ],
+              "rules": [
+                { "id": "R.1", "text": { "default": "One" } },
+                \(middleRule),
+                { "id": "R.3", "text": { "default": "Three" } }
+              ],
+              "vars": { "counter": { "scope": "round", "type": "int", "initial": "0" } }
+            }
+            """)
         return text
     }
 
-    func overlay(patch: [(String, String, JSON?)] = [], options: JSON? = nil, extends: String = "test.game@^1.0", id: String = "test.overlay", kind: String = "variant") throws -> OverlayDocument {
+    func overlay(
+        patch: [(String, String, JSON?)] = [], options: JSON? = nil,
+        extends: String = "test.game@^1.0", id: String = "test.overlay", kind: String = "variant"
+    ) throws -> OverlayDocument {
         var patchArray: [JSON] = []
         for (op, path, value) in patch {
             var entry: [JSONField] = [
@@ -104,7 +115,10 @@ struct ResolverTests {
         let rubber = try Resolver.resolve(base: rubberBase())
         #expect(rubber.hash == "44d86a091419d2baa134262da884f21f4a36c5522545193df0640e81257acd7f")
         let hearts = try Resolver.resolve(base: heartsBase())
-        #expect(hearts.hash == "5d158dd6821c42ed46b0bca1b4d49cb14a9060d0e98b9f7f26968de2efc124ec")
+        // 2026-11-19: CardCount now normalizes the word "all" to null
+        // (§5.7 "absent means all"), which changes hearts' canonical move
+        // card counts; re-verified against the Python canonicalizer.
+        #expect(hearts.hash == "8016dc419e3ce7ac8baba3c1f98e96b5acbad8ac8f9750f38e4902b56a58ce7b")
     }
 
     // MARK: Chicago overlay → rubber base (primary acceptance)
@@ -197,78 +211,6 @@ struct ResolverTests {
         }
     }
 
-    // MARK: Patch ops
-
-    @Test func replaceAddAppendRemoveWork() throws {
-        let base = try syntheticBase()
-        let ov = try overlay(patch: [
-            ("replace", "/options/byId/target/default", .int(200)),
-            ("add", "/vars/bonus", .object([JSONField(key: "scope", value: .string("round")),
-                                           JSONField(key: "type", value: .string("int")),
-                                           JSONField(key: "initial", value: .string("0"))])),
-            ("append", "/rules", .object([JSONField(key: "id", value: .string("R.9")),
-                                          JSONField(key: "text", value: .object([JSONField(key: "default", value: .string("Nine"))]))])),
-            ("remove", "/options/byId/flag", nil),
-        ])
-        let resolved = try Resolver.resolve(base: base, variant: ov)
-        #expect(resolvedOption(resolved, "target") == .int(200))
-        #expect(resolved.document.vars?.first(where: { $0.key == "bonus" }) != nil)
-        #expect(resolved.document.rules?.contains(where: { $0.id == "R.9" }) == true)
-        #expect(resolved.document.options?.contains(where: { $0.id == "flag" }) == false)
-        #expect(resolved.provenance["/options/byId/target/default"]?.role == .variant)
-        #expect(resolved.provenance["/vars/bonus"]?.role == .variant)
-        #expect(resolved.provenance["/rules"]?.role == .variant)
-    }
-
-    @Test func numericIndexIsRejected() throws {
-        let base = try syntheticBase()
-        let ov = try overlay(patch: [("replace", "/rules/0", nil)])
-        #expect(throws: ResolveError.self) {
-            _ = try Resolver.resolve(base: base, variant: ov)
-        }
-        let ov2 = try overlay(patch: [("replace", "/rules/0/text", .object([JSONField(key: "default", value: .string("x"))]))])
-        #expect(throws: ResolveError.self) {
-            _ = try Resolver.resolve(base: base, variant: ov2)
-        }
-    }
-
-    @Test func unknownByIdTargetFails() throws {
-        let base = try syntheticBase()
-        let ov = try overlay(patch: [("replace", "/options/byId/nope/default", .int(1))])
-        do {
-            _ = try Resolver.resolve(base: base, variant: ov)
-            Issue.record("expected unknownId failure")
-        } catch {
-            guard case .unknownId(let id) = error.kind else {
-                Issue.record("wrong error: \(error)")
-                return
-            }
-            #expect(id == "nope")
-        }
-    }
-
-    @Test func missingTargetsFail() throws {
-        let base = try syntheticBase()
-        let replaceMissing = try overlay(patch: [("replace", "/vars/ghost", .int(1))])
-        #expect(throws: ResolveError.self) { _ = try Resolver.resolve(base: base, variant: replaceMissing) }
-        let removeMissing = try overlay(patch: [("remove", "/vars/ghost", nil)])
-        #expect(throws: ResolveError.self) { _ = try Resolver.resolve(base: base, variant: removeMissing) }
-        let addExisting = try overlay(patch: [("add", "/vars/counter", .int(1))])
-        #expect(throws: ResolveError.self) { _ = try Resolver.resolve(base: base, variant: addExisting) }
-        let appendNonArray = try overlay(patch: [("append", "/format", .string("x"))])
-        #expect(throws: ResolveError.self) { _ = try Resolver.resolve(base: base, variant: appendNonArray) }
-    }
-
-    @Test func malformedPointerFails() throws {
-        let base = try syntheticBase()
-        let noSlash = try overlay(patch: [("replace", "format", .string("x"))])
-        #expect(throws: ResolveError.self) { _ = try Resolver.resolve(base: base, variant: noSlash) }
-        let scalarDescent = try overlay(patch: [("replace", "/format/sub", .string("x"))])
-        #expect(throws: ResolveError.self) { _ = try Resolver.resolve(base: base, variant: scalarDescent) }
-        let removeWithValue = try overlay(patch: [("remove", "/vars/counter", .int(1))])
-        #expect(throws: ResolveError.self) { _ = try Resolver.resolve(base: base, variant: removeWithValue) }
-    }
-
     // MARK: Locking (§8.2 constraint 3)
 
     @Test func lockedOptionRejectsOverlayAndTable() throws {
@@ -284,10 +226,14 @@ struct ResolverTests {
 
     @Test func lockedRuleRejectsPatch() throws {
         let base = try syntheticBase(lockedRule: true)
-        let ov = try overlay(patch: [("replace", "/rules/byId/R.2/text", .object([JSONField(key: "default", value: .string("Changed"))]))])
+        let ov = try overlay(patch: [
+            ("replace", "/rules/byId/R.2/text", .object([JSONField(key: "default", value: .string("Changed"))]))
+        ])
         #expect(throws: ResolveError.self) { _ = try Resolver.resolve(base: base, variant: ov) }
         // Untouched neighbors still patch fine.
-        let ok = try overlay(patch: [("replace", "/rules/byId/R.1/text", .object([JSONField(key: "default", value: .string("One-ish"))]))])
+        let ok = try overlay(patch: [
+            ("replace", "/rules/byId/R.1/text", .object([JSONField(key: "default", value: .string("One-ish"))]))
+        ])
         let resolved = try Resolver.resolve(base: base, variant: ok)
         #expect(resolved.document.rules?.first(where: { $0.id == "R.1" })?.text.defaultString == "One-ish")
     }

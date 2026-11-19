@@ -4,6 +4,7 @@
 
 import Foundation
 import Testing
+
 @testable import RulesetKit
 
 struct SchemaRoundTripTests {
@@ -127,10 +128,14 @@ struct SchemaRoundTripTests {
         let text = try read("hearts.standard.ruleset.json")
         let doc = try Schema.decodeRuleset(text)
         var tree = doc.json
-        guard case .object(var fields) = tree else { Issue.record("not an object"); return }
+        guard case .object(var fields) = tree else {
+            Issue.record("not an object")
+            return
+        }
         for (index, field) in fields.enumerated() where field.key == "phases" {
             guard case .array(var phases) = field.value, let first = phases.first,
-                  case .object(var phaseFields) = first else { continue }
+                case .object(var phaseFields) = first
+            else { continue }
             phaseFields.append(JSONField(key: "bogusKey", value: .int(1)))
             phases[0] = .object(phaseFields)
             fields[index] = JSONField(key: "phases", value: .array(phases))
@@ -145,10 +150,14 @@ struct SchemaRoundTripTests {
         let text = try read("hearts.standard.ruleset.json")
         let doc = try Schema.decodeRuleset(text)
         var tree = doc.json
-        guard case .object(var fields) = tree else { Issue.record("not an object"); return }
+        guard case .object(var fields) = tree else {
+            Issue.record("not an object")
+            return
+        }
         for (index, field) in fields.enumerated() where field.key == "phases" {
             guard case .array(var phases) = field.value, let first = phases.first,
-                  case .object(var phaseFields) = first else { continue }
+                case .object(var phaseFields) = first
+            else { continue }
             for (pi, pf) in phaseFields.enumerated() where pf.key == "mechanic" {
                 phaseFields[pi] = JSONField(key: "mechanic", value: .int(7))
             }

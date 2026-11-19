@@ -296,10 +296,15 @@ public struct TypeChecker {
         }
         let typedBase = try checkNode(base, scope: scope)
         let typedIndex = try checkNode(index, scope: scope)
-        // Per-team and per-seat variables are indexed by team or seat,
-        // not by int (§7.3).
+        // Per-seat and per-team variables are indexed by their own domain:
+        // a per-seat variable by seat, a per-team variable by team (§7.3),
+        // regardless of which store holds them.
         if case .variable(let ref) = typedBase.binding, ref.scope.isIndexed {
-            let wanted: ExprType = ref.store == .match ? .team : .seat
+            let wanted: ExprType
+            switch ref.scope {
+            case .seatMatch, .seatDeal: wanted = .seat
+            default: wanted = .team
+            }
             guard unify(typedIndex.type, wanted) != nil else {
                 let kind = ref.store == .match ? "team" : "seat"
                 let message =

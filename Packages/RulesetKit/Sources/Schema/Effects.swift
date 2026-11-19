@@ -20,7 +20,9 @@ public enum CardCount: Equatable, Sendable, JSONCodable {
         } else if let i = json.intValue {
             self = .top(i)
         } else if let s = json.stringValue {
-            self = .expr(Expr(source: s))
+            // The word "all" spells the default; anything else is an
+            // expression evaluated per move.
+            self = s == "all" ? .all : .expr(Expr(source: s))
         } else {
             throw SchemaError.wrongType(expected: "int or expression string", path: path)
         }
@@ -73,106 +75,146 @@ public enum Effect: Equatable, Sendable, JSONCodable {
 
     public init(json: JSON, path: String) throws(SchemaError) {
         let present = Effect.vocabulary.filter { json[$0] != nil }
-        switch present.count {
-        case 0:
-            throw SchemaError.wrongType(expected: "an effect object", path: path)
-        case 1:
-            break
-        default:
+        guard present.count == 1 else {
+            let found = present.joined(separator: ", ")
             throw SchemaError.wrongType(
-                expected: "exactly one effect key (found \(present.joined(separator: ", ")))",
+                expected: present.isEmpty
+                    ? "an effect object"
+                    : "exactly one effect key (found \(found))",
                 path: path)
         }
+        self = try Self.dispatch(present[0], json: json, path: path)
+    }
 
+    /// Dispatch to the per-case decoder. Keeps init small enough for lint.
+    private static func dispatch(
+        _ key: String, json: JSON, path: String
+    ) throws(SchemaError) -> Effect {
+        switch key {
+        case "set": return try decodeSet(json, path: path)
+        case "add": return try decodeAdd(json, path: path)
+        case "let": return try decodeLet(json, path: path)
+        case "if": return try decodeIfElse(json, path: path)
+        case "forEach": return try decodeForEach(json, path: path)
+        case "move": return try decodeMoveEffect(json, path: path)
+        case "reveal": return try decodeReveal(json, path: path)
+        case "emit": return try decodeEmit(json, path: path)
+        default: throw SchemaError.wrongType(expected: "an effect object", path: path)
+        }
+    }
+
+    // MARK: - Per-case decoders
+
+    private static func decodeSet(_ json: JSON, path: String) throws(SchemaError) -> Effect {
         var reader = try FieldReader(json, path: path)
+        return .set(
+            path: try reader.string("set"),
+            to: try reader.decoded("to") as Expr,
+            rule: try reader.optionalString("rule"))
+    }
 
-        func decodeEffectArray(_ key: String) throws(SchemaError) -> [Effect] {
-            let raw = try reader.value(key)
-            let arrayPath = reader.childPath(key)
-            guard let items = raw.arrayValue else {
-                throw SchemaError.wrongType(expected: "array of effects", path: arrayPath)
-            }
-            return try items.enumerated().map { (index: Int, item: JSON) throws(SchemaError) in
-                try Effect(json: item, path: "\(arrayPath)[\(index)]")
-            }
+    private static func decodeAdd(_ json: JSON, path: String) throws(SchemaError) -> Effect {
+        var reader = try FieldReader(json, path: path)
+        return .add(
+            path: try reader.string("add"),
+            value: try reader.decoded("value") as Expr,
+            event: try reader.optionalString("event"),
+            rule: try reader.optionalString("rule"))
+    }
+
+    private static func decodeLet(_ json: JSON, path: String) throws(SchemaError) -> Effect {
+        var reader = try FieldReader(json, path: path)
+        return .letBinding(
+            name: try reader.string("let"),
+            be: try reader.decoded("be") as Expr,
+            rule: try reader.optionalString("rule"))
+    }
+
+    private static func decodeIfElse(_ json: JSON, path: String) throws(SchemaError) -> Effect {
+        var reader = try FieldReader(json, path: path)
+        return .ifElse(
+            condition: try reader.decoded("if") as Expr,
+            then: try decodeEffectArray(&reader, "then", path: path),
+            elseBranch: try reader.optionalArray("else") as [Effect]?,
+            rule: try reader.optionalString("rule"))
+    }
+
+    private static func decodeForEach(_ json: JSON, path: String) throws(SchemaError) -> Effect {
+        var reader = try FieldReader(json, path: path)
+        return .forEach(
+            kind: try reader.string("forEach"),
+            body: try decodeEffectArray(&reader, "do", path: path),
+            rule: try reader.optionalString("rule"))
+    }
+
+    private static func decodeMoveEffect(_ json: JSON, path: String) throws(SchemaError) -> Effect {
+        var reader = try FieldReader(json, path: path)
+        return .move(
+            try decodeMoveSpec(reader: &reader, path: path),
+            rule: try reader.optionalString("rule"))
+    }
+
+    private static func decodeReveal(_ json: JSON, path: String) throws(SchemaError) -> Effect {
+        var reader = try FieldReader(json, path: path)
+        let raw = try reader.value("reveal")
+        var revealReader = try FieldReader(raw, path: reader.childPath("reveal"))
+        let zone = try revealReader.string("zone")
+        let seat = try revealReader.optionalDecoded("seat") as Expr?
+        let to = revealReader.optionalValue("to")
+        try revealReader.rejectLeftovers()
+        return .reveal(zone: zone, seat: seat, to: to, rule: try reader.optionalString("rule"))
+    }
+
+    private static func decodeEmit(_ json: JSON, path: String) throws(SchemaError) -> Effect {
+        var reader = try FieldReader(json, path: path)
+        let raw = try reader.value("emit")
+        guard let name = raw.stringValue else {
+            throw SchemaError.wrongType(expected: "event name string", path: reader.childPath("emit"))
         }
-
-        func decodeMove() throws(SchemaError) -> MoveSpec {
-            let raw = try reader.value("move")
-            var moveReader = try FieldReader(raw, path: reader.childPath("move"))
-            let spec = MoveSpec(
-                from: try moveReader.value("from"),
-                to: try moveReader.value("to"),
-                toSeat: try moveReader.optionalDecoded("toSeat") as Expr?,
-                toTeam: try moveReader.optionalDecoded("toTeam") as Expr?,
-                cards: try moveReader.optionalDecoded("cards") as CardCount? ?? .all)
-            try moveReader.rejectLeftovers()
-            return spec
-        }
-
-        switch present[0] {
-        case "set":
-            self = .set(
-                path: try reader.string("set"),
-                to: try reader.decoded("to") as Expr,
-                rule: try reader.optionalString("rule"))
-        case "add":
-            self = .add(
-                path: try reader.string("add"),
-                value: try reader.decoded("value") as Expr,
-                event: try reader.optionalString("event"),
-                rule: try reader.optionalString("rule"))
-        case "let":
-            self = .letBinding(
-                name: try reader.string("let"),
-                be: try reader.decoded("be") as Expr,
-                rule: try reader.optionalString("rule"))
-        case "if":
-            self = .ifElse(
-                condition: try reader.decoded("if") as Expr,
-                then: try decodeEffectArray("then"),
-                elseBranch: try reader.optionalArray("else") as [Effect]?,
-                rule: try reader.optionalString("rule"))
-        case "forEach":
-            self = .forEach(
-                kind: try reader.string("forEach"),
-                body: try decodeEffectArray("do"),
-                rule: try reader.optionalString("rule"))
-        case "move":
-            self = .move(try decodeMove(), rule: try reader.optionalString("rule"))
-        case "reveal":
-            let raw = try reader.value("reveal")
-            var revealReader = try FieldReader(raw, path: reader.childPath("reveal"))
-            let zone = try revealReader.string("zone")
-            let seat = try revealReader.optionalDecoded("seat") as Expr?
-            let to = revealReader.optionalValue("to")
-            try revealReader.rejectLeftovers()
-            self = .reveal(zone: zone, seat: seat, to: to, rule: try reader.optionalString("rule"))
-        case "emit":
-            let raw = try reader.value("emit")
-            guard let name = raw.stringValue else {
-                throw SchemaError.wrongType(expected: "event name string", path: reader.childPath("emit"))
+        var data: [JSONField]?
+        if let dataJSON = json["data"] {
+            guard let dataObject = dataJSON.fields else {
+                throw SchemaError.wrongType(
+                    expected: "object of event data", path: reader.childPath("data"))
             }
-            var data: [JSONField]?
-            if let dataJSON = json["data"] {
-                guard let dataObject = dataJSON.fields else {
-                    throw SchemaError.wrongType(expected: "object of event data", path: reader.childPath("data"))
+            data = try dataObject.map { (field: JSONField) throws(SchemaError) in
+                guard let s = field.value.stringValue else {
+                    throw SchemaError.wrongType(
+                        expected: "expression string",
+                        path: "\(reader.childPath("data")).\(field.key)")
                 }
-                data = try dataObject.map { (field: JSONField) throws(SchemaError) in
-                    guard let s = field.value.stringValue else {
-                        throw SchemaError.wrongType(
-                            expected: "expression string",
-                            path: "\(reader.childPath("data")).\(field.key)")
-                    }
-                    return JSONField(key: field.key, value: .string(s))
-                }
+                return JSONField(key: field.key, value: .string(s))
             }
-            self = .emit(name: name, data: data, rule: try reader.optionalString("rule"))
-        default:
-            throw SchemaError.wrongType(expected: "an effect object", path: path)
         }
+        return .emit(name: name, data: data, rule: try reader.optionalString("rule"))
+    }
 
-        try reader.rejectLeftovers()
+    // MARK: - Helpers
+
+    private static func decodeEffectArray(
+        _ reader: inout FieldReader, _ key: String, path: String
+    ) throws(SchemaError) -> [Effect] {
+        let raw = try reader.value(key)
+        let arrayPath = reader.childPath(key)
+        guard let items = raw.arrayValue else {
+            throw SchemaError.wrongType(expected: "array of effects", path: arrayPath)
+        }
+        return try items.enumerated().map { (index: Int, item: JSON) throws(SchemaError) in
+            try Effect(json: item, path: "\(arrayPath)[\(index)]")
+        }
+    }
+
+    private static func decodeMoveSpec(reader: inout FieldReader, path: String) throws(SchemaError) -> MoveSpec {
+        let raw = try reader.value("move")
+        var moveReader = try FieldReader(raw, path: reader.childPath("move"))
+        let spec = MoveSpec(
+            from: try moveReader.value("from"),
+            to: try moveReader.value("to"),
+            toSeat: try moveReader.optionalDecoded("toSeat") as Expr?,
+            toTeam: try moveReader.optionalDecoded("toTeam") as Expr?,
+            cards: try moveReader.optionalDecoded("cards") as CardCount? ?? .all)
+        try moveReader.rejectLeftovers()
+        return spec
     }
 
     public var json: JSON {

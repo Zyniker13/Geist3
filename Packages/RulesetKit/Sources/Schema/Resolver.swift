@@ -189,7 +189,7 @@ public enum Resolver {
                 .versionMismatch,
                 "overlay \(overlay.id) needs base \(range), found \(base.version)")
         }
-        _ = pinned // `^` already encoded in `floor`/major check
+        _ = pinned  // `^` already encoded in `floor`/major check
     }
 
     /// Returns the inclusive floor `(major, minor, patch)` and whether the
@@ -231,8 +231,11 @@ public enum Resolver {
                         "overlay \(overlay.id): two patches address \(path)")
                 }
                 working = try apply(
-                    working, op: "replace", path: path, value: field.value,
-                    overlayId: overlay.id, note: nil, role: role, into: &provenance)
+                    working,
+                    step: Step(
+                        name: "replace", path: path, value: field.value,
+                        overlayId: overlay.id, note: nil),
+                    role: role, into: &provenance)
             }
         }
 
@@ -244,41 +247,49 @@ public enum Resolver {
                     "overlay \(overlay.id): two patches address \(path)")
             }
             working = try apply(
-                working, op: op.op, path: path, value: op.value,
-                overlayId: overlay.id, note: op.note, role: role, into: &provenance)
+                working,
+                step: Step(
+                    name: op.op, path: path, value: op.value,
+                    overlayId: overlay.id, note: op.note),
+                role: role, into: &provenance)
         }
         return working
     }
 
+    /// One patch step about to land on the working tree: what to do, where
+    /// (`path` is normalized Pointer text), and which overlay it came from.
+    struct Step {
+        let name: String
+        let path: String
+        let value: JSON?
+        let overlayId: String
+        let note: String?
+    }
+
     static func apply(
-        _ tree: JSON,
-        op opName: String,
-        path: String,
-        value: JSON?,
-        overlayId: String,
-        note: String?,
-        role: LayerRef.Role,
+        _ tree: JSON, step: Step, role: LayerRef.Role,
         into provenance: inout [String: LayerRef]
     ) throws(ResolveError) -> JSON {
-        guard opName == "replace" || opName == "add" || opName == "append" || opName == "remove" else {
-            throw ResolveError(.badPointer, "\(overlayId): unknown op \(opName) at \(path)")
+        let id = step.overlayId
+        guard step.name == "replace" || step.name == "add" || step.name == "append" || step.name == "remove" else {
+            throw ResolveError(.badPointer, "\(id): unknown op \(step.name) at \(step.path)")
         }
-        guard opName != "remove" || value == nil else {
-            throw ResolveError(.badPointer, "\(overlayId): remove carries a value at \(path)")
+        guard step.name != "remove" || step.value == nil else {
+            throw ResolveError(.badPointer, "\(id): remove carries a value at \(step.path)")
         }
-        guard opName == "remove" || value != nil else {
-            throw ResolveError(.badPointer, "\(overlayId): \(opName) is missing its value at \(path)")
+        guard step.name == "remove" || step.value != nil else {
+            throw ResolveError(.badPointer, "\(id): \(step.name) is missing its value at \(step.path)")
         }
-        let pointer = try Pointer.parse(path)
+        let pointer = try Pointer.parse(step.path)
         try checkProtected(pointer)
         try checkLocked(tree, pointer)
-        let newValue = value ?? .null
+        let newValue = step.value ?? .null
 
-        let applied = mutate(tree, pointer: pointer, op: opName, value: newValue)
+        let applied = mutate(tree, pointer: pointer, op: step.name, value: newValue)
         guard case .mutated(let result) = applied else {
-            throw ResolveError(applied.failureKind, applied.failureMessage ?? path)
+            throw ResolveError(applied.failureKind, applied.failureMessage ?? step.path)
         }
-        provenance[pointer.normalized] = LayerRef(role: role, sourceId: overlayId, note: note)
+        provenance[pointer.normalized] = LayerRef(role: role, sourceId: step.overlayId, note: step.note)
         return result
     }
 
@@ -294,18 +305,24 @@ public enum Resolver {
             let pointer = Pointer(segments: ["options", "byId", id, "value"])
             let valuePointer = Pointer(segments: ["options", "byId", id, "default"])
             // Existence and locking are checked against the option itself.
-            guard case .mutated(let found) = mutate(
-                working, pointer: Pointer(segments: ["options", "byId", id]),
-                op: "replace", value: .null) else {
+            guard
+                case .mutated(let found) = mutate(
+                    working, pointer: Pointer(segments: ["options", "byId", id]),
+                    op: "replace", value: .null)
+            else {
                 throw ResolveError(.unknownOption(id), "table option \(id) is not declared")
             }
             _ = found
             try checkLocked(working, valuePointer)
-            guard case .mutated(let withValue) = mutate(
-                working, pointer: pointer, op: "add", value: choice) else {
+            guard
+                case .mutated(let withValue) = mutate(
+                    working, pointer: pointer, op: "add", value: choice)
+            else {
                 // `value` already present (a prior table pass) — replace it.
-                guard case .mutated(let replaced) = mutate(
-                    working, pointer: pointer, op: "replace", value: choice) else {
+                guard
+                    case .mutated(let replaced) = mutate(
+                        working, pointer: pointer, op: "replace", value: choice)
+                else {
                     throw ResolveError(.badPointer, "table option \(id) could not be set")
                 }
                 working = replaced
@@ -327,11 +344,13 @@ public enum Resolver {
     static func injectOptionValues(_ tree: JSON, _ tableOptions: [String: JSON]) -> JSON {
         guard var fields = tree.fields else { return tree }
         guard let index = fields.firstIndex(where: { $0.key == "options" }),
-              var options = fields[index].value.arrayValue else { return tree }
+            var options = fields[index].value.arrayValue
+        else { return tree }
         for optionIndex in options.indices {
             guard var option = options[optionIndex].fields,
-                  let idField = option.first(where: { $0.key == "id" }),
-                  let id = idField.value.stringValue else { continue }
+                let idField = option.first(where: { $0.key == "id" }),
+                let id = idField.value.stringValue
+            else { continue }
             let resolved = tableOptions[id] ?? option.first(where: { $0.key == "default" })?.value ?? .null
             if let existing = option.firstIndex(where: { $0.key == "value" }) {
                 option[existing].value = resolved
@@ -364,7 +383,8 @@ public enum Resolver {
         for lockedPointer in locked {
             if lockedPointer.segments == pointer.segments
                 || isPrefix(lockedPointer.segments, pointer.segments)
-                || isPrefix(pointer.segments, lockedPointer.segments) {
+                || isPrefix(pointer.segments, lockedPointer.segments)
+            {
                 throw ResolveError(
                     .lockedPath,
                     "\(pointer.normalized) is locked in the base ruleset")
@@ -398,239 +418,6 @@ public enum Resolver {
 
     static func isPrefix(_ prefix: [String], _ path: [String]) -> Bool {
         prefix.count <= path.count && zip(prefix, path).allSatisfy { $0.0 == $0.1 }
-    }
-
-    // MARK: Tree mutation
-
-    /// The outcome of one mutation attempt against the tree.
-    enum Mutation {
-        case mutated(JSON)
-        case failed(ResolveError.Kind, String)
-        var failureKind: ResolveError.Kind {
-            if case .failed(let kind, _) = self { return kind }
-            return .badPointer
-        }
-        var failureMessage: String? {
-            if case .failed(_, let message) = self { return message }
-            return nil
-        }
-    }
-
-    /// Apply `op` at `pointer`. Declaration arrays are navigated by `byId`
-    /// pairs; numeric segments are refused everywhere.
-    static func mutate(_ tree: JSON, pointer: Pointer, op: String, value: JSON) -> Mutation {
-        var segments = pointer.segments
-
-        // Descend to the parent container, consuming `byId` pairs as needed.
-        var container = tree
-        var index = 0
-        var endedOnElement = false
-        while index < segments.count - 1 {
-            let segment = segments[index]
-            switch container {
-            case .object(let fields):
-                guard let position = fields.firstIndex(where: { $0.key == segment }) else {
-                    return .failed(.missingTarget, "no key \(segment) along \(pointer.normalized)")
-                }
-                container = fields[position].value
-                index += 1
-            case .array:
-                guard segment == "byId", index + 1 < segments.count else {
-                    if segment.first?.isNumber == true {
-                        return .failed(.numericIndex, "numeric index \(segment) is not allowed")
-                    }
-                    return .failed(.badPointer, "cannot address an array element by \(segment)")
-                }
-                let id = segments[index + 1]
-                guard case .array(let items) = container else { return .failed(.badPointer, "unreachable") }
-                guard let position = items.firstIndex(where: {
-                    $0.fields?.first(where: { $0.key == "id" })?.value == .string(id)
-                }) else {
-                    return .failed(.unknownId(id), "no element with id \(id) in \(pointer.normalized)")
-                }
-                container = items[position]
-                index += 2
-                endedOnElement = (index == segments.count)
-            default:
-                return .failed(.badPointer, "\(pointer.normalized) descends into a scalar")
-            }
-        }
-
-        // A pointer ending exactly at an id pair names the array element
-        // itself, not a key inside it.
-        if endedOnElement {
-            switch op {
-            case "replace":
-                return .mutated(rebuild(tree, path: pointer.segments, with: value))
-            case "remove":
-                return removeElement(
-                    tree, parentPath: Array(pointer.segments.dropLast(2)),
-                    id: pointer.segments.last ?? "", pointer: pointer)
-            default:
-                return .failed(
-                    .badPointer,
-                    "\(op): \(pointer.normalized) names an element; address a key inside it")
-            }
-        }
-
-        let last = segments.removeLast()
-        switch container {
-        case .object(var fields):
-            let position = fields.firstIndex(where: { $0.key == last })
-            switch op {
-            case "replace":
-                guard let position else {
-                    return .failed(.missingTarget, "replace: no key \(last) at \(pointer.normalized)")
-                }
-                fields[position].value = value
-                return .mutated(rebuild(tree, path: segments, with: .object(fields)))
-            case "add":
-                if let position {
-                    // Adding into an existing array key inserts at the end.
-                    if case .array = fields[position].value {
-                        return appendToArray(tree, path: segments + [last], value: value, pointer: pointer)
-                    }
-                    return .failed(.alreadyExists, "add: key \(last) already exists at \(pointer.normalized)")
-                }
-                fields.append(JSONField(key: last, value: value))
-                return .mutated(rebuild(tree, path: segments, with: .object(fields)))
-            case "append":
-                guard position != nil else {
-                    return .failed(.missingTarget, "append: no key \(last) at \(pointer.normalized)")
-                }
-                return appendToArray(tree, path: segments + [last], value: value, pointer: pointer)
-            case "remove":
-                guard let position else {
-                    return .failed(.missingTarget, "remove: no key \(last) at \(pointer.normalized)")
-                }
-                fields.remove(at: position)
-                return .mutated(rebuild(tree, path: segments, with: .object(fields)))
-            default:
-                return .failed(.badPointer, "unknown op \(op)")
-            }
-        case .array:
-            guard last == "byId" else {
-                if last.first?.isNumber == true {
-                    return .failed(.numericIndex, "numeric index \(last) is not allowed")
-                }
-                return .failed(.badPointer, "cannot address an array element by \(last)")
-            }
-            // A trailing `byId` without an id targets the array itself.
-            return .failed(.badPointer, "\(pointer.normalized) ends at byId")
-        default:
-            return .failed(.badPointer, "\(pointer.normalized) targets a scalar")
-        }
-    }
-
-    /// Remove the element with `id` from the array at `parentPath`, rebuilding
-    /// the parent chain unchanged.
-    static func removeElement(
-        _ tree: JSON, parentPath: [String], id: String, pointer: Pointer
-    ) -> Mutation {
-        var container = tree
-        var index = 0
-        while index < parentPath.count {
-            let segment = parentPath[index]
-            switch container {
-            case .object(let fields):
-                guard let position = fields.firstIndex(where: { $0.key == segment }) else {
-                    return .failed(.missingTarget, "no key \(segment) along \(pointer.normalized)")
-                }
-                container = fields[position].value
-                index += 1
-            case .array:
-                guard segment == "byId", index + 1 < parentPath.count else {
-                    return .failed(.badPointer, "cannot address an array element by \(segment)")
-                }
-                let inner = parentPath[index + 1]
-                guard case .array(let items) = container,
-                      let position = items.firstIndex(where: {
-                          $0.fields?.first(where: { $0.key == "id" })?.value == .string(inner)
-                      }) else {
-                    return .failed(.unknownId(inner), "no element with id \(inner) in \(pointer.normalized)")
-                }
-                container = items[position]
-                index += 2
-            default:
-                return .failed(.badPointer, "\(pointer.normalized) descends into a scalar")
-            }
-        }
-        guard case .array(var items) = container,
-              let position = items.firstIndex(where: {
-                  $0.fields?.first(where: { $0.key == "id" })?.value == .string(id)
-              }) else {
-            return .failed(.unknownId(id), "no element with id \(id) in \(pointer.normalized)")
-        }
-        items.remove(at: position)
-        return .mutated(rebuild(tree, path: parentPath, with: .array(items)))
-    }
-
-    /// Append `value` to the array at `path` (an effect list or a declaration
-    /// array); the parent chain is rebuilt unchanged.
-    static func appendToArray(_ tree: JSON, path: [String], value: JSON, pointer: Pointer) -> Mutation {
-        var segments = path
-        let last = segments.removeLast()
-        var container = tree
-        var index = 0
-        while index < segments.count {
-            let segment = segments[index]
-            switch container {
-            case .object(let fields):
-                guard let position = fields.firstIndex(where: { $0.key == segment }) else {
-                    return .failed(.missingTarget, "no key \(segment) along \(pointer.normalized)")
-                }
-                container = fields[position].value
-                index += 1
-            case .array:
-                guard segment == "byId", index + 1 < segments.count else {
-                    return .failed(.badPointer, "cannot address an array element by \(segment)")
-                }
-                let id = segments[index + 1]
-                guard case .array(let items) = container,
-                      let position = items.firstIndex(where: {
-                          $0.fields?.first(where: { $0.key == "id" })?.value == .string(id)
-                      }) else {
-                    return .failed(.unknownId(id), "no element with id \(id) in \(pointer.normalized)")
-                }
-                container = items[position]
-                index += 2
-            default:
-                return .failed(.badPointer, "\(pointer.normalized) descends into a scalar")
-            }
-        }
-        guard case .object(let fields) = container,
-              let arrayField = fields.first(where: { $0.key == last }),
-              var items = arrayField.value.arrayValue else {
-            return .failed(.notAnArray, "append: \(last) at \(pointer.normalized) is not an array")
-        }
-        items.append(value)
-        return .mutated(rebuild(tree, path: segments + [last], with: .array(items)))
-    }
-
-    /// Replace the value reached by `path` with `replacement`, returning a new
-    /// tree. `path` is in raw segment form: `byId`/id pairs are consumed here
-    /// exactly as the descent in `mutate` consumed them.
-    static func rebuild(_ tree: JSON, path: [String], with replacement: JSON) -> JSON {
-        guard let head = path.first else { return replacement }
-        var remaining = path
-        remaining.removeFirst()
-        switch tree {
-        case .object(var fields):
-            guard let position = fields.firstIndex(where: { $0.key == head }) else { return tree }
-            fields[position].value = rebuild(fields[position].value, path: remaining, with: replacement)
-            return .object(fields)
-        case .array(var items):
-            // A `byId` marker plus the id that follows it address one element.
-            guard head == "byId", !remaining.isEmpty else { return tree }
-            let id = remaining.removeFirst()
-            guard let position = items.firstIndex(where: {
-                $0.fields?.first(where: { $0.key == "id" })?.value == .string(id)
-            }) else { return tree }
-            items[position] = rebuild(items[position], path: remaining, with: replacement)
-            return .array(items)
-        default:
-            return tree
-        }
     }
 
     // MARK: - Version helpers
@@ -690,11 +477,21 @@ public struct Pointer: Equatable, Sendable {
         var out = ""
         var iterator = segment.makeIterator()
         while let character = iterator.next() {
-            guard character == "~" else { out.append(character); continue }
-            guard let next = iterator.next() else { out.append(character); continue }
-            if next == "1" { out.append("/") }
-            else if next == "0" { out.append("~") }
-            else { out.append(character); out.append(next) }
+            guard character == "~" else {
+                out.append(character)
+                continue
+            }
+            guard let next = iterator.next() else {
+                out.append(character)
+                continue
+            }
+            switch next {
+            case "1": out.append("/")
+            case "0": out.append("~")
+            default:
+                out.append(character)
+                out.append(next)
+            }
         }
         return out
     }
@@ -724,12 +521,15 @@ public enum RulesDiff {
             let components = pointer.split(separator: "/").map(String.init)
 
             if components.count >= 3, components[0] == "options",
-               let optionId = optionId(at: Int(components[1]), in: old != nil ? a : b) {
+                let optionId = optionId(at: Int(components[1]), in: old != nil ? a : b)
+            {
                 let label = optionLabel(optionId, in: b) ?? optionLabel(optionId, in: a) ?? optionId
                 let change = renderChange(old, new)
-                lines.append("option '\(label)' (\(optionId)): \(change)\(noteSuffix("/options/byId/\(optionId)/", in: b))")
+                lines.append(
+                    "option '\(label)' (\(optionId)): \(change)\(noteSuffix("/options/byId/\(optionId)/", in: b))")
             } else if components.count >= 2, components[0] == "rules",
-                      let ruleId = ruleId(at: Int(components[1]), in: old != nil ? a : b) {
+                let ruleId = ruleId(at: Int(components[1]), in: old != nil ? a : b)
+            {
                 // One line per rule, not one per changed leaf of the rule.
                 guard seenRuleIds.insert(ruleId).inserted else { continue }
                 let action = old == nil ? "added" : new == nil ? "removed" : "changed"

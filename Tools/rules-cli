@@ -1,24 +1,12 @@
-#!/usr/bin/env bash
-# rules-cli (P0 stub) — the real Swift executable lands in P3.
-# Subcommands: validate | resolve | simulate | replay | conformance | fuzz | sim
-set -eu
-cmd="${1:-help}"
-case "$cmd" in
-    validate)
-        echo "rules-cli validate: no rulesets in Resources/Rulesets yet (lands in P3); nothing to validate"
-        ;;
-    conformance)
-        echo "rules-cli conformance: no rule-ID-tagged tests yet (lands in P3); nothing to report"
-        ;;
-    sim)
-        n="${2:-200}"
-        echo "rules-cli sim N=$n: no implemented games yet (lands in P3); nothing to simulate"
-        ;;
-    resolve | simulate | replay | fuzz)
-        echo "rules-cli $cmd: not implemented yet (lands in P3)" >&2
-        exit 1
-        ;;
-    *)
-        echo "usage: rules-cli validate | conformance | sim N | resolve | simulate | replay | fuzz"
-        ;;
-esac
+#!/bin/sh
+# rules-cli — the Parlor ruleset tool (§11.4). The implementation lives in
+# the sibling SwiftPM package (rules-cli.d); this wrapper builds it once in
+# release mode and then execs it. Replaces the P0 stub; resolve/simulate/
+# replay/fuzz arrive with P3+.
+set -e
+DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+BIN="$DIR/rules-cli.d/.build/release/rules-cli"
+if [ ! -x "$BIN" ]; then
+    (cd "$DIR/rules-cli.d" && swift build -c release >/dev/null 2>&1)
+fi
+exec "$BIN" "$@"

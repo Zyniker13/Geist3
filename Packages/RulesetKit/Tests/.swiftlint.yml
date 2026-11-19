@@ -1,0 +1,6 @@
+# RulesetKit tests only. Expected-value rows are naturally >3-element
+# tuples (bridge score keys, deal tables), so the source-level 3-tuple
+# limit does not apply under Tests/. Parent rules still merge in.
+disabled_rules:
+  - trailing_comma
+  - large_tuple

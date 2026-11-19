@@ -1,0 +1,62 @@
+# filename	expected error code	message fragment
+schema-01-missing-players.json	schema/missing-field	'players' section is required
+schema-02-missing-end.json	schema/missing-field	'end' section is required
+schema-03-missing-phases.json	schema/missing-field	'phases' section is required
+schema-04-missing-deck.json	schema/missing-field	'deck' section is required
+schema-05-phases-not-list.json	schema/wrong-type	wrong shape
+schema-06-unknown-key.json	schema/wrong-type	unknown keys
+schema-07-bad-json.json	schema/bad-json	not valid JSON
+schema-08-format-mismatch.json	schema/format-mismatch	does not match this document kind
+schema-09-unknown-mechanic.json	schema/unknown-mechanic	'roulette' is not a mechanic
+schema-10-missing-mechanic.json	schema/missing-field	'mechanic' is required
+reference-01-unknown-next.json	reference/unknown-phase	'ghost', which is not a phase id
+reference-02-unknown-zone.json	reference/unknown-zone	mantelpiece
+reference-03-unknown-var-write.json	reference/unknown-var	glory
+reference-04-unknown-rule.json	reference/unknown-rule	ZZZ-9.9
+reference-05-duplicate-phase.json	reference/duplicate-id	'score' is declared more than once
+reference-06-duplicate-zone.json	reference/duplicate-id	'hand' is declared more than once
+reference-07-bad-end-check.json	reference/bad-vocabulary	'whenever' is not a known end check
+reference-08-bad-visibility.json	reference/bad-vocabulary	'everyone' is not a known zone visibility
+reference-09-bad-teams.json	reference/bad-vocabulary	'sides' is not a known team layout
+reference-10-option-range.json	reference/option-range	above the maximum
+type-01-var-initial-type.json	type/type-mismatch	must produce int
+type-02-phase-when-not-bool.json	type/type-mismatch	must produce bool
+type-03-end-when-not-bool.json	type/type-mismatch	must produce bool
+type-04-set-value-type.json	type/type-mismatch	must produce int
+type-05-parse-error.json	type/parse-error	does not parse
+type-06-unknown-name.json	type/expression-error	unknown name 'noSuchVar'
+type-07-bad-def-signature.json	type/def-signature	signature
+type-08-def-body-parse.json	type/parse-error	body of 'f() -> int'
+type-09-def-recursion.json	type/expression-error	recursive
+type-10-index-scope.json	type/type-mismatch	cannot take an index
+reach-01-middle-skipped.json	reachability/unreachable-phase	'show' can never run
+reach-02-ghost-between.json	reachability/unreachable-phase	'ghost' can never run
+reach-03-ghost-with-when.json	reachability/unreachable-phase	'ghost' can never run
+reach-04-two-ghosts.json	reachability/unreachable-phase	'ghostA' can never run
+reach-05-ghost-and-show.json	reachability/unreachable-phase	'show' can never run
+reach-06-show-jumps-on.json	reachability/unreachable-phase	'ghost' can never run
+reach-07-deal-skips-two.json	reachability/unreachable-phase	'ghostA' can never run
+reach-08-deal-skips-to-ghost.json	reachability/unreachable-phase	'show' can never run
+reach-09-loop-orphan.json	reachability/unreachable-phase	'score' can never run
+reach-10-ghost-first-gap.json	reachability/unreachable-phase	'ghost' can never run
+term-01-show-score-cycle.json	termination/no-progress	form a loop where nothing changes
+term-02-score-self-loop.json	termination/no-progress	form a loop where nothing changes
+term-03-empty-score-never-ends.json	termination/end-var-unchanged	no effect writes
+term-04-when-options-only.json	termination/end-var-unchanged	no effect writes
+term-05-show-self-loop.json	termination/no-progress	form a loop where nothing changes
+term-06-three-phase-cycle.json	termination/no-progress	form a loop where nothing changes
+term-07-cycle-and-unchanged.json	termination/no-progress	form a loop where nothing changes
+term-08-score-to-show.json	termination/no-progress	form a loop where nothing changes
+term-09-unchanged-deal-var.json	termination/end-var-unchanged	no effect writes
+term-10-cycle-no-deal.json	termination/no-progress	form a loop where nothing changes
+fallback-01-lead-pass.json	fallback/invalid	not a valid fallback
+fallback-02-play-pass.json	fallback/invalid	not a valid fallback
+fallback-03-lead-empty.json	fallback/invalid	not a valid fallback
+fallback-04-play-empty.json	fallback/invalid	not a valid fallback
+fallback-05-lead-none.json	fallback/invalid	not a valid fallback
+fallback-06-play-none.json	fallback/invalid	not a valid fallback
+fallback-07-lead-skip.json	fallback/invalid	not a valid fallback
+fallback-08-play-skip.json	fallback/invalid	not a valid fallback
+fallback-09-both-guards.json	fallback/invalid	not a valid fallback
+fallback-10-lead-again.json	fallback/invalid	not a valid fallback
+_valid-template.json	-	-

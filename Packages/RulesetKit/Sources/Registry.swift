@@ -134,6 +134,8 @@ public enum BuiltinID: String, Sendable, CaseIterable {
     case seats, teams, left, right, partner, team, opponents, nextActive
     case zone, holderOf, tricksWon, playedBy, rankIndex, colorOf, rankCode
     case top, choice, dealtHands
+    /// The `int(…)` cast: numeric text (a rank like '9' or '10') as a number.
+    case intCast = "int"
 }
 
 /// The collection macros of the expression language (§7.1). `lambda` is
@@ -219,10 +221,15 @@ public let contractRecord = RecordType(
     fields: ["strain": .suit, "level": .int, "doubled": .bool, "redoubled": .bool]
 )
 
-/// The call record (`call.bid`, `call.strain`, `call.doubled`).
+/// The call record. Auction-ladder calls read `call.bid`, `call.strain`,
+/// `call.doubled`; auction-rounds calls read `call.id`, `call.param`, and
+/// `call.alone` (the euchre order-up round in ARCHITECTURE.md §7.3).
 public let callRecord = RecordType(
     name: "call",
-    fields: ["bid": .int, "strain": .suit, "doubled": .bool]
+    fields: [
+        "bid": .int, "strain": .suit, "doubled": .bool,
+        "id": .string, "param": .optional(.string), "alone": .optional(.bool),
+    ]
 )
 
 /// The result record of the `bridge.score` native (§5.8).
@@ -236,8 +243,10 @@ public let bridgeScoreRecord = RecordType(
 /// `rummyRules.wildRanks`).
 public let rummyRulesRecord = RecordType(
     name: "rummy.rules",
-    fields: ["minSet": .int, "minRun": .int, "aceHigh": .bool, "wrap": .bool,
-             "wildRanks": .list(.string)]
+    fields: [
+        "minSet": .int, "minRun": .int, "aceHigh": .bool, "wrap": .bool,
+        "wildRanks": .list(.string),
+    ]
 )
 
 /// The record `rummy.melds` returns (`meldResult.melds`, `meldResult.deadwood`).
@@ -298,6 +307,8 @@ public let builtinRegistry: [BuiltinID: [ExprSignature]] = {
     add(.top, ExprSignature([.int], result: .list(.card)))
     add(.choice, ExprSignature([.string, .seat], result: .string))
     add(.dealtHands, ExprSignature([], result: .list(.list(.card))))
+    add(.intCast, ExprSignature([.rank], result: .int))
+    add(.intCast, ExprSignature([.string], result: .int))
     return table
 }()
 

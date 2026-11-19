@@ -42,6 +42,9 @@ line_length:
 type_body_length:
   warning: 400
   error: 600
+  # Frozen acceptance-vector tables (P2.4) are exempted with a
+  # `swiftlint:disable:next type_body_length` comment in each file:
+  # SwiftLint 0.65.1 does not honor per-rule `excluded` paths.
 file_length:
   warning: 800
   error: 1500
@@ -50,14 +53,10 @@ function_body_length:
   error: 120
 identifier_name:
   min_length:
-    warning: 2
-  excluded:
-    - id
-    - x
-    - y
-    - z
-    - i
-    - n
-    - s
+    warning: 1
 large_tuple:
   warning: 3
+function_parameter_count:
+  # 6 covers the vocabulary-check helper (ok, code, pointer, value,
+  # allowed, what) in Validator; a 7th parameter is a smell.
+  warning: 6

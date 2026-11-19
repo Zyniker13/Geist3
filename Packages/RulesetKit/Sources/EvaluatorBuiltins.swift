@@ -19,7 +19,18 @@ extension Evaluator {
             return try trackedStateBuiltin(builtin, args)
         case .rankIndex, .rankCode, .colorOf, .top:
             return try cardBuiltin(builtin, args)
+        case .intCast:
+            return try intCast(args)
         }
+    }
+
+    /// `int(text)`: numeric text ('2' … '10') as a number; anything else
+    /// is a fault.
+    private mutating func intCast(_ args: [Value]) throws(EvaluationFault) -> Value {
+        guard args.count == 1, case .string(let text) = args[0], let n = Int64(text) else {
+            return try fault(.unsupportedValue, "int(...) expects numeric text like '10'")
+        }
+        return .int(n)
     }
 
     /// Environment listings: the seat order, the team list, and the
