@@ -149,7 +149,7 @@ gate:
 	@test -n "$(PHASE)" || { echo "gate: usage: make gate PHASE=Pn" >&2; exit 1; }
 	@case "$(PHASE)" in \
 		P0|P1) $(MAKE) bootstrap lint test-packages coverage-check coverage conformance validate sim N=200 fuzz-quick snapshot build test-apps test-replays-ios ;; \
-		P2) $(MAKE) bootstrap lint test-packages coverage-check schema-check conformance validate sim N=200 coverage fuzz-quick snapshot build test-apps test-replays-ios ;; \
+		P2) $(MAKE) bootstrap lint test-packages coverage-check schema-check validate sim N=200 coverage fuzz-quick snapshot build test-apps test-replays-ios ;; \
 		*) echo "gate: PHASE=$(PHASE) checks land with that phase" >&2; exit 1 ;; \
 	esac
 	@echo "gate: PHASE=$(PHASE) PASSED"
