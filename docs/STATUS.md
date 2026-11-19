@@ -238,3 +238,27 @@ on this branch until the G2 merge):
   (includes corpusMatchesExpectations and the three native reference tests);
   `make lint` exit 0 (swiftlint x2 configs, swift-format strict,
   check-imports OK).
+
+#### P2.7 validator — overlays + full suite green
+
+- `RulesetValidator.validate(json:)` now routes by the root `format` marker:
+  `parlor.ruleset/1` runs stages B–F as before; `parlor.overlay/1` runs
+  stage B–C plus overlay-local checks in the new `OverlayChecks.swift`
+  (kind vocabulary, `extends` grammar `<id>@<range>`, overlay version,
+  patch-op vocabulary and value shape, JSON-pointer syntax, duplicate patch
+  paths). Cross-document reference/expression checks stay at resolve time
+  (§11.4). An overlay marker on a document without `extends` takes the
+  ruleset path so the marker conflict is reported as `schema/format-mismatch`
+  (corpus case schema-08 keeps its expected code).
+- Extracted stage B (limits) into `Validator+Limits.swift` to keep the
+  `RulesetValidator` enum body under the 350-line cap; `checkLimits` and
+  `mapSchemaError` are now shared by both document paths.
+- Added `PatchOp.knownOps` (§8.3 vocabulary) on the schema type.
+- New `ValidatorTests+Overlay.swift`: both reference overlays validate clean;
+  nine negative cases assert code + pointer (unknown kind, bad version,
+  extends without `@`, bad range, unknown op, remove-with-value,
+  replace-without-value, pointer without `/`, duplicate patch paths).
+- `rules-cli validate` now passes all six `docs/plan/rulesets/*.json`
+  documents (previously misfired on the two overlays); `rules-cli fmt` works.
+- Verification: `swift build` OK; RulesetKit suite **143/143 passing**;
+  `make lint` exit 0; `rules-cli validate docs/plan/rulesets/*.json` exit 0.

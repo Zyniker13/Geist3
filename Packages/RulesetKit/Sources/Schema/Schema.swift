@@ -254,6 +254,10 @@ public struct Provenance: Equatable, Sendable, JSONCodable {
 /// JSON Pointer into the resolved ruleset document; `value` is absent for
 /// removal-style ops. The op vocabulary itself is validated in P2.7.
 public struct PatchOp: Equatable, Sendable, JSONCodable {
+    /// The op vocabulary (§8.3): `replace` and `add` place a value, `append`
+    /// adds one to a list, `remove` deletes the target.
+    public static let knownOps = ["replace", "add", "append", "remove"]
+
     public var op: String
     public var path: String
     public var value: JSON?
