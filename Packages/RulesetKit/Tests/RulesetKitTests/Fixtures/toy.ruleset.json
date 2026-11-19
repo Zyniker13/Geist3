@@ -1,0 +1,115 @@
+{
+  "format": "parlor.ruleset/1",
+  "id": "parlor.toy.highcard",
+  "game": "high-card-trick",
+  "kind": "standard",
+  "version": "1.0.0",
+  "name": {
+    "default": "High Card Trick (toy)"
+  },
+  "players": {
+    "counts": [
+      2
+    ],
+    "default": 2,
+    "teams": "none"
+  },
+  "deck": {
+    "base": "french-52",
+    "remove": [
+      "2H",
+      "3H",
+      "4H",
+      "5H",
+      "6H",
+      "7H",
+      "8H",
+      "9H",
+      "10H",
+      "JH",
+      "QH",
+      "KH",
+      "AH",
+      "2D",
+      "3D",
+      "4D",
+      "5D",
+      "6D",
+      "7D",
+      "8D",
+      "9D",
+      "10D",
+      "JD",
+      "QD",
+      "KD",
+      "AD",
+      "2C",
+      "3C",
+      "4C",
+      "5C",
+      "6C",
+      "7C",
+      "8C",
+      "9C",
+      "10C",
+      "JC",
+      "QC",
+      "KC",
+      "AC"
+    ]
+  },
+  "zones": [
+    {
+      "id": "stock",
+      "scope": "shared",
+      "visibility": "none",
+      "capacity": 13
+    },
+    {
+      "id": "hand",
+      "scope": "seat",
+      "visibility": "owner",
+      "capacity": 5
+    }
+  ],
+  "vars": {
+    "score": {
+      "scope": "seatMatch",
+      "type": "int",
+      "initial": "0"
+    }
+  },
+  "setup": {
+    "firstDealer": "highCut",
+    "dealerRotation": "left"
+  },
+  "phases": [
+    {
+      "id": "deal",
+      "mechanic": "deal",
+      "params": {
+        "source": "stock",
+        "packets": [
+          {
+            "to": "hand",
+            "each": 5
+          }
+        ]
+      }
+    },
+    {
+      "id": "tricks",
+      "mechanic": "trick-play",
+      "params": {
+        "tricks": 5,
+        "winnerRule": "highestOfLedSuit"
+      }
+    }
+  ],
+  "end": {
+    "check": "afterDeal",
+    "maxDeals": 1,
+    "rank": "descending(match.score)",
+    "ties": "shared"
+  }
+}

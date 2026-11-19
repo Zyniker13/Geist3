@@ -4,11 +4,16 @@
 //                                      docs/rulesets/corpus/expected.tsv
 //   rules-cli validate FILE...         validate ruleset files, report issues
 //   rules-cli fmt [--write] FILE...    re-emit each file in canonical form
+//   rules-cli simulate [--seeds N] [--seed S] [--quiet] FILE...
+//                                      run N seeded random-legal deals of each
+//                                      ruleset; report faults and the rule
+//                                      exercise report
 //
 // Exit status: 0 clean, 1 any error/mismatch, 2 usage error.
 
 import Foundation
 import RulesetKit
+@_spi(HostOnly) import RulesetKit
 
 func repoRoot() -> URL? {
     var dir = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
@@ -127,6 +132,68 @@ func fmt(_ urls: [URL], write: Bool) -> Int {
     return ok ? 0 : 1
 }
 
+func simulate(_ urls: [URL], seeds: Int, firstSeed: UInt64, quiet: Bool) -> Int {
+    var ok = true
+    for url in urls {
+        let name = url.lastPathComponent
+        guard let data = try? Data(contentsOf: url) else {
+            print("error: cannot read \(name)")
+            ok = false
+            continue
+        }
+        let text = String(decoding: data, as: UTF8.self)
+        // A ruleset that does not validate clean is not simulated.
+        let report = RulesetValidator.validate(text: text, byteCount: data.count)
+        if !report.errors.isEmpty {
+            print("\(name): \(report.errors.count) validation error\(report.errors.count == 1 ? "" : "s"); not simulated")
+            for issue in report.errors { printIssue(issue) }
+            ok = false
+            continue
+        }
+        do {
+            let document = try RulesetDocument(json: try JSONParser.parse(text), path: "$")
+            let resolved = try Resolver.resolve(base: document)
+            let simulator = try Simulator(ruleset: resolved)
+
+            let started = Date()
+            var faultSeeds: [UInt64: String] = [:]
+            var maxActions = 0
+            for offset in 0..<max(0, seeds) {
+                let run = try simulator.runDeal(seed: firstSeed &+ UInt64(offset))
+                maxActions = max(maxActions, run.actions)
+                if let fault = run.faults.first { faultSeeds[run.seed] = fault }
+            }
+            let elapsed = Date().timeIntervalSince(started)
+
+            // Reproducibility: an independent rerun of the first seed must
+            // produce the identical final-state hash.
+            let repeatRun = try simulator.runDeal(seed: firstSeed)
+            let firstRun = try simulator.runDeal(seed: firstSeed)
+            let reproducible = repeatRun.finalHash == firstRun.finalHash
+
+            if !quiet {
+                print(
+                    "\(name): \(seeds) seeds in \(String(format: "%.2f", elapsed)) s"
+                        + ", longest deal \(maxActions) actions"
+                        + (reproducible ? ", repeat-seed reproducible" : ", REPEAT-SEED MISMATCH"))
+                let unexercised = (try simulator.runDeal(seed: firstSeed)).unexercisedRules
+                if !unexercised.isEmpty {
+                    print("  unexercised declared rules: \(unexercised.joined(separator: ", "))")
+                }
+            }
+            if !reproducible { ok = false }
+            for (seed, fault) in faultSeeds.sorted(by: { $0.key < $1.key }) {
+                print("\(name): FAULT seed \(seed): \(fault)")
+                ok = false
+            }
+        } catch {
+            print("\(name): error: \(error)")
+            ok = false
+        }
+    }
+    return ok ? 0 : 1
+}
+
 let args = Array(CommandLine.arguments.dropFirst())
 guard let command = args.first else {
     print("usage: rules-cli validate [--corpus DIR] [FILE...] | fmt [--write] FILE...")
@@ -170,9 +237,44 @@ case "fmt":
         exit(2)
     }
     exit(Int32(fmt(files, write: write)))
-case "simulate", "conformance":
-    // P2.8 lands the simulator and conformance runner.
-    print("'\(command)' arrives with P2.8 (simulator).")
+case "simulate", "sim":
+    var seedCount = 200
+    var firstSeed: UInt64 = 0
+    var quiet = false
+    var files: [URL] = []
+    var i = 0
+    while i < rest.count {
+        switch rest[i] {
+        case "--seeds" where i + 1 < rest.count:
+            guard let n = Int(rest[i + 1]), n >= 0 else {
+                print("usage: --seeds expects a non-negative integer")
+                exit(2)
+            }
+            seedCount = n
+            i += 2
+        case "--seed" where i + 1 < rest.count:
+            guard let s = UInt64(rest[i + 1]) else {
+                print("usage: --seed expects a non-negative integer")
+                exit(2)
+            }
+            firstSeed = s
+            i += 2
+        case "--quiet":
+            quiet = true
+            i += 1
+        default:
+            files.append(URL(fileURLWithPath: rest[i]))
+            i += 1
+        }
+    }
+    guard !files.isEmpty else {
+        print("usage: rules-cli simulate [--seeds N] [--seed S] [--quiet] FILE...")
+        exit(2)
+    }
+    exit(Int32(simulate(files, seeds: seedCount, firstSeed: firstSeed, quiet: quiet)))
+case "conformance":
+    // The conformance runner lands with P3 (recorded engine sessions).
+    print("'conformance' arrives with P3.")
     exit(2)
 case "resolve", "replay", "fuzz":
     print("rules-cli \(command): not implemented yet (lands in P3).")

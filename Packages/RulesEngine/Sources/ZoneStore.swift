@@ -86,6 +86,10 @@ public struct ZoneStore: Codable, Hashable, Sendable {
         location[UInt64(id.raw)].map { ZoneKey(storageKey: $0) }
     }
 
+    /// Total card instances across every zone. Host-side diagnostics only
+    /// (the P2.8 simulator's conservation invariant); counts leak no faces.
+    public var totalCardCount: Int { location.count }
+
     /// Move one card instance from one zone to another, appending at the
     /// destination (top = end of the array). Conservation is enforced here:
     /// a CardID is always in exactly one zone.

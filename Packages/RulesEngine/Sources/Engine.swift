@@ -66,12 +66,16 @@ public struct Replay: Codable, Hashable, Sendable {
 public struct Engine: Sendable {
     public let phases: [PhaseConfig]
     public let seatCount: Int
+    /// Runs once on the fresh state before the first phase enters: ruleset
+    /// zone setup (declare zones, stack the stock from the deck spec).
+    public let setup: (@Sendable (inout GameState) throws -> Void)?
     /// SHA-256 of the resolved ruleset (P1: hash of the phase configuration).
     public let rulesetHash: Data
 
-    public init(phases: [PhaseConfig], seatCount: Int) {
+    public init(phases: [PhaseConfig], seatCount: Int, setup: (@Sendable (inout GameState) throws -> Void)? = nil) {
         self.phases = phases
         self.seatCount = seatCount
+        self.setup = setup
         self.rulesetHash = Engine.hash(of: phases)
     }
 
@@ -99,6 +103,13 @@ public struct Engine: Sendable {
     private func startUnchecked(seed: UInt64) throws -> Transition {
         var state = GameState(rng: SeededRNG(seed: seed), dealer: Seat(0))
         var events: [GameEvent] = []
+        if let setup {
+            do {
+                try setup(&state)
+            } catch {
+                throw AnyMechanic.violation(error)
+            }
+        }
         guard let first = phases.first else {
             throw RuleViolation.engineFault(ruleId: nil, pointer: "engine has no phases")
         }
