@@ -103,9 +103,11 @@ snapshot:
 
 coverage:
 	@mkdir -p reports/coverage
+	@df -h / | tail -1 | sed 's/^/disk: /'
 	@for p in $(PACKAGES); do \
 		echo "=== coverage $$p ==="; \
-		(cd "Packages/$$p" && swift test --parallel --enable-code-coverage) || exit 1; \
+		(cd "Packages/$$p" && swift test --parallel --enable-code-coverage) > "reports/coverage/$$p.log" 2>&1 || { echo "coverage: $$p FAILED (log: reports/coverage/$$p.log)" >&2; tail -30 "reports/coverage/$$p.log" >&2; exit 1; }; \
+		grep -E "Test run with" "reports/coverage/$$p.log" || true; \
 		find "Packages/$$p/.build" -name '*.profraw' 2>/dev/null | while IFS= read -r f; do \
 			cp "$$f" "reports/coverage/$$p-$$(basename "$$f")"; \
 		done; \
