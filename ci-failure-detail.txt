@@ -1,0 +1,236 @@
+run: 44465799556
+sha: 5d98d4fb742c7dee692dda7b6a03c642760c4681
+date: 2026-11-19T05:34:44Z
+
+--- toolchain ---
+Apple Swift version 6.3.3 (swiftlang-6.3.3.1.3 clang-2100.1.1.101)
+Target: arm64-apple-macosx26.0
+Xcode 26.6
+Build version 17F113
+
+--- disk ---
+Filesystem        Size    Used   Avail Capacity iused ifree %iused  Mounted on
+/dev/disk2s1s1   320Gi    12Gi    97Gi    11%    459k  1.0G    0%   /
+
+--- coverage logs (tail 60 each) ---
+=== reports/coverage/CardExpr.log ===
+cd'", message → "unterminated string literal" to lexerError(src:message:) started.
+◇ Test case passing 2 arguments src → "1 +", message → "unexpected end of input" to parseError(src:message:) started.
+◇ Test case passing 2 arguments src → "99999999999999999999", message → "integer literal out of range" to lexerError(src:message:) started.
+◇ Test case passing 2 arguments src → "(1", message → "expected ')' but found eof" to parseError(src:message:) started.
+◇ Test case passing 2 arguments src → "a|b", message → "unexpected character '|'" to lexerError(src:message:) started.
+◇ Test case passing 2 arguments src → "[1", message → "expected ']' but found eof" to parseError(src:message:) started.
+◇ Test case passing 2 arguments src → "a&b", message → "unexpected character '&'" to lexerError(src:message:) started.
+◇ Test case passing 2 arguments src → "a.", message → "expected an identifier after '.' but found eof" to parseError(src:message:) started.
+◇ Test case passing 2 arguments src → "a=b", message → "unexpected character '='" to lexerError(src:message:) started.
+◇ Test case passing 2 arguments src → "[1,]", message → "unexpected token ']'" to parseError(src:message:) started.
+◇ Test case passing 2 arguments src → "a#b", message → "unexpected character '#'" to lexerError(src:message:) started.
+◇ Test case passing 2 arguments src → "a ? b", message → "expected ':' but found eof" to parseError(src:message:) started.
+◇ Test case passing 2 arguments src → "a ? b :", message → "unexpected end of input" to parseError(src:message:) started.
+◇ Test case passing 2 arguments src → "a@b", message → "unexpected character '@'" to lexerError(src:message:) started.
+◇ Test case passing 2 arguments src → "a in", message → "unexpected end of input" to parseError(src:message:) started.
+◇ Test case passing 2 arguments src → "a;b", message → "unexpected character ';'" to lexerError(src:message:) started.
+◇ Test case passing 2 arguments src → "a in b c", message → "unexpected token 'c'" to parseError(src:message:) started.
+◇ Test case passing 2 arguments src → "a"b", message → "unexpected character '"'" to lexerError(src:message:) started.
+◇ Test case passing 2 arguments src → "a..b", message → "expected an identifier after '.' but found op(.)" to parseError(src:message:) started.
+◇ Test case passing 2 arguments src → "a~b", message → "unexpected character '~'" to lexerError(src:message:) started.
+◇ Test case passing 2 arguments src → "a^b", message → "unexpected character '^'" to lexerError(src:message:) started.
+◇ Test case passing 2 arguments src → "a(1,)", message → "unexpected token ')'" to parseError(src:message:) started.
+◇ Test case passing 2 arguments src → "a{b}", message → "unexpected character '{'" to lexerError(src:message:) started.
+◇ Test case passing 2 arguments src → "a[1", message → "expected ']' but found eof" to parseError(src:message:) started.
+◇ Test case passing 2 arguments src → "a}b", message → "unexpected character '}'" to lexerError(src:message:) started.
+◇ Test case passing 2 arguments src → "a.b(c", message → "expected ')' but found eof" to parseError(src:message:) started.
+◇ Test case passing 2 arguments src → "a\b", message → "unexpected character '\'" to lexerError(src:message:) started.
+◇ Test case passing 2 arguments src → "a?b:c?", message → "unexpected end of input" to parseError(src:message:) started.
+◇ Test case passing 2 arguments src → "a`b", message → "unexpected character '`'" to lexerError(src:message:) started.
+◇ Test case passing 2 arguments src → "a||", message → "unexpected end of input" to parseError(src:message:) started.
+◇ Test case passing 2 arguments src → "a&&", message → "unexpected end of input" to parseError(src:message:) started.
+◇ Test case passing 2 arguments src → "a==", message → "unexpected end of input" to parseError(src:message:) started.
+◇ Test case passing 2 arguments src → "a!=", message → "unexpected end of input" to parseError(src:message:) started.
+◇ Test case passing 2 arguments src → "a<", message → "unexpected end of input" to parseError(src:message:) started.
+◇ Test case passing 2 arguments src → "a*", message → "unexpected end of input" to parseError(src:message:) started.
+◇ Test case passing 2 arguments src → "a/", message → "unexpected end of input" to parseError(src:message:) started.
+◇ Test case passing 2 arguments src → "a%", message → "unexpected end of input" to parseError(src:message:) started.
+◇ Test case passing 2 arguments src → "a-", message → "unexpected end of input" to parseError(src:message:) started.
+◇ Test case passing 2 arguments src → "a+", message → "unexpected end of input" to parseError(src:message:) started.
+◇ Test case passing 2 arguments src → "!", message → "unexpected end of input" to parseError(src:message:) started.
+◇ Test case passing 2 arguments src → "-", message → "unexpected end of input" to parseError(src:message:) started.
+◇ Test case passing 2 arguments src → "a.b.", message → "expected an identifier after '.' but found eof" to parseError(src:message:) started.
+◇ Test case passing 2 arguments src → "a in b in", message → "unexpected end of input" to parseError(src:message:) started.
+◇ Test case passing 2 arguments src → "a ? b : c ?", message → "unexpected end of input" to parseError(src:message:) started.
+✔ Test nodeCount(src:expected:) with 18 test cases passed after 0.012 seconds.
+✔ Test parseShape(src:expected:) with 99 test cases passed after 0.012 seconds.
+✔ Test tokenAccessors() passed after 0.012 seconds.
+✔ Test roundTrip() passed after 0.012 seconds.
+✔ Test tokenSpans() passed after 0.012 seconds.
+✔ Test topLevelSpan(_:) with 12 test cases passed after 0.012 seconds.
+✔ Test parseErrorPosition(src:line:col:) with 6 test cases passed after 0.012 seconds.
+✔ Test lexerErrorPosition(src:line:col:) with 5 test cases passed after 0.012 seconds.
+✔ Test tokenStream(src:expected:) with 34 test cases passed after 0.012 seconds.
+✔ Test parseError(src:message:) with 36 test cases passed after 0.011 seconds.
+✔ Test lexerError(src:message:) with 19 test cases passed after 0.011 seconds.
+✔ Test parseTimeIsLinear() passed after 0.030 seconds.
+✔ Suite PerfTests passed after 0.031 seconds.
+✔ Test fuzzNeverTraps() passed after 0.096 seconds.
+✔ Suite "CardExpr" passed after 0.096 seconds.
+✔ Test run with 13 tests in 2 suites passed after 0.097 seconds.
+=== reports/coverage/CardModel.log ===
+Building for debugging...
+[0/7] /Users/runner/work/Geist3/Geist3/Packages/CardModel/.build/arm64-apple-macosx/debug/CardModelPackageTests.derived/runner.swift
+[1/7] Write sources
+[4/7] Write swift-version-7974D3F7F03D5E95.txt
+[6/10] Emitting module CardModel
+[7/10] Compiling CardModel CardFace.swift
+[8/10] Compiling CardModel Deck.swift
+[9/11] Compiling CardModel Seat.swift
+[10/13] Emitting module CardModelTests
+[11/13] Compiling CardModelTests CardModelTests.swift
+[12/15] Emitting module CardModelPackageTests
+[13/15] Compiling CardModelPackageTests runner.swift
+[13/15] Write Objects.LinkFileList
+[14/15] Linking CardModelPackageTests
+Build complete! (19.79s)
+◇ Test run started.
+↳ Testing Library Version: 1902
+↳ Target Platform: arm64e-apple-macos14.0
+◇ Suite "CardModel — card identity and decks" started.
+◇ Test faceCodableRoundTrip() started.
+◇ Test deckContents() started.
+◇ Test faceIdentifierFormat() started.
+◇ Test seatCodable() started.
+◇ Test duplicateDecksProduceDistinctInstances() started.
+◇ Test everyCatalogIDHasSpecOrIsCustom() started.
+◇ Test seatSetBitOperations() started.
+◇ Test deckSizes() started.
+✔ Test faceCodableRoundTrip() passed after 0.003 seconds.
+✔ Test deckContents() passed after 0.003 seconds.
+✔ Test faceIdentifierFormat() passed after 0.003 seconds.
+✔ Test seatCodable() passed after 0.003 seconds.
+✔ Test duplicateDecksProduceDistinctInstances() passed after 0.003 seconds.
+✔ Test everyCatalogIDHasSpecOrIsCustom() passed after 0.003 seconds.
+✔ Test seatSetBitOperations() passed after 0.003 seconds.
+✔ Test deckSizes() passed after 0.005 seconds.
+✔ Suite "CardModel — card identity and decks" passed after 0.006 seconds.
+✔ Test run with 8 tests in 1 suite passed after 0.006 seconds.
+=== reports/coverage/RulesEngine.log ===
+◇ Test hiddenZonesExposeCountsOnly() started.
+✔ Test shuffleZoneAndQueries() passed after 0.296 seconds.
+✔ Test batchMove() passed after 0.296 seconds.
+✔ Test allSeatsHelper() passed after 0.296 seconds.
+✔ Test popTopEdges() passed after 0.296 seconds.
+✔ Test placeRemovesFromPreviousZone() passed after 0.499 seconds.
+✔ Test placeCapacityFull() passed after 0.500 seconds.
+✔ Test codableRoundTrip() passed after 0.500 seconds.
+✔ Test cutDepthAndFaceUpReveal() passed after 0.500 seconds.
+✔ Test exhaustedSourceThrows() passed after 0.500 seconds.
+✔ Test dealIsAutomatic() passed after 0.500 seconds.
+✔ Test zoneConservation() passed after 0.500 seconds.
+✔ Test gameStateHashOrderStable() passed after 0.500 seconds.
+✔ Test mustFollowSuitEnforced() passed after 0.500 seconds.
+✔ Test illegalIntentsRejectedWithRuleIDs() passed after 0.500 seconds.
+✔ Test zoneCapacityEnforced() passed after 0.500 seconds.
+✔ Test determinismSameSeedSameGame() passed after 0.501 seconds.
+✔ Test allZeroStateGuard() passed after 0.501 seconds.
+✔ Test shuffledArray() passed after 0.501 seconds.
+✔ Test belowIntAndInRange() passed after 0.501 seconds.
+✔ Test belowRejectionLoop() passed after 0.501 seconds.
+✔ Test dealSeedAndSplitMixDerive() passed after 0.501 seconds.
+✔ Test replayMatchesPlayedGame() passed after 0.501 seconds.
+✔ Test codableRoundTrip() passed after 0.501 seconds.
+✔ Test twentyGoldenReplaysMatch() passed after 0.501 seconds.
+✔ Test seatScopedStorageKeys() passed after 0.501 seconds.
+✔ Test truncatedReplayChangesHash() passed after 0.501 seconds.
+✔ Test splitMix64Derivation() passed after 0.501 seconds.
+✔ Test seedExpansionNeverAllZero() passed after 0.501 seconds.
+✔ Test declareSetGetAdd() passed after 0.501 seconds.
+✔ Test dealSeedFormula() passed after 0.501 seconds.
+✔ Test eventRedactionDealt() passed after 0.501 seconds.
+✔ Test hiddenDeclaration() passed after 0.501 seconds.
+✔ Test zoneRedactionWrapper() passed after 0.501 seconds.
+✔ Test maySeeViewerKinds() passed after 0.501 seconds.
+✔ Test shuffleUniformity() passed after 0.501 seconds.
+✔ Test eventRedactionOther() passed after 0.501 seconds.
+✔ Test boundedIntegers() passed after 0.501 seconds.
+✔ Test observedZoneCodableBothCases() passed after 0.501 seconds.
+✔ Test codableRoundTripPreservesStream() passed after 0.501 seconds.
+✔ Test referenceVectorAgainstAuthorsImplementation() passed after 0.501 seconds.
+✔ Test legalIntentsCarryNoForeignFaces() passed after 0.500 seconds.
+✔ Test dealtEventsRedactedPerViewer() passed after 0.500 seconds.
+✔ Test cardIDFaceIndependence() passed after 0.502 seconds.
+✔ Test revealAndViewers() passed after 0.499 seconds.
+✔ Test canonicalCodableRoundTrip() passed after 0.499 seconds.
+✔ Test hiddenZonesExposeCountsOnly() passed after 0.499 seconds.
+✔ Suite ZoneStoreEdgeTests passed after 0.503 seconds.
+✔ Suite DealMechanicEdgeTests passed after 0.503 seconds.
+✔ Suite SeededRNGHelperTests passed after 0.503 seconds.
+✔ Suite "RulesEngine — Replays (§10.4)" passed after 0.503 seconds.
+✔ Suite VarStoreTests passed after 0.503 seconds.
+✔ Suite "RulesEngine — SeededRNG (§10.1)" passed after 0.503 seconds.
+✔ Suite RedactorUnitTests passed after 0.503 seconds.
+✔ Suite KnowledgeStoreTests passed after 0.503 seconds.
+✔ Test toyGameTenThousandSeeds() passed after 5.026 seconds.
+✔ Suite "RulesEngine — state, zones, and reducer (P1.3–P1.5)" passed after 5.028 seconds.
+✔ Test observationByteScanNoHiddenFaces() passed after 39.264 seconds.
+✔ Suite "RulesEngine — Observation and Redactor (§9.6)" passed after 39.267 seconds.
+✔ Test run with 48 tests in 10 suites passed after 39.268 seconds.
+=== reports/coverage/RulesetKit.log ===
+255 |         case .lParen:
+256 |             advance()
+    |             `- warning: result of call to 'advance()' is unused [#no-usage]
+257 |             let inner = try parseTernary()
+258 |             _ = try expect(.rParen, "')'")
+[9/14] Emitting module CardExpr
+[10/14] Compiling CardExpr AST.swift
+[11/14] Compiling CardExpr Lexer.swift
+[12/14] Compiling CardExpr Token.swift
+[13/28] Emitting module RulesetKit
+[14/28] Compiling RulesetKit ConstantFolding.swift
+[15/28] Compiling RulesetKit EvaluationEnvironment.swift
+[16/28] Compiling RulesetKit EvaluationFault.swift
+[17/28] Compiling RulesetKit Evaluator.swift
+[18/28] Compiling RulesetKit EvaluatorBuiltins.swift
+[19/28] Compiling RulesetKit EvaluatorCalls.swift
+[20/28] Compiling RulesetKit EvaluatorMacros.swift
+[21/28] Compiling RulesetKit Registry.swift
+[22/28] Compiling RulesetKit RulesetKitPlaceholder.swift
+[23/28] Compiling RulesetKit TypeChecker.swift
+[24/28] Compiling RulesetKit TypeCheckerCalls.swift
+[25/28] Compiling RulesetKit TypeCheckerExpressions.swift
+[26/28] Compiling RulesetKit TypeContext.swift
+[27/34] Compiling RulesetKit TypeError.swift
+[28/34] Compiling RulesetKit TypeNames.swift
+[29/34] Compiling RulesetKit TypedExpr.swift
+[30/34] Compiling RulesetKit Types.swift
+[31/34] Compiling RulesetKit Unification.swift
+[32/34] Compiling RulesetKit Value.swift
+[33/41] Compiling RulesetKitTests EvaluatorDeterminismTests.swift
+/Users/runner/work/Geist3/Geist3/Packages/RulesetKit/Tests/RulesetKitTests/EvaluatorTests.swift:316:13: error: thrown expression type 'any Error' cannot be converted to error type 'EvaluationFault'
+314 |         #expect(try Eval.run("deal.shuffle(2)", configure: conf, env: env) == .int(6))
+315 |         let throwingNative: @Sendable ([Value]) throws(EvaluationFault) -> Value = { _ in
+316 |             throw EvaluationFault(
+    |             `- error: thrown expression type 'any Error' cannot be converted to error type 'EvaluationFault'
+317 |                 kind: .unsupportedValue, ruleId: nil, pointer: "/native", message: "boom")
+318 |         }
+[34/41] Compiling RulesetKitTests EvaluatorMacroTests.swift
+/Users/runner/work/Geist3/Geist3/Packages/RulesetKit/Tests/RulesetKitTests/EvaluatorTests.swift:316:13: error: thrown expression type 'any Error' cannot be converted to error type 'EvaluationFault'
+314 |         #expect(try Eval.run("deal.shuffle(2)", configure: conf, env: env) == .int(6))
+315 |         let throwingNative: @Sendable ([Value]) throws(EvaluationFault) -> Value = { _ in
+316 |             throw EvaluationFault(
+    |             `- error: thrown expression type 'any Error' cannot be converted to error type 'EvaluationFault'
+317 |                 kind: .unsupportedValue, ruleId: nil, pointer: "/native", message: "boom")
+318 |         }
+[35/41] Compiling RulesetKitTests EvaluatorTests.swift
+/Users/runner/work/Geist3/Geist3/Packages/RulesetKit/Tests/RulesetKitTests/EvaluatorTests.swift:316:13: error: thrown expression type 'any Error' cannot be converted to error type 'EvaluationFault'
+314 |         #expect(try Eval.run("deal.shuffle(2)", configure: conf, env: env) == .int(6))
+315 |         let throwingNative: @Sendable ([Value]) throws(EvaluationFault) -> Value = { _ in
+316 |             throw EvaluationFault(
+    |             `- error: thrown expression type 'any Error' cannot be converted to error type 'EvaluationFault'
+317 |                 kind: .unsupportedValue, ruleId: nil, pointer: "/native", message: "boom")
+318 |         }
+[36/43] Compiling RulesetKitTests MacroTests.swift
+[37/43] Compiling RulesetKitTests TestSupport.swift
+[38/43] Compiling RulesetKitTests RulesetKitTests.swift
+[39/43] Compiling RulesetKitTests BuiltinTests.swift
+[40/43] Compiling RulesetKitTests ContextTests.swift
+[41/43] Emitting module RulesetKitTests
+error: fatalError
