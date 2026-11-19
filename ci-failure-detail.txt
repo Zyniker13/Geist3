@@ -1,0 +1,44 @@
+run: 44549747233
+sha: 19c60c5fb3edc6b6e1350a7052cb125f9f1832c6
+date: 2026-11-19T15:00:12Z
+
+--- toolchain ---
+Apple Swift version 6.3.3 (swiftlang-6.3.3.1.3 clang-2100.1.1.101)
+Target: arm64-apple-macosx26.0
+Xcode 26.6
+Build version 17F113
+
+--- disk ---
+Filesystem        Size    Used   Avail Capacity iused ifree %iused  Mounted on
+/dev/disk2s1s1   320Gi    12Gi    96Gi    11%    459k  1.0G    0%   /
+
+--- memory ---
+hw.memsize: 7516192768
+Mach Virtual Memory Statistics: (page size of 16384 bytes)
+Pages free:                                     4407.
+Pages active:                                 174956.
+Pages inactive:                               163373.
+Pages speculative:                             12123.
+Pages throttled:                                   0.
+Pages wired down:                              86477.
+Pages purgeable:                                1120.
+"Translation faults":                        2446449.
+Pages copy-on-write:                          185436.
+Pages zero filled:                            726309.
+Pages reactivated:                             85478.
+Pages purged:                                   4707.
+File-backed pages:                            197120.
+Anonymous pages:                              153332.
+Pages stored in compressor:                    59488.
+Pages occupied by compressor:                  16443.
+Decompressions:                                12309.
+Compressions:                                  78233.
+Pageins:                                      319506.
+Pageouts:                                       1454.
+Swapins:                                           0.
+Swapouts:                                          0.
+
+--- crash reports (.ips modified in last 15 min; full text of newest 2) ---
+(no .ips files modified in the last 15 minutes — likely SIGKILL, e.g. OOM)
+
+--- coverage logs (full) ---
