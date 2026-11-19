@@ -1,0 +1,120 @@
+{
+  "format": "parlor.ruleset/1",
+  "id": "test.minimal",
+  "game": "test",
+  "kind": "standard",
+  "version": "1.0.0",
+  "name": {
+    "default": "Minimal Test"
+  },
+  "players": {
+    "counts": [
+      2,
+      3,
+      4
+    ],
+    "default": 4,
+    "teams": "none"
+  },
+  "deck": {
+    "base": "french-52"
+  },
+  "zones": [
+    {
+      "id": "stock",
+      "scope": "shared",
+      "visibility": "none"
+    },
+    {
+      "id": "hand",
+      "scope": "seat",
+      "visibility": "owner"
+    },
+    {
+      "id": "discards",
+      "scope": "shared",
+      "visibility": "public"
+    }
+  ],
+  "options": [
+    {
+      "id": "targetScore",
+      "type": "int",
+      "default": 100,
+      "min": 10,
+      "max": 500,
+      "label": {
+        "default": "Target score"
+      },
+      "rules": []
+    }
+  ],
+  "vars": {
+    "target": {
+      "scope": "match",
+      "type": "int",
+      "initial": "100"
+    },
+    "score": {
+      "scope": "seatMatch",
+      "type": "int",
+      "initial": "0"
+    }
+  },
+  "setup": {
+    "firstDealer": "highCut",
+    "dealerRotation": "left"
+  },
+  "phases": [
+    {
+      "id": "deal",
+      "mechanic": "deal",
+      "params": {
+        "packets": [
+          {
+            "to": "hand",
+            "each": 5
+          }
+        ]
+      }
+    },
+    {
+      "id": "play",
+      "mechanic": "trick-play",
+      "params": {
+        "tricks": 1,
+        "leadAllowed": {
+          "expr": "true",
+          "otherwise": "any"
+        },
+        "playAllowed": {
+          "expr": "true",
+          "otherwise": ""
+        }
+      }
+    },
+    {
+      "id": "score",
+      "mechanic": "score",
+      "params": {
+        "effects": [
+          {
+            "forEach": "seat",
+            "do": [
+              {
+                "set": "match.score[seat]",
+                "to": "1"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "end": {
+    "check": "afterDeal",
+    "when": "seats().exists(s, match.score[s] >= options.targetScore)",
+    "rank": "descending(match.score)",
+    "ties": "shared"
+  }
+}

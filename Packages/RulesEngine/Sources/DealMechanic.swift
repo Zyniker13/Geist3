@@ -4,19 +4,31 @@
 import CardModel
 
 public struct DealPacket: Codable, Hashable, Sendable {
-    public let to: Seat
+    /// Target zone. JSON rulesets name a zone id; seat-scoped zones deal to
+    /// every owner seat in turn (EngineBuilder expands them per owner).
+    public let to: ZoneKey
     /// Cards per packet.
     public let each: Int
-    /// Number of packets for this seat (default 1).
+    /// Number of packets for this target (default 1).
     public let packets: Int
+    /// Total cards to move, overriding `each * packets` (JSON `count`).
+    public let count: Int?
     /// Whether the dealt cards become known to their owner.
     public let faceUp: Bool
 
-    public init(to: Seat, each: Int, packets: Int = 1, faceUp: Bool = false) {
+    public init(
+        to: ZoneKey, each: Int, packets: Int = 1, count: Int? = nil, faceUp: Bool = false
+    ) {
         self.to = to
         self.each = each
         self.packets = packets
+        self.count = count
         self.faceUp = faceUp
+    }
+
+    /// Convenience for dealing to a seat's hand zone.
+    public init(to seat: Seat, each: Int, packets: Int = 1, faceUp: Bool = false) {
+        self.init(to: ZoneKey(scope: .seat, owner: seat.raw, id: "hand"), each: each, packets: packets, faceUp: faceUp)
     }
 }
 
@@ -70,10 +82,11 @@ public enum DealMechanic: Mechanic {
         // order, fresh each deal (§9.5 anti-leak rule).
         var nextID: UInt16 = 0
         for packet in params.packets {
-            let target = ZoneKey(scope: .seat, owner: packet.to.raw, id: "hand")
-            state.zones.declare(target)
+            let target = packet.to
+            let total = packet.count ?? packet.each * packet.packets
+            state.zones.ensureDeclared(target)
             var dealt: [CardInstance] = []
-            for _ in 0..<(packet.each * packet.packets) {
+            for _ in 0..<total {
                 let popped = try? state.zones.popTop(from: sourceKey)
                 guard let card = popped ?? nil else {
                     throw RuleViolation.engineFault(ruleId: "deal.empty", pointer: "source \(params.source) exhausted")
@@ -87,12 +100,16 @@ public enum DealMechanic: Mechanic {
                 }
                 if packet.faceUp {
                     state.knowledge.reveal(instance.id, to: SeatSet.allSeats(ctx.seatCount))
-                } else {
-                    state.knowledge.reveal(instance.id, to: SeatSet(packet.to))
+                } else if target.scope == .seat {
+                    state.knowledge.reveal(instance.id, to: SeatSet(Seat(target.owner)))
                 }
                 dealt.append(instance)
             }
-            events.append(.dealt(to: packet.to, cards: dealt))
+            if target.scope == .seat {
+                events.append(.dealt(to: Seat(target.owner), cards: dealt))
+            } else {
+                events.append(.cardsMoved(from: params.source, to: target.id, count: total))
+            }
         }
         return events
     }

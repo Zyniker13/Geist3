@@ -1,0 +1,226 @@
+{
+"$schema": "https://json-schema.org/draft/2020-12/schema",
+"title": "Parlor lesson document",
+"description": "Structural mirror of the parlor.lesson/1 document (ARCHITECTURE §15.2) for editor tooling. Deal composition and step semantics are validated by the Swift lesson validator, not here.",
+"type": "object",
+"required": [
+"format",
+"id",
+"game",
+"ruleset",
+"title",
+"seat",
+"steps",
+"complete"
+],
+"properties": {
+"format": {
+"const": "parlor.lesson/1"
+},
+"id": {
+"type": "string",
+"pattern": "^[a-z][a-z0-9-]*\\.[a-z0-9][a-z0-9-]*$"
+},
+"game": {
+"type": "string",
+"pattern": "^[a-z][a-z0-9-]*$"
+},
+"ruleset": {
+"type": "string"
+},
+"title": {
+"$ref": "#/$defs/text"
+},
+"seat": {
+"type": "integer",
+"minimum": 0
+},
+"options": {
+"type": "object"
+},
+"deal": {
+"type": "object"
+},
+"bots": {
+"type": "object"
+},
+"steps": {
+"type": "array",
+"items": {
+"type": "object",
+"properties": {
+"say": {
+"$ref": "#/$defs/text"
+},
+"expect": {
+"type": "object",
+"properties": {
+"intent": {
+"type": "string"
+},
+"card": {
+"type": "string"
+},
+"anyOf": {
+"type": "array",
+"items": {
+"type": "string"
+}
+}
+},
+"required": [
+"intent"
+],
+"additionalProperties": false
+},
+"highlight": {
+"type": "array",
+"items": {
+"type": "string"
+}
+},
+"auto": {
+"type": "integer",
+"minimum": 0
+},
+"onOther": {
+"type": "object",
+"properties": {
+"say": {
+"$ref": "#/$defs/text"
+}
+},
+"required": [
+"say"
+],
+"additionalProperties": false
+}
+},
+"anyOf": [
+{
+"type": "object",
+"properties": {},
+"required": [
+"say"
+],
+"additionalProperties": false
+},
+{
+"type": "object",
+"properties": {},
+"required": [
+"expect"
+],
+"additionalProperties": false
+},
+{
+"type": "object",
+"properties": {},
+"required": [
+"auto"
+],
+"additionalProperties": false
+}
+],
+"additionalProperties": false
+},
+"minItems": 1
+},
+"complete": {
+"type": "object",
+"properties": {
+"say": {
+"$ref": "#/$defs/text"
+},
+"expect": {
+"type": "object",
+"properties": {
+"intent": {
+"type": "string"
+},
+"card": {
+"type": "string"
+},
+"anyOf": {
+"type": "array",
+"items": {
+"type": "string"
+}
+}
+},
+"required": [
+"intent"
+],
+"additionalProperties": false
+},
+"highlight": {
+"type": "array",
+"items": {
+"type": "string"
+}
+},
+"auto": {
+"type": "integer",
+"minimum": 0
+},
+"onOther": {
+"type": "object",
+"properties": {
+"say": {
+"$ref": "#/$defs/text"
+}
+},
+"required": [
+"say"
+],
+"additionalProperties": false
+}
+},
+"anyOf": [
+{
+"type": "object",
+"properties": {},
+"required": [
+"say"
+],
+"additionalProperties": false
+},
+{
+"type": "object",
+"properties": {},
+"required": [
+"expect"
+],
+"additionalProperties": false
+},
+{
+"type": "object",
+"properties": {},
+"required": [
+"auto"
+],
+"additionalProperties": false
+}
+],
+"additionalProperties": false
+}
+},
+"additionalProperties": false,
+"$defs": {
+"text": {
+"type": "object",
+"properties": {
+"key": {
+"type": "string"
+},
+"default": {
+"type": "string"
+}
+},
+"required": [
+"default"
+],
+"additionalProperties": false
+}
+}
+}

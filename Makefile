@@ -11,7 +11,7 @@ COVERAGE_MIN ?= 90
 # Host-local simulator lock (no-op on CI where the lock does not exist).
 SIM_LOCK := $(shell test -x "$(HOME)/.hermes/bin/sim-lock" && echo "$(HOME)/.hermes/bin/sim-lock")
 
-.PHONY: help bootstrap gen build test test-packages test-packages-ios test-replays-ios test-apps lint format validate conformance sim fuzz-quick snapshot coverage coverage-check perf gate
+.PHONY: help bootstrap gen build test test-packages test-packages-ios test-replays-ios test-apps lint format validate schema-check conformance sim fuzz-quick snapshot coverage coverage-check perf gate
 
 help:
 	@echo "Parlor build targets (CONVENTIONS §7):"
@@ -24,6 +24,7 @@ help:
 	@echo "  lint        - SwiftLint (main + pure), swift-format, check-imports.sh (zero warnings)"
 	@echo "  format      - swift-format --in-place"
 	@echo "  validate    - rules-cli validate (no-ops until P3 rulesets land)"
+	@echo "  schema-check - rules-cli schema --check (exported schemas fresh)"
 	@echo "  conformance - rules-cli conformance (no-ops until P3)"
 	@echo "  sim N=200   - random-legal / bot-vs-bot games (no-ops until P3)"
 	@echo "  fuzz-quick  - 60s protocol fuzz (no-ops until P8)"
@@ -89,11 +90,17 @@ format:
 validate:
 	Tools/rules-cli validate
 
+# P2.9: the committed JSON Schemas must match the exporter exactly
+# (freshness), and CI validates the reference rulesets against the schema
+# (scripts/validate-schemas.py, run by the CI workflow with a jsonschema venv).
+schema-check:
+	Tools/rules-cli schema --check
+
 conformance:
 	Tools/rules-cli conformance
 
 sim:
-	Tools/rules-cli sim $(or $(N),200)
+	Tools/rules-cli sim --seeds $(or $(N),200) Packages/RulesetKit/Tests/RulesetKitTests/Fixtures/toy.ruleset.json
 
 fuzz-quick:
 	Tools/net-fuzz quick
@@ -103,21 +110,24 @@ snapshot:
 
 coverage:
 	@mkdir -p reports/coverage
+	@df -h / | tail -1 | sed 's/^/disk: /'
 	@for p in $(PACKAGES); do \
 		echo "=== coverage $$p ==="; \
-		(cd "Packages/$$p" && swift test --parallel --enable-code-coverage) || exit 1; \
+		(cd "Packages/$$p" && swift test --parallel --enable-code-coverage) > "reports/coverage/$$p.log" 2>&1 || { echo "coverage: $$p FAILED (log: reports/coverage/$$p.log)" >&2; tail -30 "reports/coverage/$$p.log" >&2; exit 1; }; \
+		grep -E "Test run with" "reports/coverage/$$p.log" || true; \
 		find "Packages/$$p/.build" -name '*.profraw' 2>/dev/null | while IFS= read -r f; do \
 			cp "$$f" "reports/coverage/$$p-$$(basename "$$f")"; \
 		done; \
 	done
 	@echo "coverage: profraw files in reports/coverage/"
 
-# Threshold enforcement for the G1 packages: >= 90% line coverage each.
+# Threshold enforcement: >= 90% line coverage in CardModel and RulesEngine,
+# >= 95% in CardExpr (G2 requirement).
 coverage-check:
 	@mkdir -p reports/coverage
 	@set -e; \
 	SPECS=""; \
-	for p in CardModel RulesEngine; do \
+	for p in CardModel RulesEngine CardExpr; do \
 		echo "=== coverage $$p ==="; \
 		swift test --package-path "Packages/$$p" --enable-code-coverage --build-path ".build/coverage-$$p" >/dev/null; \
 		PROF=".build/coverage-$$p/out/Products/Debug/codecov/default.profdata"; \
@@ -125,12 +135,12 @@ coverage-check:
 		BIN="$$BUNDLE/Contents/MacOS/$$(basename "$$BUNDLE" .xctest)"; \
 		SPECS="$$SPECS $$BIN:$$PROF"; \
 	done; \
-	RESULT=$$(bash Tools/coverage-report.sh $$SPECS || true); \
+	RESULT=$$(COVERAGE_THRESHOLDS="CardExpr=95" bash Tools/coverage-report.sh $$SPECS || true); \
 	echo "$$RESULT" | tee reports/coverage/summary.txt; \
 	if echo "$$RESULT" | grep -q BELOW; then \
-		echo "coverage-check: FAILED (threshold $(COVERAGE_MIN)%)" >&2; exit 1; \
+		echo "coverage-check: FAILED (thresholds: CardModel/RulesEngine 90%, CardExpr 95%)" >&2; exit 1; \
 	fi; \
-	echo "coverage-check: all packages >= $(COVERAGE_MIN)%"
+	echo "coverage-check: all package thresholds met (CardModel/RulesEngine >= 90%, CardExpr >= 95%)"
 
 perf:
 	@echo "perf: perf harness lands in P9; nothing to measure yet"
@@ -139,6 +149,7 @@ gate:
 	@test -n "$(PHASE)" || { echo "gate: usage: make gate PHASE=Pn" >&2; exit 1; }
 	@case "$(PHASE)" in \
 		P0|P1) $(MAKE) bootstrap lint test-packages coverage-check coverage conformance validate sim N=200 fuzz-quick snapshot build test-apps test-replays-ios ;; \
+		P2) $(MAKE) bootstrap lint test-packages coverage-check schema-check validate sim N=200 coverage fuzz-quick snapshot build test-apps test-replays-ios ;; \
 		*) echo "gate: PHASE=$(PHASE) checks land with that phase" >&2; exit 1 ;; \
 	esac
 	@echo "gate: PHASE=$(PHASE) PASSED"
