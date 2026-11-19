@@ -3,13 +3,10 @@
 
 import CardModel
 import Foundation
-import RulesetKit
 import Testing
-@_spi(HostOnly) import RulesetKit
 
-@_spi(HostOnly) import RulesEngine
-@testable import RulesEngine
-@testable import RulesetKit
+@_spi(HostOnly) @testable import RulesEngine
+@_spi(HostOnly) @testable import RulesetKit
 
 struct SimulationTests {
     /// The toy fixture lives beside this file, so no repo-root walk is needed.

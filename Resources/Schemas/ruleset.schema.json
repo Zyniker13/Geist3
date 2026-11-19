@@ -1,0 +1,807 @@
+{
+"$schema": "https://json-schema.org/draft/2020-12/schema",
+"title": "Parlor ruleset document",
+"description": "Structural mirror of the parlor.ruleset/1 base document (ARCHITECTURE §5.2) for editor tooling. The Swift RulesetValidator is authoritative: references, expressions, mechanic parameters, and semantics are validated by `rules-cli validate`, not here.",
+"type": "object",
+"required": [
+"format",
+"id",
+"game",
+"kind",
+"version",
+"engine",
+"name",
+"summary",
+"classification",
+"sources",
+"players",
+"deck",
+"orders",
+"options",
+"rules",
+"zones",
+"vars",
+"defs",
+"setup",
+"phases",
+"end",
+"display",
+"ai"
+],
+"properties": {
+"format": {
+"const": "parlor.ruleset/1"
+},
+"id": {
+"type": "string",
+"pattern": "^[a-z][a-z0-9-]*\\.[a-z0-9][a-z0-9-]*$"
+},
+"game": {
+"type": "string",
+"pattern": "^[a-z][a-z0-9-]*$"
+},
+"kind": {
+"const": "base"
+},
+"version": {
+"type": "string",
+"pattern": "^\\d+\\.\\d+\\.\\d+$"
+},
+"engine": {
+"type": "string",
+"pattern": "^>=\\d+\\.\\d+(\\.\\d+)?$"
+},
+"name": {
+"$ref": "#/$defs/text"
+},
+"summary": {
+"$ref": "#/$defs/text"
+},
+"description": {
+"$ref": "#/$defs/text"
+},
+"author": {
+"$ref": "#/$defs/authorRef"
+},
+"classification": {
+"$ref": "#/$defs/classification"
+},
+"sources": {
+"type": "array",
+"items": {
+"$ref": "#/$defs/source"
+},
+"minItems": 1
+},
+"players": {
+"$ref": "#/$defs/playersSpec"
+},
+"deck": {
+"$ref": "#/$defs/deckSpec"
+},
+"orders": {
+"type": "object",
+"additionalProperties": {
+"type": "array",
+"items": {
+"type": "string"
+},
+"minItems": 1
+}
+},
+"options": {
+"type": "array",
+"items": {
+"$ref": "#/$defs/optionDecl"
+}
+},
+"rules": {
+"type": "array",
+"items": {
+"$ref": "#/$defs/ruleDecl"
+}
+},
+"zones": {
+"type": "array",
+"items": {
+"$ref": "#/$defs/zoneDecl"
+}
+},
+"vars": {
+"type": "object",
+"additionalProperties": {
+"$ref": "#/$defs/varDecl"
+}
+},
+"defs": {
+"type": "object",
+"additionalProperties": {
+"type": "string",
+"minLength": 1
+}
+},
+"setup": {
+"$ref": "#/$defs/setupSpec"
+},
+"phases": {
+"type": "array",
+"items": {
+"$ref": "#/$defs/phase"
+}
+},
+"end": {
+"$ref": "#/$defs/endDecl"
+},
+"display": {
+"$ref": "#/$defs/displayHints"
+},
+"ai": {
+"$ref": "#/$defs/aiHints"
+},
+"teaching": {
+"$ref": "#/$defs/teachingHints"
+}
+},
+"additionalProperties": false,
+"$defs": {
+"text": {
+"type": "object",
+"properties": {
+"key": {
+"type": "string"
+},
+"default": {
+"type": "string"
+}
+},
+"required": [
+"default"
+],
+"additionalProperties": false
+},
+"authorRef": {
+"type": "object",
+"properties": {
+"displayName": {
+"type": "string"
+}
+},
+"required": [
+"displayName"
+],
+"additionalProperties": false
+},
+"classification": {
+"type": "object",
+"properties": {
+"pagat": {
+"type": "string"
+},
+"objective": {
+"type": "string"
+},
+"tags": {
+"type": "array",
+"items": {
+"type": "string"
+}
+}
+},
+"required": [
+"pagat",
+"objective",
+"tags"
+],
+"additionalProperties": false
+},
+"source": {
+"type": "object",
+"properties": {
+"id": {
+"type": "string"
+},
+"title": {
+"type": "string"
+},
+"url": {
+"type": "string"
+},
+"role": {
+"enum": [
+"primary",
+"official",
+"secondary",
+"context"
+]
+},
+"accessed": {
+"type": "string"
+}
+},
+"required": [
+"id",
+"title",
+"url",
+"role"
+],
+"additionalProperties": false
+},
+"playersSpec": {
+"type": "object",
+"properties": {
+"counts": {
+"type": "array",
+"items": {
+"type": "integer"
+},
+"minItems": 1
+},
+"default": {
+"type": "integer"
+},
+"teams": {
+"type": "string"
+},
+"seatNames": {
+"type": "array",
+"items": {
+"type": "string"
+}
+}
+},
+"required": [
+"counts",
+"default",
+"teams"
+],
+"additionalProperties": false
+},
+"deckSpec": {
+"type": "object",
+"properties": {
+"base": {
+"type": "string"
+},
+"copies": {
+"type": "integer",
+"minimum": 1
+},
+"remove": {
+"type": "array",
+"items": {
+"type": "string"
+}
+},
+"add": {
+"type": "array",
+"items": {
+"type": "string"
+}
+},
+"faces": {
+"type": "string"
+}
+},
+"required": [],
+"additionalProperties": false
+},
+"optionDecl": {
+"type": "object",
+"properties": {
+"id": {
+"type": "string"
+},
+"type": {
+"enum": [
+"bool",
+"int",
+"enum"
+]
+},
+"default": {},
+"min": {
+"type": "integer"
+},
+"max": {
+"type": "integer"
+},
+"values": {
+"type": "array"
+},
+"label": {
+"$ref": "#/$defs/text"
+},
+"help": {
+"$ref": "#/$defs/text"
+},
+"rules": {
+"type": "array",
+"items": {
+"type": "string"
+}
+},
+"group": {
+"type": "string"
+},
+"locked": {
+"type": "boolean"
+}
+},
+"required": [
+"id",
+"type",
+"default",
+"label",
+"rules"
+],
+"additionalProperties": false
+},
+"ruleDecl": {
+"type": "object",
+"properties": {
+"id": {
+"type": "string"
+},
+"text": {
+"$ref": "#/$defs/text"
+},
+"explain": {
+"$ref": "#/$defs/text"
+},
+"locked": {
+"type": "boolean"
+}
+},
+"required": [
+"id",
+"text"
+],
+"additionalProperties": false
+},
+"zoneDecl": {
+"type": "object",
+"properties": {
+"id": {
+"type": "string"
+},
+"scope": {
+"enum": [
+"seat",
+"team",
+"shared"
+]
+},
+"visibility": {
+"oneOf": [
+{
+"type": "string"
+},
+{
+"type": "object",
+"properties": {
+"seats": {
+"type": "string"
+}
+},
+"required": [
+"seats"
+],
+"additionalProperties": false
+}
+]
+},
+"ordered": {
+"type": "boolean"
+},
+"faceDown": {
+"type": "boolean"
+},
+"sort": {
+"type": "string"
+},
+"owner": {
+"type": "string"
+},
+"capacity": {
+"type": "integer"
+}
+},
+"required": [
+"id",
+"scope",
+"visibility"
+],
+"additionalProperties": false
+},
+"varDecl": {
+"type": "object",
+"properties": {
+"scope": {
+"enum": [
+"match",
+"deal",
+"seatMatch",
+"seatDeal",
+"teamMatch",
+"teamDeal"
+]
+},
+"type": {
+"type": "string"
+},
+"initial": {
+"type": "string"
+}
+},
+"required": [
+"scope",
+"type",
+"initial"
+],
+"additionalProperties": false
+},
+"setupSpec": {
+"type": "object",
+"properties": {
+"firstDealer": {
+"type": "string"
+},
+"dealerRotation": {
+"type": "string"
+}
+},
+"required": [
+"firstDealer",
+"dealerRotation"
+],
+"additionalProperties": false
+},
+"phase": {
+"type": "object",
+"properties": {
+"id": {
+"type": "string"
+},
+"mechanic": {
+"type": "string"
+},
+"params": {
+"type": "object"
+},
+"when": {
+"type": "string"
+},
+"rule": {
+"type": "string"
+},
+"before": {
+"type": "array",
+"items": {
+"$ref": "#/$defs/effect"
+}
+},
+"after": {
+"type": "array",
+"items": {
+"$ref": "#/$defs/effect"
+}
+},
+"next": {
+"type": "string"
+}
+},
+"required": [
+"id",
+"mechanic"
+],
+"additionalProperties": false
+},
+"effect": {
+"oneOf": [
+{
+"type": "object",
+"properties": {
+"set": {
+"type": "string"
+},
+"to": {
+"type": "string"
+},
+"rule": {
+"type": "string"
+}
+},
+"required": [
+"set",
+"to"
+],
+"additionalProperties": false
+},
+{
+"type": "object",
+"properties": {
+"add": {
+"type": "string"
+},
+"value": {
+"type": "string"
+},
+"event": {
+"type": "string"
+},
+"rule": {
+"type": "string"
+}
+},
+"required": [
+"add",
+"value"
+],
+"additionalProperties": false
+},
+{
+"type": "object",
+"properties": {
+"let": {
+"type": "string"
+},
+"be": {
+"type": "string"
+},
+"rule": {
+"type": "string"
+}
+},
+"required": [
+"let",
+"be"
+],
+"additionalProperties": false
+},
+{
+"type": "object",
+"properties": {
+"if": {
+"type": "string"
+},
+"then": {
+"type": "array",
+"items": {
+"$ref": "#/$defs/effect"
+}
+},
+"else": {
+"type": "array",
+"items": {
+"$ref": "#/$defs/effect"
+}
+},
+"rule": {
+"type": "string"
+}
+},
+"required": [
+"if",
+"then"
+],
+"additionalProperties": false
+},
+{
+"type": "object",
+"properties": {
+"forEach": {
+"type": "string"
+},
+"do": {
+"type": "array",
+"items": {
+"$ref": "#/$defs/effect"
+}
+},
+"rule": {
+"type": "string"
+}
+},
+"required": [
+"forEach",
+"do"
+],
+"additionalProperties": false
+},
+{
+"type": "object",
+"properties": {
+"move": {
+"type": "object",
+"properties": {
+"from": {},
+"to": {},
+"toSeat": {
+"type": "string"
+},
+"toTeam": {
+"type": "string"
+},
+"cards": {}
+},
+"required": [
+"from",
+"to"
+],
+"additionalProperties": false
+},
+"rule": {
+"type": "string"
+}
+},
+"required": [
+"move"
+],
+"additionalProperties": false
+},
+{
+"type": "object",
+"properties": {
+"reveal": {
+"type": "object",
+"properties": {
+"zone": {
+"type": "string"
+},
+"seat": {
+"type": "string"
+},
+"to": {}
+},
+"required": [
+"zone"
+],
+"additionalProperties": false
+},
+"rule": {
+"type": "string"
+}
+},
+"required": [
+"reveal"
+],
+"additionalProperties": false
+},
+{
+"type": "object",
+"properties": {
+"emit": {
+"type": "string"
+},
+"data": {
+"type": "object",
+"additionalProperties": {
+"type": "string"
+}
+},
+"rule": {
+"type": "string"
+}
+},
+"required": [
+"emit"
+],
+"additionalProperties": false
+}
+]
+},
+"endDecl": {
+"type": "object",
+"properties": {
+"check": {
+"enum": [
+"afterDeal",
+"continuous",
+"afterTrick"
+]
+},
+"when": {
+"type": "string"
+},
+"rank": {
+"type": "string"
+},
+"ties": {
+"enum": [
+"shared",
+"playOff",
+"impossible"
+]
+},
+"rule": {
+"type": "string"
+},
+"matchEffects": {
+"type": "array",
+"items": {
+"$ref": "#/$defs/effect"
+}
+},
+"maxDeals": {
+"type": "integer"
+}
+},
+"required": [
+"check",
+"rank",
+"ties"
+],
+"additionalProperties": false
+},
+"displayHints": {
+"type": "object",
+"properties": {
+"layout": {
+"type": "string"
+},
+"scoreSheet": {},
+"showLastTrick": {
+"type": "boolean"
+},
+"trickHistory": {
+"type": "string"
+},
+"board": {
+"type": "string"
+},
+"showContract": {
+"type": "boolean"
+},
+"showVulnerability": {
+"type": "boolean"
+},
+"showTrump": {
+"type": "boolean"
+},
+"showMaker": {
+"type": "boolean"
+},
+"auctionBox": {
+"type": "boolean"
+},
+"announceCount": {
+"type": "boolean"
+}
+},
+"required": [],
+"additionalProperties": false
+},
+"aiHints": {
+"type": "object",
+"properties": {
+"profile": {
+"type": "string"
+},
+"params": {
+"type": "object"
+}
+},
+"required": [
+"profile",
+"params"
+],
+"additionalProperties": false
+},
+"teachingHints": {
+"type": "object",
+"properties": {
+"lessons": {
+"type": "array",
+"items": {
+"type": "string"
+},
+"minItems": 1
+}
+},
+"required": [
+"lessons"
+],
+"additionalProperties": false
+}
+}
+}

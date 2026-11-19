@@ -474,8 +474,13 @@ public enum JSONParser {
             UInt8(ascii: "r"): 0x0D, UInt8(ascii: "t"): 0x09,
         ]
 
-        /// Decodes the character following a backslash; advances `index`.
+        /// Decodes an escape sequence whose backslash is `current`; consumes
+        /// the backslash and the escape character, advancing `index`.
         mutating func parseEscape() throws(SchemaError) -> UInt32 {
+            guard current == UInt8(ascii: "\\") else {
+                throw SchemaError.parse("expected escape at \(describePosition())")
+            }
+            index += 1
             guard let escape = current else {
                 throw SchemaError.parse("unterminated escape at \(describePosition())")
             }

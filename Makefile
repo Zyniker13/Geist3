@@ -11,7 +11,7 @@ COVERAGE_MIN ?= 90
 # Host-local simulator lock (no-op on CI where the lock does not exist).
 SIM_LOCK := $(shell test -x "$(HOME)/.hermes/bin/sim-lock" && echo "$(HOME)/.hermes/bin/sim-lock")
 
-.PHONY: help bootstrap gen build test test-packages test-packages-ios test-replays-ios test-apps lint format validate conformance sim fuzz-quick snapshot coverage coverage-check perf gate
+.PHONY: help bootstrap gen build test test-packages test-packages-ios test-replays-ios test-apps lint format validate schema-check conformance sim fuzz-quick snapshot coverage coverage-check perf gate
 
 help:
 	@echo "Parlor build targets (CONVENTIONS §7):"
@@ -24,6 +24,7 @@ help:
 	@echo "  lint        - SwiftLint (main + pure), swift-format, check-imports.sh (zero warnings)"
 	@echo "  format      - swift-format --in-place"
 	@echo "  validate    - rules-cli validate (no-ops until P3 rulesets land)"
+	@echo "  schema-check - rules-cli schema --check (exported schemas fresh)"
 	@echo "  conformance - rules-cli conformance (no-ops until P3)"
 	@echo "  sim N=200   - random-legal / bot-vs-bot games (no-ops until P3)"
 	@echo "  fuzz-quick  - 60s protocol fuzz (no-ops until P8)"
@@ -88,6 +89,12 @@ format:
 
 validate:
 	Tools/rules-cli validate
+
+# P2.9: the committed JSON Schemas must match the exporter exactly
+# (freshness), and CI validates the reference rulesets against the schema
+# (scripts/validate-schemas.py, run by the CI workflow with a jsonschema venv).
+schema-check:
+	Tools/rules-cli schema --check
 
 conformance:
 	Tools/rules-cli conformance

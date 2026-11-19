@@ -4,6 +4,9 @@
 //                                      docs/rulesets/corpus/expected.tsv
 //   rules-cli validate FILE...         validate ruleset files, report issues
 //   rules-cli fmt [--write] FILE...    re-emit each file in canonical form
+//   rules-cli schema [--out DIR] [--check]
+//                                      write (or verify) the exported JSON
+//                                      Schemas (draft 2020-12)
 //   rules-cli simulate [--seeds N] [--seed S] [--quiet] FILE...
 //                                      run N seeded random-legal deals of each
 //                                      ruleset; report faults and the rule
@@ -12,8 +15,7 @@
 // Exit status: 0 clean, 1 any error/mismatch, 2 usage error.
 
 import Foundation
-import RulesetKit
-@_spi(HostOnly) import RulesetKit
+@_spi(HostOnly) @_spi(Tools) import RulesetKit
 
 func repoRoot() -> URL? {
     var dir = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
@@ -24,6 +26,43 @@ func repoRoot() -> URL? {
         dir.deleteLastPathComponent()
     }
     return nil
+}
+
+/// P2.9: write (or verify) the exported JSON Schemas. Freshness check is a
+/// byte comparison of both normalized pretty forms, so regenerating never
+/// churns whitespace-only diffs and CI fails on real drift.
+func runSchema(out: URL, check: Bool) -> Int {
+    let files: [(String, JSON)] = [
+        ("ruleset.schema.json", SchemaExport.rulesetSchema()),
+        ("lesson.schema.json", SchemaExport.lessonSchema()),
+    ]
+    var ok = true
+    for (name, schema) in files {
+        let text = schema.prettyString() + "\n"
+        let target = out.appendingPathComponent(name)
+        if check {
+            guard let existing = try? String(contentsOf: target, encoding: .utf8) else {
+                print("\(name): missing — run `rules-cli schema` to regenerate")
+                ok = false
+                continue
+            }
+            if existing == text {
+                print("\(name): up to date")
+            } else {
+                print("\(name): stale — run `rules-cli schema` to regenerate")
+                ok = false
+            }
+        } else {
+            do {
+                try text.write(to: target, atomically: true, encoding: .utf8)
+                print("wrote \(target.path)")
+            } catch {
+                print("\(name): error: \(error)")
+                ok = false
+            }
+        }
+    }
+    return ok ? 0 : 1
 }
 
 func printIssue(_ issue: ValidationIssue) {
@@ -272,6 +311,24 @@ case "simulate", "sim":
         exit(2)
     }
     exit(Int32(simulate(files, seeds: seedCount, firstSeed: firstSeed, quiet: quiet)))
+case "schema":
+    var out = repoRoot()?.appendingPathComponent("Resources/Schemas")
+        ?? URL(fileURLWithPath: "Resources/Schemas")
+    var check = false
+    var i = 0
+    while i < rest.count {
+        if rest[i] == "--out", i + 1 < rest.count {
+            out = URL(fileURLWithPath: rest[i + 1])
+            i += 2
+        } else if rest[i] == "--check" {
+            check = true
+            i += 1
+        } else {
+            print("usage: rules-cli schema [--out DIR] [--check]")
+            exit(2)
+        }
+    }
+    exit(Int32(runSchema(out: out, check: check)))
 case "conformance":
     // The conformance runner lands with P3 (recorded engine sessions).
     print("'conformance' arrives with P3.")

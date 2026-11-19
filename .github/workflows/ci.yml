@@ -107,6 +107,13 @@ jobs:
       - name: make validate
         run: make validate
 
+      - name: Schema freshness + reference rulesets against the JSON Schemas (P2.9)
+        run: |
+          make schema-check
+          python3 -m venv "$PWD/.venv-schema"
+          "$PWD/.venv-schema/bin/pip" install --quiet jsonschema
+          "$PWD/.venv-schema/bin/python" scripts/validate-schemas.py
+
       - name: make sim N=200
         run: make sim N=200
 

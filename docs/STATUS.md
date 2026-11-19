@@ -297,3 +297,41 @@ on this branch until the G2 merge):
   (acceptance: < 5 s); `swiftlint` errors: 0 (EngineBuilder trick-play
   conversion split into reject/derivation helpers for complexity <= 10).
 - Commit: 33b7f62 (P2.8 code + tests + CLI).
+
+#### P2.9 JSON Schema export + CI validation (session 2026-11-19)
+
+- New `Packages/RulesetKit/Sources/Schema/SchemaExport.swift`
+  (`@_spi(Tools)`): `SchemaExport.rulesetSchema()` / `lessonSchema()` build
+  draft 2020-12 JSON Schemas as structural mirrors of the decoder shapes
+  (required fields, fixed vocabularies as enums, `$defs` for text/source/
+  zone/phase/effect/etc.). ADR-0027: the mirror deliberately does NOT set
+  `additionalProperties` (looser than decode; ADR-0026 closes decode on
+  unknown keys) — the Swift validator stays the strict layer.
+- `rules-cli schema [--out DIR] [--check]`: writes
+  `Resources/Schemas/{ruleset,lesson}.schema.json` (committed) or verifies
+  the committed files are byte-fresh against the exporter (normalized
+  pretty form). `make schema-check` target added.
+- CI (`.github/workflows/ci.yml`): new step runs `make schema-check`
+  (freshness) plus `scripts/validate-schemas.py` (jsonschema venv): both
+  schemas are valid draft 2020-12 and all four reference rulesets validate
+  against `ruleset.schema.json`.
+- SchemaExportTests (XCTest, 3): draft marker on both schemas; every
+  top-level key of the four reference rulesets appears in the schema's
+  properties and every schema-required key is present in each document;
+  prettyString -> JSONParser round-trip is lossless for both schemas.
+- **Parser bug found by the round-trip test** (pre-existing, P1):
+  `JSONParser.parseEscape` read the backslash itself as the escape
+  character (call site never advanced past it), so every JSON escape
+  (`\\`, `\n`, `\"`, `\uXXXX`) decoded wrong — one byte short. No fixture
+  contains escapes, so it never fired. Fixed in
+  `Packages/RulesetKit/Sources/Schema/JSON.swift` (parseEscape now
+  consumes the backslash + escape char); regression tests
+  `parserDecodesEscapeSequences` (short escapes, surrogate pair, escaped
+  backslash, lossless re-encode) and `parserRejectsBadEscape` added to
+  SchemaRoundTripTests.
+- Verification: `swift test --package-path Packages/RulesetKit`
+  **151/151 passing**; `rules-cli schema --check` -> both schemas up to
+  date; `scripts/validate-schemas.py` -> 2 schemas valid draft 2020-12,
+  4/4 reference rulesets OK; `swiftlint` on touched files: 0 errors
+  (one pre-existing cyclomatic-complexity warning in `parseNumber`,
+  untouched by this change); `swift build -c release` rules-cli OK.

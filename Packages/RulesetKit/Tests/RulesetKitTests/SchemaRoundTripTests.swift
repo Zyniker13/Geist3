@@ -122,6 +122,33 @@ struct SchemaRoundTripTests {
         }
     }
 
+    @Test func parserDecodesEscapeSequences() throws {
+        // Short-form escapes, surrogate pairs, and an escaped backslash must
+        // decode to their real characters (the P2.9 schema round-trip caught
+        // a doubled backslash here). Raw strings keep the JSON escapes
+        // literal.
+        let parsed = try JSONParser.parse(
+            #"{"a":"line\nbreak","b":"back\\slash","c":"quote\"inside","d":"😀"}"#)
+        guard case .object(let fields) = parsed else {
+            Issue.record("not an object")
+            return
+        }
+        #expect(fields.first { $0.key == "a" }?.value == .string("line\nbreak"))
+        #expect(fields.first { $0.key == "b" }?.value == .string("back\\slash"))
+        #expect(fields.first { $0.key == "c" }?.value == .string("quote\"inside"))
+        #expect(fields.first { $0.key == "d" }?.value == .string("😀"))
+        // Encode → parse yields the same tree.
+        #expect(try JSONParser.parse(parsed.prettyString()) == parsed)
+    }
+
+    @Test func parserRejectsBadEscape() {
+        // \x is not a JSON escape; the parser must reject it, not emit a
+        // stray character.
+        #expect(throws: SchemaError.self) {
+            _ = try JSONParser.parse(#"{"a":"ba\dx"}"#)
+        }
+    }
+
     @Test func decodeRejectsUnknownPhaseKey() throws {
         // Shapes are closed: an unknown key inside a phase is an error, not
         // silent loss (SchemaError tests the rejectLeftovers path).
