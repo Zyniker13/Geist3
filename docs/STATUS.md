@@ -117,7 +117,7 @@ Deliverables: tree-walking `Evaluator` over `TypedExpr` with `Value` and `Evalua
 - `swift test` (Packages/RulesetKit): **73/73 pass** (11 suites); CardExpr unchanged (13/13).
 - Lint: `make lint` all four checks clean — SwiftLint main **0**, SwiftLint pure **0**, swift-format `--strict` **0**. Files split for `file_length` (`EvaluatorBuiltins`/`EvaluatorMacros`; evaluator tests in three files); swift-format↔SwiftLint `opening_brace` conflicts resolved by restructuring the affected conditions to be format-stable under both tools.
 
-### P2.4 Native functions — in progress (branch `phase/P2-ruleset-dsl`)
+### P2.4 Native functions — DONE (2026-11-19, branch `phase/P2-ruleset-dsl`)
 
 Deliverables: `StandardNatives.swift` with the five §5.8 natives (`cribbage.handScore`, `cribbage.pegPoints`, `bridge.score`, `bridge.honors`, `rummy.melds`), signatures pinned in `Registry.swift`, records (`contractRecord`, `rummyRulesRecord`, `rummyMeldRecord`) and the `bridgeScoreRecord` result. Semantics in ADR-0025.
 
