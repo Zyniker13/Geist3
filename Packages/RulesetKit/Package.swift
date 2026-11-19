@@ -13,7 +13,10 @@ let package = Package(
         .package(path: "../RulesEngine"),
     ],
     targets: [
-        .target(name: "RulesetKit", dependencies: ["CardExpr", "CardModel", .product(name: "RulesEngine", package: "RulesEngine")], path: "Sources"),
+        .target(
+            name: "RulesetKit",
+            dependencies: ["CardExpr", "CardModel", .product(name: "RulesEngine", package: "RulesEngine")],
+            path: "Sources"),
         .testTarget(
             name: "RulesetKitTests",
             dependencies: ["RulesetKit", "CardModel", .product(name: "RulesEngine", package: "RulesEngine")],

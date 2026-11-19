@@ -51,11 +51,13 @@ public struct RandomLegalBot: SimulatorBot {
 
     /// One-way mix for seed streams (CONVENTIONS §5: derived, not random).
     static func mix(seed: UInt64, seat: Int, counter: Int) -> UInt64 {
-        var h = seed &* 0x9E3779B97F4A7C15
-        h = h &+ (UInt64(bitPattern: Int64(seat)) &* 0xBF58476D1CE4E5B9)
-        h = h &+ (UInt64(bitPattern: Int64(counter)) &* 0x94D049BB133111EB)
-        h ^= h >> 33; h = h &* 0xFF51AFD7ED558CCD
-        h ^= h >> 33; h = h &* 0xC4CEB9FE1A85EC53
+        var h = seed &* 0x9E37_79B9_7F4A_7C15
+        h = h &+ (UInt64(bitPattern: Int64(seat)) &* 0xBF58_476D_1CE4_E5B9)
+        h = h &+ (UInt64(bitPattern: Int64(counter)) &* 0x94D0_49BB_1331_11EB)
+        h ^= h >> 33
+        h = h &* 0xFF51_AFD7_ED55_8CCD
+        h ^= h >> 33
+        h = h &* 0xC4CE_B9FE_1A85_EC53
         h ^= h >> 33
         return h
     }

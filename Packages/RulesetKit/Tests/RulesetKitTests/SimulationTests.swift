@@ -30,7 +30,8 @@ struct SimulationTests {
     @Test func toySimulatesCleanFromJSON() throws {
         let simulator = try toySimulator()
         let run = try simulator.runDeal(seed: 42)
-        #expect(run.faults.isEmpty, Comment(stringLiteral: "toy deal must be clean: " + run.faults.joined(separator: "; ")))
+        #expect(
+            run.faults.isEmpty, Comment(stringLiteral: "toy deal must be clean: " + run.faults.joined(separator: "; ")))
         #expect(run.done)
         // Two seats × five tricks = ten plays; the deal itself costs no actions.
         #expect(run.actions == 10)
@@ -83,7 +84,9 @@ struct SimulationTests {
         let run = try simulator.runDeal(seed: 42)
         #expect(run.actions == 1)
         #expect(!run.done)
-        #expect(run.faults.contains("simulator.action-cap"), Comment(stringLiteral: "faults: " + run.faults.joined(separator: "; ")))
+        #expect(
+            run.faults.contains("simulator.action-cap"),
+            Comment(stringLiteral: "faults: " + run.faults.joined(separator: "; ")))
     }
 
     @Test func customBotSteersTheRun() throws {
@@ -124,12 +127,16 @@ struct SimulationTests {
             trickParams: { params in
                 params["follow"] = .object([JSONField(key: "rule", value: .string("follow"))])
             },
-            rules: [JSON.object([
-                JSONField(key: "id", value: .string("follow")),
-                JSONField(key: "text", value: .object([
-                    JSONField(key: "default", value: .string("Follow suit when able.")),
-                ])),
-            ])])
+            rules: [
+                JSON.object([
+                    JSONField(key: "id", value: .string("follow")),
+                    JSONField(
+                        key: "text",
+                        value: .object([
+                            JSONField(key: "default", value: .string("Follow suit when able."))
+                        ])),
+                ])
+            ])
         let document = try RulesetDocument(json: variant, path: "$")
         let resolved = try Resolver.resolve(base: document)
         let simulator = try Simulator(ruleset: resolved)
@@ -161,9 +168,12 @@ struct SimulationTests {
         trickParams(&params)
         trickFields.removeAll { $0.key == "params" }
         trickFields.append(
-            JSONField(key: "params", value: .object(params.sorted { $0.key < $1.key }.map {
-                JSONField(key: $0.key, value: $0.value)
-            })))
+            JSONField(
+                key: "params",
+                value: .object(
+                    params.sorted { $0.key < $1.key }.map {
+                        JSONField(key: $0.key, value: $0.value)
+                    })))
         phases[1] = .object(trickFields)
         fields.removeAll { $0.key == "phases" }
         fields.append(JSONField(key: "phases", value: .array(phases)))

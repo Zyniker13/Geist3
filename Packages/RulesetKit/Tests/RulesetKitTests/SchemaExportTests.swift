@@ -1,6 +1,5 @@
-import XCTest
-
 @_spi(Tools) import RulesetKit
+import XCTest
 
 // P2.9: the exported JSON Schemas stay honest against the documents they
 // describe. The schemas are generated from the decoder shapes, so the drift
@@ -39,8 +38,9 @@ final class SchemaExportTests: XCTestCase {
 
         let dir = repoRoot.appendingPathComponent("docs/plan/rulesets")
         let files = try FileManager.default.contentsOfDirectory(
-            at: dir, includingPropertiesForKeys: nil)
-            .filter { $0.lastPathComponent.hasSuffix(".ruleset.json") }
+            at: dir, includingPropertiesForKeys: nil
+        )
+        .filter { $0.lastPathComponent.hasSuffix(".ruleset.json") }
         XCTAssertEqual(files.count, 4, "expected the four reference rulesets")
         for file in files {
             let json = try JSONParser.parse(try String(contentsOf: file, encoding: .utf8))

@@ -88,8 +88,10 @@ public struct Simulator: Sendable {
 
     /// One round-robin turn: first seat with a legal intent acts. A bot that
     /// declines (nil) skips that seat; if every seat declines, the run stalls.
-    private func pickAction(state: GameState, actions: Int,
-                            bot: any SimulatorBot) -> (action: Action, intent: ActionIntent)? {
+    private func pickAction(
+        state: GameState, actions: Int,
+        bot: any SimulatorBot
+    ) -> (action: Action, intent: ActionIntent)? {
         for rawSeat in 0..<seatCount {
             let seat = Seat(rawSeat)
             let legal = engine.legalIntents(for: seat, in: state)

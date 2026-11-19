@@ -89,7 +89,7 @@ while IFS= read -r f; do
     case "$rel" in
         Tools/check-imports.sh)
             ;;
-        Packages/RulesEngine/* | Packages/RulesetKit/* | Packages/TableNet/* | Packages/Persistence/* | Tools/rules-cli/* | *Tests/* | Tests/*)
+        Packages/RulesEngine/* | Packages/RulesetKit/* | Packages/TableNet/* | Packages/Persistence/* | Tools/rules-cli/* | Tools/rules-cli.d/* | *Tests/* | Tests/*)
             ;;
         *)
             violation "SPI: $rel uses @_spi(HostOnly) (not in the ARCHITECTURE §3 allow-list)"

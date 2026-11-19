@@ -184,7 +184,8 @@ func simulate(_ urls: [URL], seeds: Int, firstSeed: UInt64, quiet: Bool) -> Int 
         // A ruleset that does not validate clean is not simulated.
         let report = RulesetValidator.validate(text: text, byteCount: data.count)
         if !report.errors.isEmpty {
-            print("\(name): \(report.errors.count) validation error\(report.errors.count == 1 ? "" : "s"); not simulated")
+            print(
+                "\(name): \(report.errors.count) validation error\(report.errors.count == 1 ? "" : "s"); not simulated")
             for issue in report.errors { printIssue(issue) }
             ok = false
             continue
@@ -312,7 +313,8 @@ case "simulate", "sim":
     }
     exit(Int32(simulate(files, seeds: seedCount, firstSeed: firstSeed, quiet: quiet)))
 case "schema":
-    var out = repoRoot()?.appendingPathComponent("Resources/Schemas")
+    var out =
+        repoRoot()?.appendingPathComponent("Resources/Schemas")
         ?? URL(fileURLWithPath: "Resources/Schemas")
     var check = false
     var i = 0

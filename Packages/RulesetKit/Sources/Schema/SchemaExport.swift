@@ -8,33 +8,33 @@
 
 @_spi(Tools)
 public enum SchemaExport {
-    // MARK: - Builder helpers
+    // MARK: - Builder helpers (internal: shared with SchemaExport+Lesson.swift)
 
-    private static func s(_ v: String) -> JSON { .string(v) }
+    static func s(_ v: String) -> JSON { .string(v) }
 
-    private static func obj(_ pairs: [(String, JSON)]) -> JSON {
+    static func obj(_ pairs: [(String, JSON)]) -> JSON {
         .object(pairs.map { JSONField(key: $0.0, value: $0.1) })
     }
 
-    private static func t(_ type: String) -> JSON { obj([("type", s(type))]) }
+    static func t(_ type: String) -> JSON { obj([("type", s(type))]) }
 
-    private static func ref(_ name: String) -> JSON {
+    static func ref(_ name: String) -> JSON {
         obj([("$ref", s("#/$defs/\(name)"))])
     }
 
-    private static func strArray(minItems: Int? = nil) -> JSON {
+    static func strArray(minItems: Int? = nil) -> JSON {
         var pairs = [("type", s("array")), ("items", t("string"))]
         if let minItems { pairs.append(("minItems", .int(minItems))) }
         return obj(pairs)
     }
 
-    private static func enumOf(_ values: [String]) -> JSON {
+    static func enumOf(_ values: [String]) -> JSON {
         obj([("enum", .array(values.map { .string($0) }))])
     }
 
     /// One closed object shape: properties in declaration order, optional
     /// extras allowed by name, unknown keys rejected.
-    private static func shape(
+    static func shape(
         _ required: [String],
         _ properties: [(String, JSON)]
     ) -> JSON {
@@ -102,7 +102,13 @@ public enum SchemaExport {
             ("rules", obj([("type", s("array")), ("items", ref("ruleDecl"))])),
             ("zones", obj([("type", s("array")), ("items", ref("zoneDecl"))])),
             ("vars", obj([("type", s("object")), ("additionalProperties", ref("varDecl"))])),
-            ("defs", obj([("type", s("object")), ("additionalProperties", obj([("type", s("string")), ("minLength", .int(1))]))])),
+            (
+                "defs",
+                obj([
+                    ("type", s("object")),
+                    ("additionalProperties", obj([("type", s("string")), ("minLength", .int(1))])),
+                ])
+            ),
             ("setup", ref("setupSpec")),
             ("phases", obj([("type", s("array")), ("items", ref("phase"))])),
             ("end", ref("endDecl")),
@@ -223,7 +229,11 @@ public enum SchemaExport {
                         ("initial", t("string")),
                     ])
             ),
-            ("setupSpec", shape(["firstDealer", "dealerRotation"], [("firstDealer", t("string")), ("dealerRotation", t("string"))])),
+            (
+                "setupSpec",
+                shape(
+                    ["firstDealer", "dealerRotation"], [("firstDealer", t("string")), ("dealerRotation", t("string"))])
+            ),
             (
                 "phase",
                 shape(
@@ -285,10 +295,13 @@ public enum SchemaExport {
 
     private static func visibility() -> JSON {
         obj([
-            ("oneOf", .array([
-                t("string"),
-                shape(["seats"], [("seats", t("string"))]),
-            ])),
+            (
+                "oneOf",
+                .array([
+                    t("string"),
+                    shape(["seats"], [("seats", t("string"))]),
+                ])
+            )
         ])
     }
 
@@ -345,87 +358,4 @@ public enum SchemaExport {
         return obj([("oneOf", .array(variants))])
     }
 
-    // MARK: - Lesson schema
-
-    /// The `parlor.lesson/1` structural schema (§15.2). Lessons gain their
-    /// Swift type in P4; until then this mirrors the documented format, and
-    /// the deal/expect semantics stay with the (future) Swift validator.
-    public static func lessonSchema() -> JSON {
-        obj([
-            ("$schema", s("https://json-schema.org/draft/2020-12/schema")),
-            ("title", s("Parlor lesson document")),
-            (
-                "description",
-                s(
-                    "Structural mirror of the parlor.lesson/1 document "
-                        + "(ARCHITECTURE §15.2) for editor tooling. Deal "
-                        + "composition and step semantics are validated by the "
-                        + "Swift lesson validator, not here.")
-            ),
-            ("type", s("object")),
-            (
-                "required",
-                .array(["format", "id", "game", "ruleset", "title", "seat", "steps", "complete"].map { .string($0) })
-            ),
-            (
-                "properties",
-                obj([
-                    ("format", obj([("const", s("parlor.lesson/1"))])),
-                    ("id", obj([("type", s("string")), ("pattern", s("^[a-z][a-z0-9-]*\\.[a-z0-9][a-z0-9-]*$"))])),
-                    ("game", obj([("type", s("string")), ("pattern", s("^[a-z][a-z0-9-]*$"))])),
-                    ("ruleset", t("string")),
-                    ("title", ref("text")),
-                    ("seat", obj([("type", s("integer")), ("minimum", .int(0))])),
-                    ("options", t("object")),
-                    ("deal", t("object")),
-                    ("bots", t("object")),
-                    ("steps", obj([("type", s("array")), ("items", lessonStep()), ("minItems", .int(1))])),
-                    ("complete", lessonStep()),
-                ])
-            ),
-            ("additionalProperties", .bool(false)),
-            ("$defs", lessonDefs()),
-        ])
-    }
-
-    private static func lessonDefs() -> JSON {
-        obj([
-            ("text", shape(["default"], [("key", t("string")), ("default", t("string"))])),
-        ])
-    }
-
-    private static func lessonStep() -> JSON {
-        obj([
-            ("type", s("object")),
-            (
-                "properties",
-                obj([
-                    ("say", ref("text")),
-                    ("expect", lessonExpect()),
-                    ("highlight", strArray()),
-                    ("auto", obj([("type", s("integer")), ("minimum", .int(0))])),
-                    ("onOther", shape(["say"], [("say", ref("text"))])),
-                ])
-            ),
-            (
-                "anyOf",
-                .array([
-                    shape(["say"], []),
-                    shape(["expect"], []),
-                    shape(["auto"], []),
-                ])
-            ),
-            ("additionalProperties", .bool(false)),
-        ])
-    }
-
-    private static func lessonExpect() -> JSON {
-        shape(
-            ["intent"],
-            [
-                ("intent", t("string")),
-                ("card", t("string")),
-                ("anyOf", strArray()),
-            ])
-    }
 }

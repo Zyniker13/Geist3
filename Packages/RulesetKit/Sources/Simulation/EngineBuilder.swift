@@ -6,8 +6,8 @@
 // Determinism (CONVENTIONS §5): the builder is a pure function of the
 // document; all randomness lives in the engine's seeded deal.
 
-import CardModel
 import CardExpr
+import CardModel
 @_spi(HostOnly) import RulesEngine
 
 @_spi(HostOnly)
@@ -66,16 +66,22 @@ public enum EngineBuilder {
                 guard params.thenEffects == nil else {
                     throw SimulationError.unsupported("deal.then effects")
                 }
-                let packets = try dealPackets(params.packets, seatCount: seatCount,
-                                              seatZones: seatZoneIds, sharedZones: sharedZoneIds)
-                config = PhaseConfig(id: phase.id, mechanic: AnyMechanic(
-                    DealMechanic.self, params: RulesEngine.DealParams(
-                        source: sourceId, packets: packets, shuffleFirst: true,
-                        deckFaces: deckFaces)))
+                let packets = try dealPackets(
+                    params.packets, seatCount: seatCount,
+                    seatZones: seatZoneIds, sharedZones: sharedZoneIds)
+                config = PhaseConfig(
+                    id: phase.id,
+                    mechanic: AnyMechanic(
+                        DealMechanic.self,
+                        params: RulesEngine.DealParams(
+                            source: sourceId, packets: packets, shuffleFirst: true,
+                            deckFaces: deckFaces)))
             case ("trick-play", .trickPlay(let params)):
                 let engineParams = try trickPlayParams(params, phaseId: phase.id, seatCount: seatCount)
-                config = PhaseConfig(id: phase.id, mechanic: AnyMechanic(
-                    TrickPlayMechanic.self, params: engineParams))
+                config = PhaseConfig(
+                    id: phase.id,
+                    mechanic: AnyMechanic(
+                        TrickPlayMechanic.self, params: engineParams))
             case (let mechanic, _):
                 throw SimulationError.unsupported("mechanic '\(mechanic)'")
             }
@@ -96,8 +102,10 @@ public enum EngineBuilder {
 
     // MARK: - deal
 
-    private static func dealPackets(_ packets: [DealPacket], seatCount: Int,
-                                    seatZones: Set<String>, sharedZones: Set<String>) throws -> [RulesEngine.DealPacket] {
+    private static func dealPackets(
+        _ packets: [DealPacket], seatCount: Int,
+        seatZones: Set<String>, sharedZones: Set<String>
+    ) throws -> [RulesEngine.DealPacket] {
         var out: [RulesEngine.DealPacket] = []
         for packet in packets {
             let faceUp = packet.faceUp ?? false
@@ -106,14 +114,16 @@ public enum EngineBuilder {
             let count = try constant(packet.count, param: "count")
             if seatZones.contains(packet.to) {
                 for seat in 0..<seatCount {
-                    out.append(RulesEngine.DealPacket(
-                        to: ZoneKey(scope: .seat, owner: seat, id: packet.to),
-                        each: each ?? 0, packets: 1, count: count, faceUp: faceUp))
+                    out.append(
+                        RulesEngine.DealPacket(
+                            to: ZoneKey(scope: .seat, owner: seat, id: packet.to),
+                            each: each ?? 0, packets: 1, count: count, faceUp: faceUp))
                 }
             } else if sharedZones.contains(packet.to) {
-                out.append(RulesEngine.DealPacket(
-                    to: ZoneKey(scope: .shared, id: packet.to),
-                    each: each ?? 0, packets: 1, count: count, faceUp: faceUp))
+                out.append(
+                    RulesEngine.DealPacket(
+                        to: ZoneKey(scope: .shared, id: packet.to),
+                        each: each ?? 0, packets: 1, count: count, faceUp: faceUp))
             } else {
                 throw SimulationError.config("deal packet target '\(packet.to)' is not a declared zone")
             }
@@ -123,8 +133,10 @@ public enum EngineBuilder {
 
     // MARK: - trick-play
 
-    private static func trickPlayParams(_ params: TrickPlayParams, phaseId: String,
-                                        seatCount: Int) throws -> RulesEngine.TrickPlayParams {
+    private static func trickPlayParams(
+        _ params: TrickPlayParams, phaseId: String,
+        seatCount: Int
+    ) throws -> RulesEngine.TrickPlayParams {
         try rejectUnsupportedTrickPlay(params)
 
         let tricks: Int
@@ -157,9 +169,10 @@ public enum EngineBuilder {
         let winnerRule = try trickWinnerRule(params)
         let followRuleId = try trickFollowRule(params.follow)
 
-        return RulesEngine.TrickPlayParams(seatCount: seatCount, tricks: tricks,
-                               activeSeats: activeSeats, firstLeader: firstLeader,
-                               winnerRule: winnerRule, followRuleId: followRuleId)
+        return RulesEngine.TrickPlayParams(
+            seatCount: seatCount, tricks: tricks,
+            activeSeats: activeSeats, firstLeader: firstLeader,
+            winnerRule: winnerRule, followRuleId: followRuleId)
     }
 
     /// Rejected extras: anything the P1 engine does not model.
@@ -246,7 +259,8 @@ public enum EngineBuilder {
     /// CardFace: longest matching suit-code suffix wins; trumps are suit-first.
     static func parseFace(_ id: String) throws -> CardFace {
         if id.hasPrefix("T"), id.count > 1,
-           id.dropFirst().allSatisfy(\.isNumber) {
+            id.dropFirst().allSatisfy(\.isNumber)
+        {
             return CardFace(suit: Suit("T"), rank: Rank(String(id.dropFirst())))
         }
         let maxSuffix = min(2, max(0, id.count - 1))
