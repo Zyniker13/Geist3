@@ -121,12 +121,13 @@ coverage:
 	done
 	@echo "coverage: profraw files in reports/coverage/"
 
-# Threshold enforcement for the G1 packages: >= 90% line coverage each.
+# Threshold enforcement: >= 90% line coverage in CardModel and RulesEngine,
+# >= 95% in CardExpr (G2 requirement).
 coverage-check:
 	@mkdir -p reports/coverage
 	@set -e; \
 	SPECS=""; \
-	for p in CardModel RulesEngine; do \
+	for p in CardModel RulesEngine CardExpr; do \
 		echo "=== coverage $$p ==="; \
 		swift test --package-path "Packages/$$p" --enable-code-coverage --build-path ".build/coverage-$$p" >/dev/null; \
 		PROF=".build/coverage-$$p/out/Products/Debug/codecov/default.profdata"; \
@@ -134,12 +135,12 @@ coverage-check:
 		BIN="$$BUNDLE/Contents/MacOS/$$(basename "$$BUNDLE" .xctest)"; \
 		SPECS="$$SPECS $$BIN:$$PROF"; \
 	done; \
-	RESULT=$$(bash Tools/coverage-report.sh $$SPECS || true); \
+	RESULT=$$(COVERAGE_THRESHOLDS="CardExpr=95" bash Tools/coverage-report.sh $$SPECS || true); \
 	echo "$$RESULT" | tee reports/coverage/summary.txt; \
 	if echo "$$RESULT" | grep -q BELOW; then \
-		echo "coverage-check: FAILED (threshold $(COVERAGE_MIN)%)" >&2; exit 1; \
+		echo "coverage-check: FAILED (thresholds: CardModel/RulesEngine 90%, CardExpr 95%)" >&2; exit 1; \
 	fi; \
-	echo "coverage-check: all packages >= $(COVERAGE_MIN)%"
+	echo "coverage-check: all package thresholds met (CardModel/RulesEngine >= 90%, CardExpr >= 95%)"
 
 perf:
 	@echo "perf: perf harness lands in P9; nothing to measure yet"
@@ -148,6 +149,7 @@ gate:
 	@test -n "$(PHASE)" || { echo "gate: usage: make gate PHASE=Pn" >&2; exit 1; }
 	@case "$(PHASE)" in \
 		P0|P1) $(MAKE) bootstrap lint test-packages coverage-check coverage conformance validate sim N=200 fuzz-quick snapshot build test-apps test-replays-ios ;; \
+		P2) $(MAKE) bootstrap lint test-packages coverage-check schema-check conformance validate sim N=200 coverage fuzz-quick snapshot build test-apps test-replays-ios ;; \
 		*) echo "gate: PHASE=$(PHASE) checks land with that phase" >&2; exit 1 ;; \
 	esac
 	@echo "gate: PHASE=$(PHASE) PASSED"

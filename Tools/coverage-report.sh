@@ -2,7 +2,8 @@
 # Per-package line coverage from llvm-cov lcov export over one or more test
 # binaries. Usage: coverage-report.sh <binary>[:<instrprofile>] ...
 # Prints TOTAL per top-level package dir and fails if any package < threshold
-# (default 90, override with COVERAGE_MIN).
+# (default 90; override globally with COVERAGE_MIN or per package with
+# COVERAGE_THRESHOLDS, e.g. "CardExpr=95,RulesEngine=90").
 set -euo pipefail
 THRESHOLD="${COVERAGE_MIN:-90}"
 TMP=$(mktemp -d)
@@ -14,9 +15,14 @@ for spec in "$@"; do
   PROF="${spec#*:}"
   xcrun llvm-cov export "$BIN" -instr-profile="$PROF" -format=lcov >> "$TMP/all.info"
 done
-python3 - "$TMP/all.info" "$THRESHOLD" <<'PYEOF'
+python3 - "$TMP/all.info" "$THRESHOLD" "${COVERAGE_THRESHOLDS:-}" <<'PYEOF'
 import sys, collections
-trace, threshold = sys.argv[1], float(sys.argv[2])
+trace, default_threshold, overrides_arg = sys.argv[1], float(sys.argv[2]), sys.argv[3]
+overrides = {}
+for pair in overrides_arg.split(',') if overrides_arg else []:
+    pkg, _, thr = pair.partition('=')
+    if pkg and thr:
+        overrides[pkg] = float(thr)
 best = {}  # (source file, line) -> max count across all records
 cur_file = None
 for line in open(trace):
@@ -45,6 +51,7 @@ bad = False
 for fdir in sorted(pkg_total):
     if not pkg_total[fdir]:
         continue
+    threshold = overrides.get(fdir.split('/')[0], default_threshold)
     pct = 100.0 * pkg_hit[fdir] / pkg_total[fdir]
     flag = '' if pct >= threshold else '  <-- BELOW'
     if pct < threshold:
