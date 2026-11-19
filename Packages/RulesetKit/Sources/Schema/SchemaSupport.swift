@@ -13,8 +13,8 @@ public protocol JSONCodable: Sendable {
 }
 
 /// Primitives ride through the schema as their obvious JSON cases. The
-/// schema's lossless JSON tree keeps int and double apart, so an integer
-/// field must contain a JSON integer, not an integral double.
+/// schema's lossless JSON tree keeps int and decimal apart, so an integer
+/// field must contain a JSON integer, not an integral decimal.
 extension Int: JSONCodable {
     public init(json: JSON, path: String) throws(SchemaError) {
         guard let i = json.intValue else {
@@ -86,8 +86,11 @@ extension JSON: Codable {
             self = .int(value)
             return
         }
-        if let value = try? container.decode(Double.self) {
-            self = .double(value)
+        if let value = try? container.decode(Decimal.self) {
+            // Foundation's exact base-10 number bridges the transport layer;
+            // the tree keeps the literal (canonicalization maps integral
+            // forms onto .int on comparison).
+            self = .decimal(value.description)
             return
         }
         if let value = try? container.decode(String.self) {
@@ -98,8 +101,9 @@ extension JSON: Codable {
             self = .array(value)
             return
         }
-        self = .object(try container.decode([String: JSON].self)
-            .map { JSONField(key: $0.key, value: $0.value) })
+        self = .object(
+            try container.decode([String: JSON].self)
+                .map { JSONField(key: $0.key, value: $0.value) })
     }
 
     public func encode(to encoder: any Encoder) throws {
@@ -108,22 +112,24 @@ extension JSON: Codable {
         case .null: try container.encodeNil()
         case .bool(let b): try container.encode(b)
         case .int(let i): try container.encode(i)
-        case .double(let d): try container.encode(d)
+        case .decimal(let literal):
+            try container.encode(Decimal(string: literal))
         case .string(let s): try container.encode(s)
         case .array(let items): try container.encode(items)
         case .object(let fields):
-            try container.encode(Dictionary(
-                uniqueKeysWithValues: fields.map { ($0.key, $0.value) }))
+            try container.encode(
+                Dictionary(
+                    uniqueKeysWithValues: fields.map { ($0.key, $0.value) }))
         }
     }
 }
 
-public extension JSONCodable {
-    init(from decoder: any Decoder) throws {
+extension JSONCodable {
+    public init(from decoder: any Decoder) throws {
         self = try Self(json: try JSON(from: decoder))
     }
 
-    func encode(to encoder: any Encoder) throws {
+    public func encode(to encoder: any Encoder) throws {
         try json.encode(to: encoder)
     }
 }
@@ -583,7 +589,8 @@ public struct ZoneDecl: Equatable, Sendable, JSONCodable {
         if let name = rawVisibility.stringValue {
             visibility = .named(name)
         } else if let seatsExpr = rawVisibility["seats"], let fields = rawVisibility.fields,
-                  fields.count == 1 {
+            fields.count == 1
+        {
             visibility = .seats(try Expr(json: seatsExpr, path: "\(path).visibility.seats"))
         } else {
             throw SchemaError.wrongType(
@@ -668,7 +675,7 @@ public struct EndDecl: Equatable, Sendable, JSONCodable {
 
     public var json: JSON {
         var pairs: [(String, JSON)] = [
-            ("check", .string(check)),
+            ("check", .string(check))
         ]
         if let when { pairs.append(("when", when.json)) }
         pairs.append(("rank", .string(rank)))
@@ -738,7 +745,7 @@ public struct AIHints: Equatable, Sendable, JSONCodable {
     public init(json: JSON, path: String) throws(SchemaError) {
         var reader = try FieldReader(json, path: path)
         profile = try reader.string("profile")
-        params = try reader.keyedFields("params") // values stay raw JSON
+        params = try reader.keyedFields("params")  // values stay raw JSON
         try reader.rejectLeftovers()
     }
 
@@ -763,7 +770,7 @@ public struct TeachingHints: Equatable, Sendable, JSONCodable {
 
     public var json: JSON {
         let pairs: [(String, JSON)] = [
-            ("lessons", .array(lessons.map { .string($0) })),
+            ("lessons", .array(lessons.map { .string($0) }))
         ]
         return .object(pairs.map { JSONField(key: $0.0, value: $0.1) })
     }

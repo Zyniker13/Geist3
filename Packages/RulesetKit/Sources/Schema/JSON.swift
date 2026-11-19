@@ -3,7 +3,7 @@
 // Why not [String: Any] or Foundation Codable end to end: the loader must be
 // lossless — decode → encode → decode identical in canonical form (P2.5) — and
 // must preserve object key order (§5.1 wants schema key order on output; the
-// validator warns on order) and the int/double distinction ("1" vs "1.0").
+// validator warns on order) and the int/decimal distinction ("1" vs "1.0").
 // This file is the single owned representation; everything else in Schema/
 // reads and writes it through `JSONCodable`.
 
@@ -36,12 +36,14 @@ public struct JSONField: Equatable, Sendable {
 }
 
 /// Lossless JSON value tree. Objects keep source key order; numbers keep the
-/// literal distinction between integer and decimal forms.
+/// literal distinction between integer and decimal forms. Non-integer numbers
+/// are stored as exact decimal literals (no floating point per CONVENTIONS
+/// §5.4 — canonicalization below is pure string/integer arithmetic).
 public enum JSON: Equatable, Sendable {
     case null
     case bool(Bool)
     case int(Int)
-    case double(Double)
+    case decimal(String)
     case string(String)
     case array([JSON])
     case object([JSONField])
@@ -96,9 +98,10 @@ public enum JSON: Equatable, Sendable {
     public func canonicallySorted() -> JSON {
         switch self {
         case .object(let fields):
-            return .object(fields
-                .map { JSONField(key: $0.key, value: $0.value.canonicallySorted()) }
-                .sorted { $0.key < $1.key })
+            return .object(
+                fields
+                    .map { JSONField(key: $0.key, value: $0.value.canonicallySorted()) }
+                    .sorted { $0.key < $1.key })
         case .array(let items):
             return .array(items.map { $0.canonicallySorted() })
         default:
@@ -106,20 +109,19 @@ public enum JSON: Equatable, Sendable {
         }
     }
 
-    /// Canonical form with numbers normalized: integral doubles become ints
-    /// (1.0 and 1 are the same number). This is the form P2.5's round-trip
-    /// equality and P2.6's hash input are defined on.
+    /// Canonical form with numbers normalized: integral decimals become ints
+    /// (1.0 and 1 are the same number), other decimals collapse to a canonical
+    /// literal. This is the form P2.5's round-trip equality and P2.6's hash
+    /// input are defined on.
     public func normalizedForCompare() -> JSON {
         switch self {
-        case .double(let d):
-            if d == d.rounded(.towardZero), d >= Double(Int.min), d <= Double(Int.max) {
-                return .int(Int(d))
-            }
-            return self
+        case .decimal(let literal):
+            return JSON.canonicalDecimal(literal)
         case .object(let fields):
-            return .object(fields
-                .map { JSONField(key: $0.key, value: $0.value.normalizedForCompare()) }
-                .sorted { $0.key < $1.key })
+            return .object(
+                fields
+                    .map { JSONField(key: $0.key, value: $0.value.normalizedForCompare()) }
+                    .sorted { $0.key < $1.key })
         case .array(let items):
             return .array(items.map { $0.normalizedForCompare() })
         default:
@@ -151,33 +153,47 @@ public enum JSON: Equatable, Sendable {
             out += b ? "true" : "false"
         case .int(let i):
             out += String(i)
-        case .double(let d):
-            out += JSON.encodeDouble(d)
+        case .decimal(let literal):
+            out += literal
         case .string(let s):
             JSON.writeEscaped(s, to: &out)
         case .array(let items):
-            if items.isEmpty { out += "[]"; return }
-            out += "["
-            for (index, item) in items.enumerated() {
-                if index > 0 { out += "," }
-                JSON.appendNewlineIfNeeded(to: &out, indent: indent, depth: depth + 1)
-                item.write(to: &out, indent: indent, depth: depth + 1)
-            }
-            JSON.appendNewlineIfNeeded(to: &out, indent: indent, depth: depth)
-            out += "]"
+            writeArray(items, to: &out, indent: indent, depth: depth)
         case .object(let fields):
-            if fields.isEmpty { out += "{}"; return }
-            out += "{"
-            for (index, field) in fields.enumerated() {
-                if index > 0 { out += "," }
-                JSON.appendNewlineIfNeeded(to: &out, indent: indent, depth: depth + 1)
-                JSON.writeEscaped(field.key, to: &out)
-                out += ": "
-                field.value.write(to: &out, indent: indent, depth: depth + 1)
-            }
-            JSON.appendNewlineIfNeeded(to: &out, indent: indent, depth: depth)
-            out += "}"
+            writeObject(fields, to: &out, indent: indent, depth: depth)
         }
+    }
+
+    private func writeArray(_ items: [JSON], to out: inout String, indent: Int?, depth: Int) {
+        if items.isEmpty {
+            out += "[]"
+            return
+        }
+        out += "["
+        for (index, item) in items.enumerated() {
+            if index > 0 { out += "," }
+            JSON.appendNewlineIfNeeded(to: &out, indent: indent, depth: depth + 1)
+            item.write(to: &out, indent: indent, depth: depth + 1)
+        }
+        JSON.appendNewlineIfNeeded(to: &out, indent: indent, depth: depth)
+        out += "]"
+    }
+
+    private func writeObject(_ fields: [JSONField], to out: inout String, indent: Int?, depth: Int) {
+        if fields.isEmpty {
+            out += "{}"
+            return
+        }
+        out += "{"
+        for (index, field) in fields.enumerated() {
+            if index > 0 { out += "," }
+            JSON.appendNewlineIfNeeded(to: &out, indent: indent, depth: depth + 1)
+            JSON.writeEscaped(field.key, to: &out)
+            out += ": "
+            field.value.write(to: &out, indent: indent, depth: depth + 1)
+        }
+        JSON.appendNewlineIfNeeded(to: &out, indent: indent, depth: depth)
+        out += "}"
     }
 
     private static func appendNewlineIfNeeded(to out: inout String, indent: Int?, depth: Int) {
@@ -186,15 +202,64 @@ public enum JSON: Equatable, Sendable {
         out += String(repeating: " ", count: indent * depth)
     }
 
-    /// Shortest round-trippable decimal form; always keeps a `.` or exponent so
-    /// the value re-parses as a double, not an int.
-    static func encodeDouble(_ d: Double) -> String {
-        if d == -0.0 { return "-0.0" }
-        var text = d.description
-        if !text.contains(".") && !text.contains("e") && !text.contains("E") {
-            text += ".0"
+    /// Expands a JSON decimal literal to its canonical form: integral values
+    /// (0.0, 1e2, -3.00) become `.int`; other decimals become a canonical
+    /// literal without redundant zeros. Pure string/integer arithmetic —
+    /// deterministic per CONVENTIONS §5.4.
+    static func canonicalDecimal(_ literal: String) -> JSON {
+        var text = Substring(literal)
+        var negative = false
+        if text.first == "-" {
+            negative = true
+            text = text.dropFirst()
         }
-        return text
+        // Split at exponent, if any. Literals always come from the parser,
+        // which bounds the exponent; unparseable ones pass through verbatim.
+        var exponent = 0
+        if let eIndex = text.firstIndex(where: { $0 == "e" || $0 == "E" }) {
+            let exponentText = text[text.index(after: eIndex)...]
+            exponent = Int(exponentText) ?? 0
+            text = text[..<eIndex]
+        }
+        // Split mantissa at the decimal point.
+        let pointIndex = text.firstIndex(of: ".") ?? text.endIndex
+        let intDigits = text[..<pointIndex]
+        let fracDigits = text[(pointIndex < text.endIndex ? text.index(after: pointIndex) : text.endIndex)...]
+        let digits = Array(intDigits) + Array(fracDigits)
+        // Decimal point position relative to the start of `digits`.
+        var pointPosition = intDigits.count + exponent
+        // Strip leading zeros: each removed digit also shifts the point left.
+        var lead = 0
+        while lead < digits.count - 1, digits[lead] == "0" {
+            lead += 1
+            pointPosition -= 1
+        }
+        // Strip trailing zeros (fraction only — a trailing zero left of the
+        // point scales the value).
+        var end = digits.count
+        while end > pointPosition + 1, end > lead + 1, digits[end - 1] == "0" {
+            end -= 1
+        }
+        let kept = digits[lead..<end]
+        let allZero = kept.allSatisfy { $0 == "0" }
+        if allZero { return .int(0) }
+        let digitsText = String(kept)
+        if pointPosition >= digitsText.count {
+            // Integral: append missing zeros; keep as int when it fits Int64.
+            let valueText = digitsText + String(repeating: "0", count: pointPosition - digitsText.count)
+            if let value = Int(valueText) {
+                return .int(negative ? -value : value)
+            }
+            return .decimal((negative ? "-" : "") + valueText)
+        }
+        if pointPosition <= 0 {
+            let frac = String(repeating: "0", count: -pointPosition) + digitsText
+            return .decimal((negative ? "-" : "") + "0." + frac)
+        }
+        let split = digitsText.index(digitsText.startIndex, offsetBy: pointPosition)
+        let intPart = String(digitsText[..<split])
+        let fracPart = String(digitsText[split...])
+        return .decimal((negative ? "-" : "") + intPart + "." + fracPart)
     }
 
     private static func writeEscaped(_ s: String, to out: inout String) {
@@ -312,7 +377,7 @@ public enum JSONParser {
         }
 
         mutating func parseObject(depth: Int) throws(SchemaError) -> JSON {
-            index += 1 // consume {
+            index += 1  // consume {
             var fields: [JSONField] = []
             var seen: Set<String> = []
             try skipWhitespace()
@@ -351,7 +416,7 @@ public enum JSONParser {
         }
 
         mutating func parseArray(depth: Int) throws(SchemaError) -> JSON {
-            index += 1 // consume [
+            index += 1  // consume [
             var items: [JSON] = []
             try skipWhitespace()
             if current == UInt8(ascii: "]") {
@@ -375,7 +440,7 @@ public enum JSONParser {
         }
 
         mutating func parseString() throws(SchemaError) -> String {
-            index += 1 // consume opening quote
+            index += 1  // consume opening quote
             var units: [UInt8] = []
             while true {
                 guard let b = current else {
@@ -383,29 +448,14 @@ public enum JSONParser {
                 }
                 if b == UInt8(ascii: "\"") {
                     index += 1
-                    return String(decoding: units, as: UTF8.self)
+                    guard let text = String(bytes: units, encoding: .utf8) else {
+                        throw SchemaError.parse("invalid UTF-8 in string at \(describePosition())")
+                    }
+                    return text
                 }
                 if b == UInt8(ascii: "\\") {
-                    index += 1
-                    guard let escape = current else {
-                        throw SchemaError.parse("unterminated escape at \(describePosition())")
-                    }
-                    index += 1
-                    switch escape {
-                    case UInt8(ascii: "\""): units.append(UInt8(ascii: "\""))
-                    case UInt8(ascii: "\\"): units.append(UInt8(ascii: "\\"))
-                    case UInt8(ascii: "/"): units.append(UInt8(ascii: "/"))
-                    case UInt8(ascii: "b"): units.append(0x08)
-                    case UInt8(ascii: "f"): units.append(0x0C)
-                    case UInt8(ascii: "n"): units.append(0x0A)
-                    case UInt8(ascii: "r"): units.append(0x0D)
-                    case UInt8(ascii: "t"): units.append(0x09)
-                    case UInt8(ascii: "u"):
-                        let scalar = try parseUnicodeEscape()
-                        appendUTF8(scalar, to: &units)
-                    default:
-                        throw SchemaError.parse("bad escape at \(describePosition())")
-                    }
+                    let scalar = try parseEscape()
+                    appendUTF8(scalar, to: &units)
                     continue
                 }
                 if b < 0x20 {
@@ -414,6 +464,25 @@ public enum JSONParser {
                 units.append(b)
                 index += 1
             }
+        }
+
+        /// Short-form escapes: the character after the backslash, mapped to
+        /// its code point.
+        private static let shortEscapes: [UInt8: UInt32] = [
+            UInt8(ascii: "\""): 0x22, UInt8(ascii: "\\"): 0x5C, UInt8(ascii: "/"): 0x2F,
+            UInt8(ascii: "b"): 0x08, UInt8(ascii: "f"): 0x0C, UInt8(ascii: "n"): 0x0A,
+            UInt8(ascii: "r"): 0x0D, UInt8(ascii: "t"): 0x09,
+        ]
+
+        /// Decodes the character following a backslash; advances `index`.
+        mutating func parseEscape() throws(SchemaError) -> UInt32 {
+            guard let escape = current else {
+                throw SchemaError.parse("unterminated escape at \(describePosition())")
+            }
+            index += 1
+            if let code = Self.shortEscapes[escape] { return code }
+            if escape == UInt8(ascii: "u") { return try parseUnicodeEscape() }
+            throw SchemaError.parse("bad escape at \(describePosition())")
         }
 
         mutating func parseHex4() throws(SchemaError) -> UInt32 {
@@ -477,9 +546,7 @@ public enum JSONParser {
             case UInt8(ascii: "0"):
                 index += 1
             case .some(UInt8(ascii: "1")...UInt8(ascii: "9")):
-                while let b = current, (UInt8(ascii: "0")...UInt8(ascii: "9")).contains(b) {
-                    index += 1
-                }
+                scanDigits()
             default:
                 throw SchemaError.parse("bad number at \(describePosition())")
             }
@@ -490,29 +557,44 @@ public enum JSONParser {
                 guard let b = current, (UInt8(ascii: "0")...UInt8(ascii: "9")).contains(b) else {
                     throw SchemaError.parse("bad number fraction at \(describePosition())")
                 }
-                while let b = current, (UInt8(ascii: "0")...UInt8(ascii: "9")).contains(b) {
-                    index += 1
-                }
+                scanDigits()
             }
             if current == UInt8(ascii: "e") || current == UInt8(ascii: "E") {
                 isDecimal = true
-                index += 1
-                if current == UInt8(ascii: "+") || current == UInt8(ascii: "-") { index += 1 }
-                guard let b = current, (UInt8(ascii: "0")...UInt8(ascii: "9")).contains(b) else {
-                    throw SchemaError.parse("bad number exponent at \(describePosition())")
-                }
-                while let b = current, (UInt8(ascii: "0")...UInt8(ascii: "9")).contains(b) {
-                    index += 1
-                }
+                try parseExponent()
             }
-            let literal = String(decoding: bytes[start..<index], as: UTF8.self)
+            guard let literal = String(bytes: bytes[start..<index], encoding: .utf8) else {
+                throw SchemaError.parse("invalid UTF-8 in number at \(describePosition())")
+            }
             if !isDecimal, let intValue = Int(literal) {
                 return .int(intValue)
             }
-            guard let doubleValue = Double(literal), doubleValue.isFinite else {
-                throw SchemaError.parse("number out of range at \(describePosition())")
+            // Decimal literals are kept exact (no floating point). Guard the
+            // exponent so canonicalization can expand it without overflow.
+            if isDecimal, let ePos = literal.firstIndex(where: { $0 == "e" || $0 == "E" }) {
+                let exponentText = literal[literal.index(after: ePos)...]
+                guard let exponent = Int(exponentText), abs(exponent) <= 4096 else {
+                    throw SchemaError.parse("number out of range at \(describePosition())")
+                }
             }
-            return .double(doubleValue)
+            return .decimal(literal)
+        }
+
+        /// Advances `index` past a run of ASCII digits.
+        mutating func scanDigits() {
+            while let b = current, (UInt8(ascii: "0")...UInt8(ascii: "9")).contains(b) {
+                index += 1
+            }
+        }
+
+        /// Parses the `e`/`E` exponent (sign and digits); advances `index`.
+        mutating func parseExponent() throws(SchemaError) {
+            index += 1
+            if current == UInt8(ascii: "+") || current == UInt8(ascii: "-") { index += 1 }
+            guard let b = current, (UInt8(ascii: "0")...UInt8(ascii: "9")).contains(b) else {
+                throw SchemaError.parse("bad number exponent at \(describePosition())")
+            }
+            scanDigits()
         }
     }
 }
