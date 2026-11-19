@@ -156,3 +156,21 @@ Deliverables: `StandardNatives.swift` with the five §5.8 natives (`cribbage.han
   (`H2→2H`, `D2/D3→2D/3D`) in fault/typeCheck/consistency tests.
 - `honorsFixedCases` + `honorsFaults` pass in isolation; full re-run in progress
   (`/tmp/p2.4-full-run3.log`).
+
+#### P2.5 schema types and loader — round-trip green (session 2026-11-19)
+
+- `Sources/Schema/` complete: `JSON.swift` (lossless tree, ordered objects,
+  int/double distinction), `SchemaSupport.swift` (JSONCodable + FieldReader,
+  closed shapes), `Effects.swift`, `MechanicsParams.swift` (NumOrExpr,
+  TricksSpec), `Schema.swift` (Phase, RulesetDocument, OverlayDocument, PatchOp,
+  inlined decodeRuleset/decodeOverlay).
+- All 4 reference rulesets and both overlays decode → encode → decode to an
+  `==`-identical document; encoding is deterministic (second encode == first).
+- Design decision ADR-0026: shapes are CLOSED — every struct's decode ends
+  with `reader.rejectLeftovers()`; unknown keys throw `SchemaError.wrongType`
+  naming the keys and path. The initial extras ride-through was removed
+  (47 call sites + fields + builders). Runtime `VarDecl` renamed `VarBinding`
+  to free the name for the schema type.
+- Full suite: **102/102 passing** (91 prior + 11 SchemaRoundTripTests).
+- Remaining for P2.5 acceptance: none — round-trip of the reference corpus is
+  the phase's criterion; commit + push next.

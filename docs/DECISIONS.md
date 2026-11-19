@@ -29,6 +29,7 @@ Purpose: every decision made during the build as a numbered ADR (context, decisi
 | 0021 | Rename `Accessibility` package to `A11yKit` | Accepted |
 | 0022 | Gate G0 excludes the macOS UI-test leg; required again from G9 | Accepted |
 | 0025 | Standard native scoring semantics (P2.4) | Accepted |
+| 0026 | Schema shapes are closed; unknown keys fail decode | Accepted |
 
 ## ADR-0001 — Toolchain: Xcode 27.2, Swift 6.4.2, language mode 6
 
@@ -216,3 +217,10 @@ Purpose: every decision made during the build as a numbered ADR (context, decisi
   5. `cribbage.pegPoints(sequence)` scores only what the last played card creates from the count run since the last reset: a fifteen when the running total is exactly 15 (2 points), pairs royal among cards of the last card's rank (2 per pair), and the longest valid suffix run (1 point per rank × the product of per-rank multiplicities). The `count-play` mechanic owns the 31 award, `go`, and last-card points (CRB-4.3) — the native never awards them.
 - **Consequences:** The P2.4 test suite pins all of the above. Ruleset authors needing different rummy field names or run semantics address that in a ruleset definition, not a native change; revisit only if a catalogued game requires it.
 - **Addendum (2026-11-19, after full-suite debugging):** two input-validation decisions pinned by the fault tests: `cribbage.handScore` faults when the four-card hand repeats a suit+rank or the starter duplicates a hand card (scoring is undefined otherwise; Cribbage deals disjoint cards), and `bridge.honors` faults on a trump string outside C/D/H/S (null stays notrump).
+
+## ADR-0026 — Schema shapes are closed; unknown keys fail decode (P2.5)
+
+- **Status:** Accepted (2026-11-19, P2.5)
+- **Context:** During decode a struct must choose between silently carrying unknown keys through decode/encode (an `extras` ride-through, the initial P2.5 design) and rejecting them. ARCHITECTURE's posture is strict — unknown future `schemaVersion`s are refused with a clear message and evolution happens through tested migration functions — and the P2.7 validator exists precisely to catch author mistakes, which a silent ride-through would hide (a typo like `payoffs` for `payoff` would decode, round-trip, validate, and only misbehave at the table). The four reference rulesets and two overlays contain only known keys, so the round-trip acceptance does not need tolerance.
+- **Decision:** Every schema struct's decode ends with `reader.rejectLeftovers()`; any unconsumed key throws `SchemaError.wrongType` naming the leftover keys and the document path. The `extras` field and ride-through mechanism are removed. Deliberately open data stays where the schema declares it (house-overlay `options` is a raw keyed object, notes and sources are strings).
+- **Consequences:** Adding a field to a ruleset means a `schemaVersion` bump plus a migration function, not silent acceptance; malformed documents fail loudly at load with the offending path; the round-trip tests still pass unchanged for the reference corpus.
