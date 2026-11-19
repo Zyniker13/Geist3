@@ -63,11 +63,31 @@ jobs:
             echo "--- disk ---"
             df -h /
             echo
-            echo "--- coverage logs (tail 60 each) ---"
+            echo "--- memory ---"
+            sysctl hw.memsize
+            vm_stat
+            echo
+            echo "--- crash reports (.ips modified in last 15 min; full text of newest 2) ---"
+            RECENT=$(find "$HOME/Library/Logs/DiagnosticReports" /Library/Logs/DiagnosticReports -name '*.ips' -mmin -15 2>/dev/null | sort)
+            if [ -z "$RECENT" ]; then
+              echo "(no .ips files modified in the last 15 minutes — likely SIGKILL, e.g. OOM)"
+            else
+              echo "$RECENT"
+              N=0
+              for f in $RECENT; do
+                N=$((N+1))
+                if [ "$N" -le 2 ]; then
+                  echo "=== FULL: $f ==="
+                  sed -e 's/GITHUB_TOKEN=[^ "]*//g' "$f"
+                fi
+              done
+            fi
+            echo
+            echo "--- coverage logs (full) ---"
             for f in reports/coverage/*.log; do
               [ -f "$f" ] || continue
-              echo "=== $f ==="
-              tail -60 "$f"
+              echo "=== $f ($(wc -l < "$f") lines) ==="
+              cat "$f"
             done
           } > ci-failure-detail.txt
           git config user.name "parlor-ci"
