@@ -45,6 +45,36 @@ jobs:
       - name: Package tests with coverage
         run: make coverage
 
+      - name: Publish failure detail (best effort, public branch)
+        if: failure()
+        run: |
+          {
+            echo "run: ${{ github.run_id }}"
+            echo "sha: ${{ github.sha }}"
+            echo "date: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo
+            echo "--- toolchain ---"
+            swift --version
+            xcodebuild -version
+            echo
+            echo "--- disk ---"
+            df -h /
+            echo
+            echo "--- coverage logs (tail 60 each) ---"
+            for f in reports/coverage/*.log; do
+              [ -f "$f" ] || continue
+              echo "=== $f ==="
+              tail -60 "$f"
+            done
+          } > ci-failure-detail.txt
+          git config user.name "parlor-ci"
+          git config user.email "parlor-ci@users.noreply.github.com"
+          BR="ci-failure-run-${{ github.run_id }}"
+          git checkout -b "$BR"
+          git add ci-failure-detail.txt
+          git commit -m "ci: failure detail for run ${{ github.run_id }}"
+          git push origin "$BR" || echo "PUSH-FAILED: GITHUB_TOKEN lacks contents:write"
+
       - name: Coverage threshold (CardModel and RulesEngine >= 90%)
         run: make coverage-check
 
