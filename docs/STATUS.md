@@ -262,3 +262,38 @@ on this branch until the G2 merge):
   documents (previously misfired on the two overlays); `rules-cli fmt` works.
 - Verification: `swift build` OK; RulesetKit suite **143/143 passing**;
   `make lint` exit 0; `rules-cli validate docs/plan/rulesets/*.json` exit 0.
+
+#### P2.8 simulator — toy game end-to-end, 500 seeds in 0.13 s (session 2026-11-19)
+
+- New `Packages/RulesetKit/Sources/Simulation/`: `Simulator` (deal loop,
+  round-robin legal pick, card-conservation check each action, action cap
+  4000 = nontermination guard, stall report when no seat can act, seeded
+  SHA-256 final-state digest, unexercised-declared-rule report),
+  `SimulationTypes` (SimulationRun with `done`/host-only final state,
+  SimulatorBot protocol, seeded uniform RandomLegalBot), `EngineBuilder`
+  (JSON phases -> engine setup: deal packets, trick-play, score; unsupported
+  mechanics rejected as `simulator.unsupported`).
+- RulesEngine support: engine setup hook, `ZoneStore.totalCardCount`, deal
+  packet application. Final state stays host-only (`@_spi(HostOnly)`,
+  never serialized) — §9 redaction unchanged.
+- `rules-cli simulate --seeds N PATH` (alias `sim`): per-deal actions,
+  elapsed, longest deal, repeat-seed reproducibility, faults, unexercised
+  rules. Added `sim` alias to match the Makefile `make sim` target.
+- SimulationTests (6): toy JSON game clean end-to-end (10 actions, 13 cards
+  conserved, both hands empty, five 2-card piles), same-seed reproducibility
+  (identical digest) and different-seed divergence, conservation across 12
+  seeds, action cap -> `simulator.action-cap` + `done=false`, unexercised
+  declared rule (`follow`) reported, custom bot steers the run
+  (LastLegalBot legal-last; deterministic across repeats).
+- Reference rulesets are *not* yet simulatable by design: G2 (line 124) says
+  mechanic implementations may still be stubs for P3, so simulation of them
+  is not yet required. Current gaps (validator accepts, simulator rejects):
+  hearts/bridge deal has no source, cribbage exchange.discardTo, euchre
+  team-scoped zone. Tracked for P3 wiring.
+- Verification: `swift test --package-path Packages/RulesetKit`
+  **149/149 passing**; `time Tools/rules-cli simulate --seeds 500
+  Packages/RulesetKit/Tests/RulesetKitTests/Fixtures/toy.ruleset.json` ->
+  "500 seeds in 0.13 s, longest deal 10 actions, repeat-seed reproducible"
+  (acceptance: < 5 s); `swiftlint` errors: 0 (EngineBuilder trick-play
+  conversion split into reject/derivation helpers for complexity <= 10).
+- Commit: 33b7f62 (P2.8 code + tests + CLI).
