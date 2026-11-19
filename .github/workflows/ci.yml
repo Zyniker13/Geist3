@@ -11,6 +11,9 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: write
+
 jobs:
   ci:
     name: build-test-lint
