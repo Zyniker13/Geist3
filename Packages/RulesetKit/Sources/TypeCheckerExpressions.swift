@@ -165,10 +165,12 @@ extension TypeChecker {
     }
 
     /// Comparison and arithmetic operators take int operands (§7.2).
+    /// Optional operands are accepted by unwrapping: a null operand
+    /// dereferences at runtime (§7.6), so optionality is not a type error.
     private func requireIntOperands(
         _ op: AST.Operator, _ lhs: TypedExpr, _ rhs: TypedExpr, _ span: SourceSpan
     ) throws {
-        for side in [lhs.type, rhs.type] where unify(side, .int) == nil {
+        for side in [lhs.type.unwrapped, rhs.type.unwrapped] where unify(side, .int) == nil {
             throw TypeError(span: span, message: "'\(op.symbol)' takes int operands, got \(typeName(side))")
         }
     }

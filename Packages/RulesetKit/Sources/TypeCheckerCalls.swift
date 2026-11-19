@@ -42,9 +42,10 @@ extension TypeChecker {
         // Call syntax on a context-root field (`players.count(s)`) names the
         // dotted field in the error rather than treating the root as a list.
         // An unknown base (`cards.size()`) falls through to the macros.
-        if case .ident(let root, _) = base,
-           (try? rootAccess(root: root, name: name, span: ast.span)) != nil {
-            throw TypeError(span: ast.span, message: "'\(root).\(name)' is not callable")
+        if case .ident(let root, _) = base {
+            if (try? rootAccess(root: root, name: name, span: ast.span)) != nil {
+                throw TypeError(span: ast.span, message: "'\(root).\(name)' is not callable")
+            }
         }
         return try checkMacroCall(name, base: base, args: args, ast: ast, scope: scope)
     }

@@ -103,3 +103,16 @@ Deliverables: `ExprType` (§7.2 scalars, structured types, optionals, records, u
 - Lint: SwiftLint main **0**, SwiftLint pure **0**, swift-format `--strict` **0** — includes clearing CardExpr's post-G1 lint debt (identifier renames, `list<card>` test syntax, integer-math perf comparisons per CONVENTIONS §5.4).
 
 **Crash found and fixed during P2.2:** `parseTimeIsLinear` aborted on long left-leaning `+` chains — deep `indirect enum` trees exhaust a small-stack test thread via recursive teardown (compounded by the old recursive `nodeCount`). `AST.nodeCount` is now iterative (explicit stack), and the perf test measures a wide list literal (constant tree depth; 2,000 vs 8,000 items, 4× input). Deep right-nesting remains bounded only by input size; logged in `docs/OPEN_QUESTIONS.md`.
+
+### P2.3 Evaluator and fuel — DONE (2026-11-19, branch `phase/P2-ruleset-dsl`)
+
+Deliverables: tree-walking `Evaluator` over `TypedExpr` with `Value` and `EvaluationEnvironment` (§7.3 bindings), checked integer arithmetic (overflow, division), fuel budgets (§7.4), `ConstantFolding`, bounded `CompiledExpressionCache` (key: ruleset hash + JSON pointer, oldest-entry eviction), builtin/macro dispatch (§7.4) with def-body memoization and host-only rejection at evaluation time.
+
+**Acceptance evidence:**
+- *Evaluation deterministic* — `repeatedEvaluationsAgree`, `defChainSweepIsDeterministic`, `pureArithmeticSweepMatchesIntegerMath`; no clock, UUID, system randomness or floating point anywhere in the evaluator (arithmetic is checked integers throughout; `banned-double` lint enforces the test side).
+- *Fuel exhaustion raises a fault rather than hanging* — `fuelExhaustionFaults` (plus `indexOutOfRangeFaults` and `recursiveDefBodiesAreRejected` at evaluation time).
+- *Overflow and division by zero raise faults* — `overflowFaults`, `divisionByZeroFaults`, `sumOverflowFaults`.
+- *Median 1 µs for `leadAllowed`-sized expressions* — release-mode `leadAllowedMedianUnderMicrosecond` (`#if !DEBUG`): **median 291 ns** against the 1,000 ns budget (4,000 samples, `swift test -c release`, Packages/RulesetKit).
+- Constant folding — `constantsFold`, `foldedConstantsEvaluateWithoutEnvironment`; impure and faulting subtrees stay unfolded (`impureSubtreesStayUnfolded`, `faultingConstantsStayUnfolded`); `shortCircuitPrunesFaultingBranches`; cache round-trip in `cacheRoundTrip`.
+- `swift test` (Packages/RulesetKit): **73/73 pass** (11 suites); CardExpr unchanged (13/13).
+- Lint: `make lint` all four checks clean — SwiftLint main **0**, SwiftLint pure **0**, swift-format `--strict` **0**. Files split for `file_length` (`EvaluatorBuiltins`/`EvaluatorMacros`; evaluator tests in three files); swift-format↔SwiftLint `opening_brace` conflicts resolved by restructuring the affected conditions to be format-stable under both tools.

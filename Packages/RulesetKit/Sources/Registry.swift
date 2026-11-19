@@ -101,7 +101,8 @@ public enum PlayersField: String, Sendable {
     /// The field's expression type.
     public var type: ExprType {
         switch self {
-        case .count, .active: return .int
+        case .count: return .int
+        case .active: return .int
         }
     }
 }

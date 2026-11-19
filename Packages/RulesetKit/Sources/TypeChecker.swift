@@ -226,6 +226,9 @@ public struct TypeChecker {
         if root == "trick", let field = TrickField(rawValue: name) {
             return (field.type, .trickField(field))
         }
+        if root == "deal", name == "index" {
+            return (.int, .dealIndex)
+        }
         guard Self.contextRoots.contains(root) else { return nil }
         if case .record(let record) = context.contextual[root], let field = record.fields[name] {
             return (field, .contextual(root))
@@ -268,7 +271,7 @@ public struct TypeChecker {
     // MARK: Lists and indexing
 
     private mutating func checkList(_ ast: AST, scope: Scope) throws -> TypedExpr {
-        guard case .list(let items, let span) = ast else {
+        guard case .list(let items, _) = ast else {
             throw TypeError(span: ast.span, message: "internal: not a list node")
         }
         guard !items.isEmpty else {

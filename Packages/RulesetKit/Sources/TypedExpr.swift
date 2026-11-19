@@ -45,12 +45,20 @@ public struct TypedExpr: Sendable {
     public let type: ExprType
     public let children: [TypedExpr]
     public let binding: Binding?
+    /// A folded constant (§7.4): when set, evaluation returns this value
+    /// directly without walking the tree. Set only by the constant
+    /// folder, and only for subexpressions that cannot fault and read
+    /// nothing from the environment.
+    public let constant: Value?
 
-    public init(node: AST, type: ExprType, children: [TypedExpr] = [], binding: Binding? = nil) {
+    public init(
+        node: AST, type: ExprType, children: [TypedExpr] = [], binding: Binding? = nil, constant: Value? = nil
+    ) {
         self.node = node
         self.type = type
         self.children = children
         self.binding = binding
+        self.constant = constant
     }
 
     /// The source span of the underlying node.
