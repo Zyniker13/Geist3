@@ -59,8 +59,8 @@ public struct VarRef: Sendable, Hashable {
     }
 }
 
-/// A declared scoped variable from the ruleset's `vars` section.
-public struct VarDecl: Sendable {
+/// A declared scoped variable: typed name binding for the evaluator context.
+public struct VarBinding: Sendable {
     public let scope: VarScope
     public let type: ExprType
     /// Initializer expression text; the loader type-checks it separately.
@@ -211,10 +211,12 @@ public let cardRecord = RecordType(
 )
 
 /// The contract record (`contract.level`, `contract.strain`,
-/// `contract.doubled`).
+/// `contract.doubled`, `contract.redoubled`). `doubled` is true for any
+/// doubled or redoubled contract; `redoubled` distinguishes redoubles for
+/// `bridge.score`'s multipliers.
 public let contractRecord = RecordType(
     name: "contract",
-    fields: ["strain": .suit, "level": .int, "doubled": .bool]
+    fields: ["strain": .suit, "level": .int, "doubled": .bool, "redoubled": .bool]
 )
 
 /// The call record (`call.bid`, `call.strain`, `call.doubled`).
@@ -229,12 +231,29 @@ public let bridgeScoreRecord = RecordType(
     fields: ["below": .int, "above": .int, "defenders": .int, "total": .int]
 )
 
+/// The rummy rules record `rummy.melds` takes (`rummyRules.minSet`,
+/// `rummyRules.minRun`, `rummyRules.aceHigh`, `rummyRules.wrap`,
+/// `rummyRules.wildRanks`).
+public let rummyRulesRecord = RecordType(
+    name: "rummy.rules",
+    fields: ["minSet": .int, "minRun": .int, "aceHigh": .bool, "wrap": .bool,
+             "wildRanks": .list(.string)]
+)
+
+/// The record `rummy.melds` returns (`meldResult.melds`, `meldResult.deadwood`).
+public let rummyMeldRecord = RecordType(
+    name: "rummy.meldResult",
+    fields: ["melds": .list(.list(.card)), "deadwood": .int]
+)
+
 /// Record types every ruleset can name in def signatures and var types.
 public let canonicalRecords: [String: RecordType] = [
     "card": cardRecord,
     "contract": contractRecord,
     "call": callRecord,
     "bridge.scoreResult": bridgeScoreRecord,
+    "rummy.rules": rummyRulesRecord,
+    "rummy.meldResult": rummyMeldRecord,
 ]
 
 /// Contextual bindings every expression can rely on (§7.3), regardless of
@@ -284,7 +303,9 @@ public let builtinRegistry: [BuiltinID: [ExprSignature]] = {
 
 /// The natives the reference rulesets call (§5.8). The remaining §5.8
 /// natives join this table when their games are implemented; references
-/// to unregistered names are validation errors.
+/// to unregistered names are validation errors. Reference implementations
+/// live in `StandardNatives`; `bridge.honors` resolves its team through the
+/// teams table the host installs (`StandardNatives.all(teams:)`).
 public let nativeRegistry: [String: NativeSignature] = [
     "cribbage.handScore": NativeSignature(
         [.list(.card), .card, .bool],
@@ -298,6 +319,10 @@ public let nativeRegistry: [String: NativeSignature] = [
     "bridge.honors": NativeSignature(
         [.list(.list(.card)), .optional(.suit), .team],
         result: .int
+    ),
+    "rummy.melds": NativeSignature(
+        [.list(.card), .record(rummyRulesRecord)],
+        result: .record(rummyMeldRecord)
     ),
 ]
 

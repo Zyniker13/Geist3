@@ -14,7 +14,7 @@ public struct TypeContext: Sendable {
     /// Option types by name (`options.x`).
     public var options: [String: ExprType]
     /// Scoped variables by name (`match.x`, `deal.x`).
-    public var vars: [String: VarDecl]
+    public var vars: [String: VarBinding]
     /// Zones by id (`zone(…)`); visibility drives host-only checking.
     public var zones: [String: ZoneInfo]
     /// Natives by dotted name (`cribbage.handScore`).
@@ -31,7 +31,7 @@ public struct TypeContext: Sendable {
     public init(
         evaluation: EvaluationContext = .host,
         options: [String: ExprType] = [:],
-        vars: [String: VarDecl] = [:],
+        vars: [String: VarBinding] = [:],
         zones: [String: ZoneInfo] = [:],
         natives: [String: NativeSignature] = [:],
         defs: [String: DefSignature] = [:],

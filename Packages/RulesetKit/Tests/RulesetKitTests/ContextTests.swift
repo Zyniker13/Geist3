@@ -32,10 +32,10 @@ struct ContextTests {
 
     @Test func matchAndDealVariables() throws {
         let configure: (inout TypeContext) -> Void = { context in
-            context.vars["score"] = VarDecl(scope: .match, type: .int, initial: "0")
-            context.vars["leadSuit"] = VarDecl(scope: .deal, type: .optional(.suit), initial: "null")
-            context.vars["scoreTeam"] = VarDecl(scope: .teamMatch, type: .int, initial: "0")
-            context.vars["taken"] = VarDecl(scope: .seatDeal, type: .list(.card), initial: "[]")
+            context.vars["score"] = VarBinding(scope: .match, type: .int, initial: "0")
+            context.vars["leadSuit"] = VarBinding(scope: .deal, type: .optional(.suit), initial: "null")
+            context.vars["scoreTeam"] = VarBinding(scope: .teamMatch, type: .int, initial: "0")
+            context.vars["taken"] = VarBinding(scope: .seatDeal, type: .list(.card), initial: "[]")
         }
         #expect(try Check.apply("match.score", configure: configure).type == .int)
         #expect(try Check.apply("deal.leadSuit == null", configure: configure).type == .bool)
@@ -170,7 +170,7 @@ struct ContextTests {
     @Test func bindings() throws {
         let configure: (inout TypeContext) -> Void = { context in
             context.options["gameType"] = .string
-            context.vars["score"] = VarDecl(scope: .match, type: .int, initial: "0")
+            context.vars["score"] = VarBinding(scope: .match, type: .int, initial: "0")
         }
         #expect(try Check.apply("options.gameType", configure: configure).binding == .option("gameType"))
         #expect(

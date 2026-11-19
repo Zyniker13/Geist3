@@ -78,9 +78,9 @@ enum Eval {
 
     /// A configure block declaring the three rule variables used here.
     static func vars(_ context: inout TypeContext) {
-        context.vars[roundsRef.name] = VarDecl(scope: .match, type: .int, initial: "0")
-        context.vars[scoresRef.name] = VarDecl(scope: .seatDeal, type: .int, initial: "0")
-        context.vars[pointsRef.name] = VarDecl(scope: .teamMatch, type: .int, initial: "0")
+        context.vars[roundsRef.name] = VarBinding(scope: .match, type: .int, initial: "0")
+        context.vars[scoresRef.name] = VarBinding(scope: .seatDeal, type: .int, initial: "0")
+        context.vars[pointsRef.name] = VarBinding(scope: .teamMatch, type: .int, initial: "0")
     }
 
     /// An env block with values for the three declared variables,

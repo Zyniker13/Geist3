@@ -79,7 +79,7 @@ struct EvaluatorDefTests {
 
     @Test func defsWithStateAndChains() throws {
         var context = TypeContext(evaluation: .host)
-        context.vars["scores"] = VarDecl(scope: .seatDeal, type: .int, initial: "0")
+        context.vars["scores"] = VarBinding(scope: .seatDeal, type: .int, initial: "0")
         context.defs["leadScore"] = .init(
             name: "leadScore", params: ["s"], types: [.seat], result: .int,
             body: try Parser().parse("deal.scores[s]").ast)

@@ -87,7 +87,7 @@ struct BuiltinTests {
         // `deal.trump` is a deal-scoped variable of type `suit?`;
         // colorOf unifies optional-to-value.
         let configure: (inout TypeContext) -> Void = { context in
-            context.vars["trump"] = VarDecl(scope: .deal, type: .optional(.suit), initial: "null")
+            context.vars["trump"] = VarBinding(scope: .deal, type: .optional(.suit), initial: "null")
         }
         #expect(try Check.apply("colorOf(deal.trump)", configure: configure).type == .string)
     }
@@ -95,7 +95,7 @@ struct BuiltinTests {
     @Test func bridgeScoreByOpponentsTeam() throws {
         let configure: (inout TypeContext) -> Void = { context in
             context.contextual["dt"] = .team
-            context.vars["score"] = VarDecl(scope: .teamMatch, type: .int, initial: "0")
+            context.vars["score"] = VarBinding(scope: .teamMatch, type: .int, initial: "0")
         }
         let typed = try Check.apply("match.score[opponents(dt)]", configure: configure)
         #expect(typed.type == .int)
