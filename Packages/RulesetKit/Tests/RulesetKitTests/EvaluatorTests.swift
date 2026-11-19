@@ -305,6 +305,13 @@ struct EvaluatorBuiltinTests {
     }
 
     @Test func nativeFaultsPropagate() throws {
+        // Named function, not a closure literal: Swift 6.3 mis-types the
+        // thrown expression as `any Error` inside a closure literal
+        // annotated with a typed-throws type (fixed in 6.4).
+        @Sendable func throwingNative(_ args: [Value]) throws(EvaluationFault) -> Value {
+            throw EvaluationFault(
+                kind: .unsupportedValue, ruleId: nil, pointer: "/native", message: "boom")
+        }
         let conf: (inout TypeContext) -> Void = {
             $0.natives["deal.shuffle"] = .init([.int], result: .int)
         }
@@ -312,10 +319,6 @@ struct EvaluatorBuiltinTests {
             $0.natives["deal.shuffle"] = { _ in .int(6) }
         }
         #expect(try Eval.run("deal.shuffle(2)", configure: conf, env: env) == .int(6))
-        let throwingNative: @Sendable ([Value]) throws(EvaluationFault) -> Value = { _ in
-            throw EvaluationFault(
-                kind: .unsupportedValue, ruleId: nil, pointer: "/native", message: "boom")
-        }
         let throwing: (inout EvaluationEnvironment) -> Void = {
             $0.natives["deal.shuffle"] = throwingNative
         }
