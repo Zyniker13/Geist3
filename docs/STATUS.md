@@ -116,3 +116,43 @@ Deliverables: tree-walking `Evaluator` over `TypedExpr` with `Value` and `Evalua
 - Constant folding — `constantsFold`, `foldedConstantsEvaluateWithoutEnvironment`; impure and faulting subtrees stay unfolded (`impureSubtreesStayUnfolded`, `faultingConstantsStayUnfolded`); `shortCircuitPrunesFaultingBranches`; cache round-trip in `cacheRoundTrip`.
 - `swift test` (Packages/RulesetKit): **73/73 pass** (11 suites); CardExpr unchanged (13/13).
 - Lint: `make lint` all four checks clean — SwiftLint main **0**, SwiftLint pure **0**, swift-format `--strict` **0**. Files split for `file_length` (`EvaluatorBuiltins`/`EvaluatorMacros`; evaluator tests in three files); swift-format↔SwiftLint `opening_brace` conflicts resolved by restructuring the affected conditions to be format-stable under both tools.
+
+### P2.4 Native functions — in progress (branch `phase/P2-ruleset-dsl`)
+
+Deliverables: `StandardNatives.swift` with the five §5.8 natives (`cribbage.handScore`, `cribbage.pegPoints`, `bridge.score`, `bridge.honors`, `rummy.melds`), signatures pinned in `Registry.swift`, records (`contractRecord`, `rummyRulesRecord`, `rummyMeldRecord`) and the `bridgeScoreRecord` result. Semantics in ADR-0025.
+
+- Frozen-vector generator: `gen-native-vectors.py` (scratch, independent Python scorer) produces `NativeTestData.swift` — 500 cribbage hands (incl. the 29/28/24/zero anchors) and 475 bridge deals (full table sweep ×3 modes × vulnerability × multiplier).
+- `bridgeScoreKeyContracts`, `bridgeScoreFrozenTable`, `bridgeScoreByOpponentsTeam`, `bridgeScoreFaults` all pass after fixing the doubled undertrick penalty (laws: non-vul 100/300/500/800…, vul 200/500/800…, redoubled ×2) and correcting two rubber anchors — rubber has no per-deal game/part bonus (BRG-5.1: game is a below-line match-store concept; slam bonuses remain per-deal above-line).
+- Remaining: full-suite rerun (chasing a `Range requires lowerBound <= upperBound` crash seen in one earlier full run), then the P2.5–P2.9 work.
+- Full-suite debug: the earlier "Range" crash was two things — an unguarded
+  reference-DP window in the rummy cross-check (fixed) and stale test-authoring
+  errors, not engine bugs. After a correct-workdir rerun the suite was down to
+  7 failures, all in test data or missing input validation:
+  1. DSL string literals are single-quoted only (`'rubber'`) — the lexer has no
+     double-quote string; three test sources (type-check sweep, consistency)
+     were rewritten.
+  2. `bridge.honors` fixed cases used suit-first card ids (`"H2"`) and a
+     two-letter rank (`"KA"`); all rewritten rank-first (`"SA"` etc.).
+  3. `cribbage.pegPoints` [5,5,5] case: the third five completes BOTH the pair
+     royal (6) and the fifteen 5+5+5 (2) → 8, not 6.
+  4. `rummy.melds` full-board case: two partitions tie at deadwood 2 (A-4 run +
+     four fives vs A-5 run + three fives); expectation aligned with the
+     deterministic search's first minimum; aceHigh case moved to diamonds (the
+     heart Q-K-A was already covered by the wrap case).
+  5. Impl hardening: `cribbage.handScore` now faults on duplicate hand cards or
+     a starter duplicating a hand card; `bridge.honors` now validates the trump
+     string is C/D/H/S (or null) after the count guards.
+- Rerun in progress.
+
+#### P2.4 honors failures resolved — card ids, not faults (session 2026-11-19)
+
+- `<not evaluated>` in swift-testing failure output is NOT a throw: it is how a
+  failed inline `#expect(try f(...) == v)` renders (no capturable LHS value).
+  Do/catch + print instrumentation showed the EW calls returned normally.
+- Real root cause: hand-authored test data in `honorsFixedCases` still had
+  suit-first/backwards card ids — `"SA"` (rank S, suit A), `"SK"/"SQ"/"SJ"`
+  (rank S, suit K/Q/J). Impl counted honors correctly; ids were junk.
+- Fixes: `SA→AS`, `SK/SQ/SJ→KS/QS/JS`; normalized remaining junk-tolerant ids
+  (`H2→2H`, `D2/D3→2D/3D`) in fault/typeCheck/consistency tests.
+- `honorsFixedCases` + `honorsFaults` pass in isolation; full re-run in progress
+  (`/tmp/p2.4-full-run3.log`).
