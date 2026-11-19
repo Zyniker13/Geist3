@@ -335,3 +335,28 @@ on this branch until the G2 merge):
   4/4 reference rulesets OK; `swiftlint` on touched files: 0 errors
   (one pre-existing cyclomatic-complexity warning in `parseNumber`,
   untouched by this change); `swift build -c release` rules-cli OK.
+
+#### P2 acceptance prep — CardExpr 300+ cases, per-package coverage bar, lint debt (session 2026-11-19)
+
+- CardExpr parser test tables expanded to **339 parametrized
+  cases** (P2.1 bar: >= 300): shapes, chains/precedence, error cases,
+  invalid characters, spans, positions, node counts. Six initial
+  expectation failures probed with a throwaway `ZZProbe` target and
+  corrected against actual parser behavior (in binds tighter than &&,
+  ternary right-associative, `a.b[0].c` node count 5, position of
+  `a\n$b`, eof error message). `swift test` (Packages/CardExpr): 13/13.
+- Coverage: `Tools/coverage-report.sh` gained `COVERAGE_THRESHOLDS`
+  (per-package overrides); `make coverage-check` passes
+  `COVERAGE_THRESHOLDS="CardExpr=95"` so the G2 P2.1 95% bar is
+  enforced without lowering the general 90% line. CardExpr measures
+  **543/543 lines = 100.0%**.
+- G2 case added to the `make gate` target (`schema-check` included).
+- Lint debt: the repo-wide `make lint` surfaced pre-existing errors
+  (P2.5–P2.9 files predated a full format pass): SchemaExport.swift
+  `type_body_length` — lesson schema split into
+  `SchemaExport+Lesson.swift` (shared builders made `internal`);
+  repo-wide `make format` (whitespace only, suites unchanged);
+  `check-imports.sh` allow-list glob now matches `Tools/rules-cli.d`
+  (its `@_spi(HostOnly) @_spi(Tools) import RulesetKit` is exactly the
+  ARCHITECTURE §3-sanctioned use). `make lint` now exits 0 with
+  SwiftLint errors 0 / swift-format 0.
