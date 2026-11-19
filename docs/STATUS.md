@@ -360,3 +360,34 @@ on this branch until the G2 merge):
   (its `@_spi(HostOnly) @_spi(Tools) import RulesetKit` is exactly the
   ARCHITECTURE §3-sanctioned use). `make lint` now exits 0 with
   SwiftLint errors 0 / swift-format 0.
+
+## G2 — P2 Ruleset DSL and Validation (GLM-SELF; ASYNC REVIEW: CLAUDE) — accumulating
+
+Phase tasks P2.1–P2.9 are implemented on branch `phase/P2-ruleset-dsl`.
+
+### G2 checks and evidence (accumulating)
+
+- **CardExpr coverage ≥ 95% (P2.1)** — `make coverage-check` with
+  `COVERAGE_THRESHOLDS="CardExpr=95"`: **CardExpr 543/543 lines = 100.0%**;
+  CardModel 94.3%, RulesEngine 96.7%, ToyGame 96.6% (all ≥ the general 90%
+  line).
+- **Validator corpus 60/60 (P2.7)** — `make validate` (`Tools/rules-cli
+  validate`): "corpus: 61 passed, 0 failed" — the 60 broken corpus cases in
+  `docs/rulesets/corpus/` each yield the expected error code + message
+  fragment per `expected.tsv`, plus the `_valid-template.json` canary
+  validates clean. The suite-side check (`corpusMatchesExpectations`)
+  additionally asserts the manifest contains exactly 60 cases.
+- **Resolver tests pass (P2.6)** — `ResolverTests` 29/29 in
+  `Packages/RulesetKit` (`swift test`).
+- **Four reference rulesets decode and validate** — decode → encode → decode
+  round-trip identical (P2.5 `SchemaRoundTripTests`); `rules-cli validate`
+  passes all six `docs/plan/rulesets/*.json` documents (4 rulesets + 2
+  overlays); all four also validate against the committed
+  `ruleset.schema.json` in CI (`scripts/validate-schemas.py`, P2.9).
+- **Simulator (P2.8)** — `make sim` (`rules-cli sim --seeds 200` on the toy
+  JSON game): 200 seeds ≪ 5 s, repeat-seed reproducible; 6 SimulationTests.
+- **CardExpr parser bar (P2.1)** — **339 parametrized parser cases** (≥ 300),
+  including precedence, error codes with column numbers, and the 10,000-string
+  fuzz (`fuzzNeverTraps`); 13/13 CardExpr tests.
+- **Consolidated final gate** — `make gate PHASE=P2`: running; final evidence
+  (log, exit, timings) recorded below when it completes.
