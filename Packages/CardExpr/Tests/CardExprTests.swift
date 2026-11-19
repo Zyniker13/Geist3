@@ -67,6 +67,12 @@ private let tokenCases: [(String, [String])] = [
     ("a.b(c,d)", ["id(a)", "op(.)", "id(b)", "op(()", "id(c)", "op(,)", "id(d)", "op())", "eof"]),
     ("a(1,2)", ["id(a)", "op(()", "int(1)", "op(,)", "int(2)", "op())", "eof"]),
     ("a()", ["id(a)", "op(()", "op())", "eof"]),
+    ("-1", ["op(-)", "int(1)", "eof"]),
+    ("!true", ["op(!)", "kw(true)", "eof"]),
+    ("'a b'", ["str('a b')", "eof"]),
+    ("a[0].b", ["id(a)", "op([)", "int(0)", "op(])", "op(.)", "id(b)", "eof"]),
+    ("a&&b||c", ["id(a)", "op(&&)", "id(b)", "op(||)", "id(c)", "eof"]),
+    ("a in [1]", ["id(a)", "kw(in)", "op([)", "int(1)", "op(])", "eof"]),
 ]
 
 // MARK: - Parse shapes (source → canonical form)
@@ -126,6 +132,48 @@ private let shapeCases: [(String, String)] = [
     ("a.b(1)", "a.b(1)"), ("a.b(1).c", "a.b(1).c"),
     ("a.b(1).c(2)", "a.b(1).c(2)"), ("a.b(1)[2]", "a.b(1)[2]"),
     ("a[1](2)", "a[1](2)"), ("a[1](2).b", "a[1](2).b"),
+    // Chains and mixed precedence.
+    ("1+2+3+4", "1 + 2 + 3 + 4"),
+    ("1*2*3*4", "1 * 2 * 3 * 4"),
+    ("1-2-3-4", "1 - 2 - 3 - 4"),
+    ("1/2/3/4", "1 / 2 / 3 / 4"),
+    ("1%2%3", "1 % 2 % 3"),
+    ("1+2%3", "1 + 2 % 3"),
+    ("1*2%3+4", "1 * 2 % 3 + 4"),
+    ("a-b-c", "a - b - c"),
+    ("--a", "--a"),
+    ("-a.b", "-a.b"),
+    ("-a[0]", "-a[0]"),
+    ("(a+b)*c", "(a + b) * c"),
+    ("(a?b:c)+1", "(a ? b : c) + 1"),
+    ("(a in xs)&&b", "a in xs && b"),
+    ("!(a in xs)", "!(a in xs)"),
+    ("-(a?b:c)", "-(a ? b : c)"),
+    ("[a[0]]", "[a[0]]"),
+    ("[[a]]", "[[a]]"),
+    ("[[a,b],[c]]", "[[a, b], [c]]"),
+    ("[1,[2,[3]]]", "[1, [2, [3]]]"),
+    ("a.b.c.d", "a.b.c.d"),
+    ("a[0][1][2]", "a[0][1][2]"),
+    ("a.b[0].c[1].d(2)", "a.b[0].c[1].d(2)"),
+    ("a.b.c(1,2,3)", "a.b.c(1, 2, 3)"),
+    ("f(a?b:c,[1,2])", "f(a ? b : c, [1, 2])"),
+    ("!a&&b||!c&&d", "!a && b || !c && d"),
+    ("a&&b||c&&d||e", "a && b || c && d || e"),
+    ("!(a&&b)||c", "!(a && b) || c"),
+    ("1<2==true", "1 < 2 == true"),
+    ("a==b&&c==d", "a == b && c == d"),
+    ("a!=b<c", "a != b < c"),
+    ("x in [1,2,3]", "x in [1, 2, 3]"),
+    ("x in a.b", "x in a.b"),
+    ("-1<2", "-1 < 2"),
+    ("!true==false", "!true == false"),
+    ("(1+2)*(3+4)", "(1 + 2) * (3 + 4)"),
+    ("a==true?x:y", "a == true ? x : y"),
+    ("[a&&b,c||d]", "[a && b, c || d]"),
+    ("a[0]?b:c", "a[0] ? b : c"),
+    ("a.b?c:d", "a.b ? c : d"),
+    ("a&&b in xs", "a && b in xs"),
 ]
 
 // MARK: - Parse errors (source → expected message fragment)
@@ -167,6 +215,28 @@ private let parseErrorCases: [(String, String)] = [
     ("a.b.", "expected an identifier after '.' but found eof"),
     ("a in b in", "unexpected end of input"),
     ("a ? b : c ?", "unexpected end of input"),
+    ("[1,2", "expected ']' but found eof"),
+    ("(1+2", "expected ')' but found eof"),
+    ("a[", "unexpected end of input"),
+    ("a(", "unexpected end of input"),
+    ("[", "unexpected end of input"),
+    ("[1,", "unexpected end of input"),
+    ("a?", "unexpected end of input"),
+    ("a?b:c?d", "expected ':' but found eof"),
+    ("(", "unexpected end of input"),
+    (")", "unexpected token ')'"),
+    ("]", "unexpected token ']'"),
+    (",", "unexpected token ','"),
+    (":", "unexpected token ':'"),
+    ("?", "unexpected token '?'"),
+    ("1..", "expected an identifier after '.' but found op(.)"),
+    ("a.1", "expected an identifier after '.' but found int(1)"),
+    ("a.b[0", "expected ']' but found eof"),
+    ("a(1", "expected ')' but found eof"),
+    ("a(1,2", "expected ')' but found eof"),
+    ("in a", "unexpected token 'in'"),
+    ("a 1", "unexpected token '1'"),
+    ("1 in", "unexpected end of input"),
 ]
 
 // MARK: - Lexer errors (source → expected message fragment)
@@ -191,6 +261,21 @@ private let lexerErrorCases: [(String, String)] = [
     ("a}b", "unexpected character '}'"),
     ("a\\b", "unexpected character '\\'"),
     ("a`b", "unexpected character '`'"),
+    ("$", "unexpected character '$'"),
+    ("\"", "unexpected character '\"'"),
+    ("#", "unexpected character '#'"),
+    ("@", "unexpected character '@'"),
+    (";", "unexpected character ';'"),
+    ("~", "unexpected character '~'"),
+    ("^", "unexpected character '^'"),
+    ("{", "unexpected character '{'"),
+    ("}", "unexpected character '}'"),
+    ("\\", "unexpected character '\\'"),
+    ("|", "unexpected character '|'"),
+    ("&", "unexpected character '&'"),
+    ("=", "unexpected character '='"),
+    ("$$$", "unexpected character '$'"),
+    ("a b $", "unexpected character '$'"),
 ]
 
 // MARK: - Spans
@@ -226,17 +311,24 @@ private let spanCases: [SpanCase] = [
     SpanCase("!a", 1, 1, 1, 2),
     SpanCase("-(a+b)", 1, 1, 1, 5),
     SpanCase("[1, 2]", 1, 1, 1, 6),
+    SpanCase("1 + 2 + 3", 1, 1, 1, 9),
+    SpanCase("a +\nb\n+ c", 1, 1, 3, 3),
+    SpanCase("[1,\n2]", 1, 1, 2, 2),
+    SpanCase("a ?\nb : c", 1, 1, 2, 5),
 ]
 
 private let parseErrorPositions: [(String, Int, Int)] = [
     // (source, line, column) of the reported error position.
     ("1 +", 1, 4), ("(1", 1, 3), ("a.", 1, 3), ("[1,]", 1, 4),
     ("a\nb", 2, 1), ("a in\n", 2, 1),
+    ("(1 +\n", 2, 1), ("[1,\n]", 2, 1),
+    ("a\n\nb", 3, 1), ("x in\n", 2, 1),
 ]
 
 private let lexerErrorPositions: [(String, Int, Int)] = [
     ("a$", 1, 2), ("a\n$", 2, 1), ("'ab", 1, 1),
     ("99999999999999999999", 1, 1), ("  $", 1, 3),
+    ("a\n$b", 2, 1), ("\n\n$", 3, 1), ("'ab\ncd'", 1, 1),
 ]
 
 // MARK: - Node counts
@@ -247,6 +339,21 @@ private let nodeCountCases: [(String, Int)] = [
     ("a(1,2)", 4), ("a()", 2), ("[1,2,3]", 4), ("[]", 1),
     ("a?b:c", 4), ("!a", 2), ("((1))", 1), ("a[1]", 3),
     ("a.b(c.d(e.f))", 8),
+    ("1+2+3+4", 7),
+    ("a.b.c.d", 4),
+    ("a[0][1]", 5),
+    ("[[1],[2]]", 5),
+    ("[[]]", 2),
+    ("a(1,2,3)", 5),
+    ("a?b:c?d:e", 7),
+    ("!-a", 3),
+    ("-!a", 3),
+    ("x in xs", 3),
+    ("1<2<3", 5),
+    ("a&&b&&c", 5),
+    ("''", 1),
+    ("a.b[0].c", 5),
+    ("f(1).g", 4),
 ]
 
 // MARK: - Suites
