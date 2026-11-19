@@ -100,7 +100,7 @@ conformance:
 	Tools/rules-cli conformance
 
 sim:
-	Tools/rules-cli sim $(or $(N),200)
+	Tools/rules-cli sim --seeds $(or $(N),200) Packages/RulesetKit/Tests/RulesetKitTests/Fixtures/toy.ruleset.json
 
 fuzz-quick:
 	Tools/net-fuzz quick
