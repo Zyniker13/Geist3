@@ -457,6 +457,10 @@ public struct OptionDecl: Equatable, Sendable, JSONCodable {
     public var rules: [String]
     public var group: String?
     public var locked: Bool?
+    /// The resolved value written in during resolution (§8.1): the table's
+    /// choice, or the (possibly overlay-patched) default. Absent in source
+    /// files; only decoded documents carry it.
+    public var value: JSON?
 
     public init(json: JSON, path: String) throws(SchemaError) {
         var reader = try FieldReader(json, path: path)
@@ -471,6 +475,7 @@ public struct OptionDecl: Equatable, Sendable, JSONCodable {
         rules = try reader.array("rules")
         group = try reader.optionalString("group")
         locked = try reader.optionalBool("locked")
+        value = reader.optionalValue("value")
         try reader.rejectLeftovers()
     }
 
@@ -488,6 +493,7 @@ public struct OptionDecl: Equatable, Sendable, JSONCodable {
         pairs.append(("rules", .array(rules.map { .string($0) })))
         if let group { pairs.append(("group", .string(group))) }
         if let locked { pairs.append(("locked", .bool(locked))) }
+        if let value { pairs.append(("value", value)) }
         return .object(pairs.map { JSONField(key: $0.0, value: $0.1) })
     }
 }
@@ -498,11 +504,14 @@ public struct RuleDecl: Equatable, Sendable, JSONCodable {
     public var id: String
     public var text: Text
     public var explain: Text?
+    /// Marks tournament-official text that overlays may not touch (§8.2).
+    public var locked: Bool?
 
     public init(id: String, text: Text) {
         self.id = id
         self.text = text
         explain = nil
+        locked = nil
     }
 
     public init(json: JSON, path: String) throws(SchemaError) {
@@ -510,6 +519,7 @@ public struct RuleDecl: Equatable, Sendable, JSONCodable {
         id = try reader.string("id")
         text = try reader.decoded("text")
         explain = try reader.optionalDecoded("explain")
+        locked = try reader.optionalBool("locked")
         try reader.rejectLeftovers()
     }
 
@@ -519,6 +529,7 @@ public struct RuleDecl: Equatable, Sendable, JSONCodable {
             ("text", text.json),
         ]
         if let explain { pairs.append(("explain", explain.json)) }
+        if let locked { pairs.append(("locked", .bool(locked))) }
         return .object(pairs.map { JSONField(key: $0.0, value: $0.1) })
     }
 }

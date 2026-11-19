@@ -174,9 +174,9 @@ struct SchemaRoundTripTests {
 
     @Test func overlayDecodesVariantPatchOps() throws {
         let doc = try Schema.decodeOverlay(try read("contract-bridge.chicago.variant.json"))
-        #expect(doc.patch.count == 8)
+        #expect(doc.patch.count == 7)
         let first = try #require(doc.patch.first)
-        #expect(first.op == "replace")
+        #expect(first.op == "add")
         #expect(first.path.hasPrefix("/"))
         #expect(doc.kind == "variant")
         #expect(doc.extends == "contract-bridge.rubber@^1.0")

@@ -110,6 +110,13 @@ public struct RulesetDocument: Equatable, Sendable, JSONCodable {
         rules = try reader.optionalArray("rules")
         zones = try reader.optionalArray("zones")
         vars = try reader.optionalKeyedFields("vars")
+        // Each vars entry must be a well-formed VarDecl: garbage written by a
+        // patch must fail the final re-decode loudly (§8.2 constraint 6).
+        if let vars {
+            for field in vars {
+                _ = try VarDecl(json: field.value, path: "vars.\(field.key)")
+            }
+        }
         defs = try reader.optionalKeyedFields("defs")
         setup = try reader.optionalDecoded("setup")
         phases = try reader.optionalArray("phases")

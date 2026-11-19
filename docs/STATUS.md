@@ -174,3 +174,34 @@ Deliverables: `StandardNatives.swift` with the five §5.8 natives (`cribbage.han
 - Full suite: **102/102 passing** (91 prior + 11 SchemaRoundTripTests).
 - Remaining for P2.5 acceptance: none — round-trip of the reference corpus is
   the phase's criterion; commit + push next.
+
+#### P2.6 resolver — 131/131 green (session 2026-11-19)
+
+- `Sources/Schema/Resolver.swift` (~800 lines): `resolve(base:variant:house:)`
+  applying layers in order; ID-addressed pointer engine (`/options/byId/<id>/…`,
+  `/rules/byId/<id>/…`) that never uses numeric indexes (rejected loudly);
+  patch ops add/replace/remove/append with same-path conflict detection inside
+  one overlay; locked options/rules reject overlay writes and table overrides;
+  semver `extends` ranges (`^`, exact, bare-major); canonical form via sorted
+  keys + SHA-256 (`hash` stable across runs, cross-checked against an
+  independent Python canonicalizer); provenance map (base/variant/house roles,
+  source overlay id, note passthrough); `RulesDiff` sorted, one line per rule.
+- Defects fixed en route: `rebuild()`/`mutate()` must consume `byId`/id pairs
+  when descending (house-tier option patches were silently dropped;
+  element-terminal pointers like `/options/byId/flag` now replace/remove the
+  element itself); `appendToArray` read the array off the wrong container;
+  `collectLocked` records byId pointers, not numeric indexes; Chicago overlay
+  merged its `replace`+`append` on one effects path (two patches to one path in
+  one overlay are an error per §8.3) and its `/vars/dealsPlayed` op corrected
+  to `add` (rubber base has no such var).
+- Closed-shape follow-through: `RulesetDocument` decode now validates each
+  `vars` entry as a `VarDecl`, so a patch writing a scalar where a var body
+  must be fails the final re-decode loudly (§8.2 constraint 6).
+- Tests: `ResolverTests` 29/29 — layering order and house-over-variant,
+  provenance roles/notes, locked rejection (option + table), byId descent,
+  element add/replace/remove, conflict classes, numeric-index refusal, extends
+  mismatch + version ranges (`^` same major ok, older major no, `banana`/no-@
+  fail), golden hashes vs Python, hash stability, diff (rules deduped+sorted,
+  option default+value lines), garbage-in-vars re-decode refusal.
+  Full suite: **131/131 passing**.
+- ADR-0025/0026 stand; no new ADRs needed for P2.6.
