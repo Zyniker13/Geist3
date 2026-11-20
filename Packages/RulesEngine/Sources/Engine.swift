@@ -82,10 +82,18 @@ public enum EngineDealerRotation: String, Sendable {
 public struct PhaseConfig: Sendable {
     public let id: String
     public let mechanic: AnyMechanic
+    /// A `when` gate: the phase is skipped while this evaluates false
+    /// (§5.6). Evaluated each time the phase would be entered. Nil
+    /// means unconditional.
+    let gate: (@Sendable (GameState) throws -> Bool)?
 
-    public init(id: String, mechanic: AnyMechanic) {
+    public init(
+        id: String, mechanic: AnyMechanic,
+        gate: (@Sendable (GameState) throws -> Bool)? = nil
+    ) {
         self.id = id
         self.mechanic = mechanic
+        self.gate = gate
     }
 }
 
@@ -292,8 +300,7 @@ public struct Engine: Sendable {
         guard let first = phases.first else {
             throw RuleViolation.engineFault(ruleId: nil, pointer: "engine has no phases")
         }
-        state.enterPhase(first.id)
-        events += try first.mechanic.enter(&state, ctx(state))
+        try enterPhase(first, state: &state, events: &events)
         try advanceIfAutomatic(&state, &events)
         state.recentEvents = events.suffix(GameState.recentEventLimit).map { $0 }
         return Transition(state: state, events: events)
@@ -323,8 +330,7 @@ public struct Engine: Sendable {
             let pending = config.mechanic.pending(state, ctx(state))
             if outcome == .continue || !pending.isEmpty { return }
             if let next = nextStateIndex(after: config.id) {
-                state.enterPhase(phases[next].id)
-                events += try phases[next].mechanic.enter(&state, ctx(state))
+                try enterPhase(phases[next], state: &state, events: &events)
             } else {
                 // Last phase of the deal list completes → the deal ends
                 // (§5.7): afterDeal effects, dealer rotation, per-deal
@@ -332,6 +338,33 @@ public struct Engine: Sendable {
                 try finishDeal(&state, &events)
             }
         }
+    }
+
+    /// Enters a phase, skipping it while its `when` gate is false (§5.6).
+    /// The gate is evaluated before the phase runs any of its mechanics.
+    private func enterPhase(
+        _ config: PhaseConfig, state: inout GameState, events: inout [GameEvent]
+    ) throws {
+        var current = config
+        var skipped = 0
+        while let gate = current.gate {
+            let open = try gate(state)
+            guard !open else { break }
+            guard let next = nextStateIndex(after: current.id) else {
+                // Every later phase is gated shut and the deal list is
+                // exhausted: the deal simply ends.
+                return try finishDeal(&state, &events)
+            }
+            skipped += 1
+            if skipped > phases.count {
+                throw RuleViolation.engineFault(
+                    ruleId: nil,
+                    pointer: "phases when-gates skip every phase in a loop at '\(current.id)'")
+            }
+            current = phases[next]
+        }
+        state.enterPhase(current.id)
+        events += try current.mechanic.enter(&state, ctx(state))
     }
 
     private func nextStateIndex(after id: String) -> Int? {

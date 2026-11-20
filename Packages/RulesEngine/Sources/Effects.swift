@@ -43,14 +43,14 @@ public struct EngineVarDecl: Sendable {
 }
 
 /// The index owner kind for `forEach`.
-public enum EngineOwnerKind: Sendable {
+public enum EngineOwnerKind: Codable, Hashable, Sendable {
     case seat
     case team
 }
 
 /// The engine effect AST (§5.6). Expression fragments keep their verbatim
 /// source and evaluate at run time.
-public enum EngineEffect: Sendable {
+public enum EngineEffect: Codable, Hashable, Sendable {
     /// `set <var> to <expr>`
     case set(name: String, index: String?, value: String)
     /// `add <expr> to <var>` (numeric deltas only).
@@ -68,19 +68,19 @@ public enum EngineEffect: Sendable {
     /// `emit <name>`
     case emit(name: String)
 
-    public enum OwnerTarget: Sendable {
+    public enum OwnerTarget: Codable, Hashable, Sendable {
         case seat(String)
         case team(String)
     }
 
     /// Who learns the revealed contents: everyone, or the seats the
     /// expression produces (a list of seat spellings).
-    public enum RevealTarget: Sendable {
+    public enum RevealTarget: Codable, Hashable, Sendable {
         case all
         case seats(String)
     }
 
-    public enum MoveCards: Sendable {
+    public enum MoveCards: Codable, Hashable, Sendable {
         case all
         case top(Int)
         case expr(String)

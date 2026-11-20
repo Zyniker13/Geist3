@@ -24,6 +24,10 @@ public enum EngineBuilder {
             throw SimulationError.config("no player count to simulate")
         }
 
+        // Host-mediated expression evaluation (§7.5): mechanics and phase
+        // `when` gates reach the runtime through closures built here.
+        let runtime = try ExpressionRuntime(doc: document, seatCount: seatCount)
+
         // Zone keys: seat-scoped zones fan out per seat; team-scoped zones
         // need a team layout the P2.8 simulator does not model.
         var seatZoneIds: Set<String> = []
@@ -52,46 +56,9 @@ public enum EngineBuilder {
             deckFaces = try DeckCatalog.resolve(cardModelDeck(deck))
         }
 
-        var enginePhases: [PhaseConfig] = []
-        var dealPhaseID: String? = nil
-        for phase in phases {
-            guard phase.when == nil, phase.before == nil, phase.after == nil, phase.next == nil else {
-                throw SimulationError.unsupported("phase-level flow control on '\(phase.id)'")
-            }
-            let config: PhaseConfig
-            switch (phase.mechanic, phase.params) {
-            case ("deal", .deal(let params)):
-                guard let sourceId = params.source else {
-                    throw SimulationError.config("deal phase '\(phase.id)' has no source")
-                }
-                guard params.thenEffects == nil else {
-                    throw SimulationError.unsupported("deal.then effects")
-                }
-                if dealPhaseID != nil {
-                    throw SimulationError.unsupported("more than one deal phase")
-                }
-                dealPhaseID = phase.id
-                let packets = try dealPackets(
-                    params.packets, phaseId: phase.id, seatCount: seatCount,
-                    seatZones: seatZoneIds, sharedZones: sharedZoneIds)
-                config = PhaseConfig(
-                    id: phase.id,
-                    mechanic: AnyMechanic(
-                        DealMechanic.self,
-                        params: RulesEngine.DealParams(
-                            source: sourceId, packets: packets, shuffleFirst: true,
-                            deckFaces: deckFaces)))
-            case ("trick-play", .trickPlay(let params)):
-                let engineParams = try trickPlayParams(params, phaseId: phase.id, seatCount: seatCount)
-                config = PhaseConfig(
-                    id: phase.id,
-                    mechanic: AnyMechanic(
-                        TrickPlayMechanic.self, params: engineParams))
-            case (let mechanic, _):
-                throw SimulationError.unsupported("mechanic '\(mechanic)'")
-            }
-            enginePhases.append(config)
-        }
+        let (enginePhases, dealPhaseID) = try phaseConfigs(
+            phases, runtime: runtime, seatCount: seatCount,
+            seatZoneIds: seatZoneIds, sharedZoneIds: sharedZoneIds, deckFaces: deckFaces)
 
         // Match substrate (§5.2–5.3, §5.6–5.8): variables, teams, the end
         // declaration, and the first-dealer procedure. A ruleset without a
@@ -126,7 +93,6 @@ public enum EngineBuilder {
 
         // Host-mediated expression evaluation (§7.5): mechanics reach the
         // runtime through `ctx.eval`.
-        let runtime = try ExpressionRuntime(doc: document, seatCount: seatCount)
         let eval: @Sendable (EvalCall, GameState) throws(EvalFailure) -> EvalValue = { call, state in
             try runtime.evaluate(call, state)
         }
@@ -139,7 +105,7 @@ public enum EngineBuilder {
 
     // MARK: - deal
 
-    private static func dealPackets(
+    static func dealPackets(
         _ packets: [DealPacket], phaseId: String, seatCount: Int,
         seatZones: Set<String>, sharedZones: Set<String>
     ) throws -> [RulesEngine.DealPacket] {
@@ -183,7 +149,7 @@ public enum EngineBuilder {
 
     // MARK: - trick-play
 
-    private static func trickPlayParams(
+    static func trickPlayParams(
         _ params: TrickPlayParams, phaseId: String,
         seatCount: Int
     ) throws -> RulesEngine.TrickPlayParams {
@@ -378,7 +344,7 @@ public enum EngineBuilder {
         return s
     }
 
-    private static func parseConstant(_ source: String, param: String) throws -> AST {
+    static func parseConstant(_ source: String, param: String) throws -> AST {
         do {
             return try Parser().parse(source).ast
         } catch {
