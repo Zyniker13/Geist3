@@ -32,6 +32,8 @@ public struct GameState: Codable, Hashable, Sendable {
     public var history: [LoggedAction]
     public var recentEvents: [GameEvent]
     public var version: UInt64
+    /// Per-phase options set by mechanics (e.g., "passed_0", "passed_1").
+    public var phaseOptions: [String: String]
 
     static let recentEventLimit = 32
 
@@ -46,7 +48,8 @@ public struct GameState: Codable, Hashable, Sendable {
         phase: PhaseCursor = PhaseCursor(phaseID: "setup"),
         history: [LoggedAction] = [],
         recentEvents: [GameEvent] = [],
-        version: UInt64 = 0
+        version: UInt64 = 0,
+        phaseOptions: [String: String] = [:]
     ) {
         self.rng = rng
         self.matchVars = matchVars
@@ -59,6 +62,7 @@ public struct GameState: Codable, Hashable, Sendable {
         self.history = history
         self.recentEvents = recentEvents
         self.version = version
+        self.phaseOptions = phaseOptions
     }
 
     // MARK: - Mechanic sub-state accessors (typed convenience)
@@ -83,6 +87,16 @@ public struct GameState: Codable, Hashable, Sendable {
         phase = PhaseCursor(phaseID: id, substate: substate)
     }
 
+    // MARK: - Phase options
+
+    func phaseOption(_ key: String) -> String? {
+        phaseOptions[key]
+    }
+
+    mutating func setPhaseOption(_ key: String, value: String) {
+        phaseOptions[key] = value
+    }
+
     /// Order-stable hashing: dictionaries hash over sorted keys so that two
     /// equal states hash equally regardless of dictionary layout.
     public func hash(into hasher: inout Hasher) {
@@ -98,6 +112,7 @@ public struct GameState: Codable, Hashable, Sendable {
         hasher.combine(history)
         hasher.combine(recentEvents)
         hasher.combine(version)
+        hasher.combine(phaseOptions)
     }
 
     public static func == (lhs: GameState, rhs: GameState) -> Bool {
@@ -112,5 +127,6 @@ public struct GameState: Codable, Hashable, Sendable {
             && lhs.history == rhs.history
             && lhs.recentEvents == rhs.recentEvents
             && lhs.version == rhs.version
+            && lhs.phaseOptions == rhs.phaseOptions
     }
 }
