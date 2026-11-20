@@ -140,17 +140,33 @@ extension TrickPlayMechanic {
         switch params.winner {
         case .highestOfLed, .highestTrumpElseLed:
             let led = sub.ledSuit
-            var best: (seat: Seat, strength: Int)?
+            var bestTrump: (seat: Seat, strength: Int)?
+            var bestPlain: (seat: Seat, strength: Int)?
             for play in plays {
                 guard let instance = pile.first(where: { $0.id == play.card }) else { continue }
                 let suit = effectiveSuit(params, instance, state: state, ctx: ctx)
                 let isTrump = sub.trumpSuit != nil && suit == sub.trumpSuit
-                let counts = params.winner == .highestOfLed ? suit == led : (isTrump || suit == led)
-                guard counts else { continue }
                 let value = cardStrength(params, instance, state: state, ctx: ctx)
-                if best == nil || value > best!.strength { best = (play.seat, value) }
+                if params.winner == .highestOfLed {
+                    // Only cards of the led suit contend (§5.6).
+                    guard suit == led else { continue }
+                    if bestPlain == nil || value > bestPlain!.strength {
+                        bestPlain = (play.seat, value)
+                    }
+                } else if isTrump {
+                    // Any trump outranks every non-trump card, so trumps
+                    // compete among themselves only (§5.6).
+                    if bestTrump == nil || value > bestTrump!.strength {
+                        bestTrump = (play.seat, value)
+                    }
+                } else if suit == led {
+                    if bestPlain == nil || value > bestPlain!.strength {
+                        bestPlain = (play.seat, value)
+                    }
+                }
             }
-            return best?.seat ?? plays.first?.seat ?? sub.leader
+            if let bestTrump { return bestTrump.seat }
+            return bestPlain?.seat ?? plays.first?.seat ?? sub.leader
         case .custom(let ref):
             var playRecords: [EvalValue] = []
             for play in plays {
