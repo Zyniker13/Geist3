@@ -1,0 +1,1022 @@
+run: 44651737046
+sha: b76b9024466150d4d61e6e97189bdf774029f214
+date: 2026-11-20T01:13:55Z
+
+--- toolchain ---
+Apple Swift version 6.3.3 (swiftlang-6.3.3.1.3 clang-2100.1.1.101)
+Target: arm64-apple-macosx26.0
+Xcode 26.6
+Build version 17F113
+
+--- disk ---
+Filesystem        Size    Used   Avail Capacity iused ifree %iused  Mounted on
+/dev/disk2s1s1   320Gi    12Gi    97Gi    11%    459k  1.0G    0%   /
+
+--- memory ---
+hw.memsize: 7516192768
+Mach Virtual Memory Statistics: (page size of 16384 bytes)
+Pages free:                                     7263.
+Pages active:                                 168781.
+Pages inactive:                               164680.
+Pages speculative:                              4054.
+Pages throttled:                                   0.
+Pages wired down:                              85269.
+Pages purgeable:                                 589.
+"Translation faults":                        5593051.
+Pages copy-on-write:                          531431.
+Pages zero filled:                           1676837.
+Pages reactivated:                            183550.
+Pages purged:                                   7102.
+File-backed pages:                            203018.
+Anonymous pages:                              134497.
+Pages stored in compressor:                    90649.
+Pages occupied by compressor:                  27613.
+Decompressions:                                44482.
+Compressions:                                 168230.
+Pageins:                                      400568.
+Pageouts:                                       2497.
+Swapins:                                           0.
+Swapouts:                                          0.
+
+--- crash reports (.ips modified in last 15 min; full text of newest 2) ---
+(no .ips files modified in the last 15 minutes — likely SIGKILL, e.g. OOM)
+
+--- coverage logs (full) ---
+=== reports/coverage/CardExpr.log (     549 lines) ===
+Building for debugging...
+[0/7] Write sources
+[0/7] /Users/runner/work/Geist3/Geist3/Packages/CardExpr/.build/arm64-apple-macosx/debug/CardExprPackageTests.derived/runner.swift
+[2/7] Write sources
+[4/7] Write swift-version-7974D3F7F03D5E95.txt
+[6/12] Compiling CardExpr AST.swift
+[7/12] Compiling CardExpr Lexer.swift
+[8/12] Emitting module CardExpr
+[9/12] Compiling CardExpr Parser.swift
+/Users/runner/work/Geist3/Geist3/Packages/CardExpr/Sources/Parser.swift:173:13: warning: result of call to 'advance()' is unused [#no-usage]
+171 |         let token = peek()
+172 |         if token.kind == .bang {
+173 |             advance()
+    |             `- warning: result of call to 'advance()' is unused [#no-usage]
+174 |             let operand = try parseUnary()
+175 |             return .unary(.not, operand, SourceSpan(start: token.span.start, end: operand.span.end))
+
+/Users/runner/work/Geist3/Geist3/Packages/CardExpr/Sources/Parser.swift:178:13: warning: result of call to 'advance()' is unused [#no-usage]
+176 |         }
+177 |         if token.kind == .minus {
+178 |             advance()
+    |             `- warning: result of call to 'advance()' is unused [#no-usage]
+179 |             let operand = try parseUnary()
+180 |             return .unary(.negate, operand, SourceSpan(start: token.span.start, end: operand.span.end))
+
+/Users/runner/work/Geist3/Geist3/Packages/CardExpr/Sources/Parser.swift:232:13: warning: result of call to 'advance()' is unused [#no-usage]
+230 |         switch token.kind {
+231 |         case .int:
+232 |             advance()
+    |             `- warning: result of call to 'advance()' is unused [#no-usage]
+233 |             return .int(token.intValue!, token.span)
+234 |         case .string:
+
+/Users/runner/work/Geist3/Geist3/Packages/CardExpr/Sources/Parser.swift:235:13: warning: result of call to 'advance()' is unused [#no-usage]
+233 |             return .int(token.intValue!, token.span)
+234 |         case .string:
+235 |             advance()
+    |             `- warning: result of call to 'advance()' is unused [#no-usage]
+236 |             return .string(token.stringValue!, token.span)
+237 |         case .keywordTrue:
+
+/Users/runner/work/Geist3/Geist3/Packages/CardExpr/Sources/Parser.swift:238:13: warning: result of call to 'advance()' is unused [#no-usage]
+236 |             return .string(token.stringValue!, token.span)
+237 |         case .keywordTrue:
+238 |             advance()
+    |             `- warning: result of call to 'advance()' is unused [#no-usage]
+239 |             return .bool(true, token.span)
+240 |         case .keywordFalse:
+
+/Users/runner/work/Geist3/Geist3/Packages/CardExpr/Sources/Parser.swift:241:13: warning: result of call to 'advance()' is unused [#no-usage]
+239 |             return .bool(true, token.span)
+240 |         case .keywordFalse:
+241 |             advance()
+    |             `- warning: result of call to 'advance()' is unused [#no-usage]
+242 |             return .bool(false, token.span)
+243 |         case .keywordNull:
+
+/Users/runner/work/Geist3/Geist3/Packages/CardExpr/Sources/Parser.swift:244:13: warning: result of call to 'advance()' is unused [#no-usage]
+242 |             return .bool(false, token.span)
+243 |         case .keywordNull:
+244 |             advance()
+    |             `- warning: result of call to 'advance()' is unused [#no-usage]
+245 |             return .null(token.span)
+246 |         case .ident:
+
+/Users/runner/work/Geist3/Geist3/Packages/CardExpr/Sources/Parser.swift:247:13: warning: result of call to 'advance()' is unused [#no-usage]
+245 |             return .null(token.span)
+246 |         case .ident:
+247 |             advance()
+    |             `- warning: result of call to 'advance()' is unused [#no-usage]
+248 |             return .ident(token.text, token.span)
+249 |         default:
+
+/Users/runner/work/Geist3/Geist3/Packages/CardExpr/Sources/Parser.swift:256:13: warning: result of call to 'advance()' is unused [#no-usage]
+254 |             return try parseList()
+255 |         case .lParen:
+256 |             advance()
+    |             `- warning: result of call to 'advance()' is unused [#no-usage]
+257 |             let inner = try parseTernary()
+258 |             _ = try expect(.rParen, "')'")
+[10/12] Compiling CardExpr SourceSpan.swift
+/Users/runner/work/Geist3/Geist3/Packages/CardExpr/Sources/Parser.swift:173:13: warning: result of call to 'advance()' is unused [#no-usage]
+171 |         let token = peek()
+172 |         if token.kind == .bang {
+173 |             advance()
+    |             `- warning: result of call to 'advance()' is unused [#no-usage]
+174 |             let operand = try parseUnary()
+175 |             return .unary(.not, operand, SourceSpan(start: token.span.start, end: operand.span.end))
+
+/Users/runner/work/Geist3/Geist3/Packages/CardExpr/Sources/Parser.swift:178:13: warning: result of call to 'advance()' is unused [#no-usage]
+176 |         }
+177 |         if token.kind == .minus {
+178 |             advance()
+    |             `- warning: result of call to 'advance()' is unused [#no-usage]
+179 |             let operand = try parseUnary()
+180 |             return .unary(.negate, operand, SourceSpan(start: token.span.start, end: operand.span.end))
+
+/Users/runner/work/Geist3/Geist3/Packages/CardExpr/Sources/Parser.swift:232:13: warning: result of call to 'advance()' is unused [#no-usage]
+230 |         switch token.kind {
+231 |         case .int:
+232 |             advance()
+    |             `- warning: result of call to 'advance()' is unused [#no-usage]
+233 |             return .int(token.intValue!, token.span)
+234 |         case .string:
+
+/Users/runner/work/Geist3/Geist3/Packages/CardExpr/Sources/Parser.swift:235:13: warning: result of call to 'advance()' is unused [#no-usage]
+233 |             return .int(token.intValue!, token.span)
+234 |         case .string:
+235 |             advance()
+    |             `- warning: result of call to 'advance()' is unused [#no-usage]
+236 |             return .string(token.stringValue!, token.span)
+237 |         case .keywordTrue:
+
+/Users/runner/work/Geist3/Geist3/Packages/CardExpr/Sources/Parser.swift:238:13: warning: result of call to 'advance()' is unused [#no-usage]
+236 |             return .string(token.stringValue!, token.span)
+237 |         case .keywordTrue:
+238 |             advance()
+    |             `- warning: result of call to 'advance()' is unused [#no-usage]
+239 |             return .bool(true, token.span)
+240 |         case .keywordFalse:
+
+/Users/runner/work/Geist3/Geist3/Packages/CardExpr/Sources/Parser.swift:241:13: warning: result of call to 'advance()' is unused [#no-usage]
+239 |             return .bool(true, token.span)
+240 |         case .keywordFalse:
+241 |             advance()
+    |             `- warning: result of call to 'advance()' is unused [#no-usage]
+242 |             return .bool(false, token.span)
+243 |         case .keywordNull:
+
+/Users/runner/work/Geist3/Geist3/Packages/CardExpr/Sources/Parser.swift:244:13: warning: result of call to 'advance()' is unused [#no-usage]
+242 |             return .bool(false, token.span)
+243 |         case .keywordNull:
+244 |             advance()
+    |             `- warning: result of call to 'advance()' is unused [#no-usage]
+245 |             return .null(token.span)
+246 |         case .ident:
+
+/Users/runner/work/Geist3/Geist3/Packages/CardExpr/Sources/Parser.swift:247:13: warning: result of call to 'advance()' is unused [#no-usage]
+245 |             return .null(token.span)
+246 |         case .ident:
+247 |             advance()
+    |             `- warning: result of call to 'advance()' is unused [#no-usage]
+248 |             return .ident(token.text, token.span)
+249 |         default:
+
+/Users/runner/work/Geist3/Geist3/Packages/CardExpr/Sources/Parser.swift:256:13: warning: result of call to 'advance()' is unused [#no-usage]
+254 |             return try parseList()
+255 |         case .lParen:
+256 |             advance()
+    |             `- warning: result of call to 'advance()' is unused [#no-usage]
+257 |             let inner = try parseTernary()
+258 |             _ = try expect(.rParen, "')'")
+[11/13] Compiling CardExpr Token.swift
+[12/16] Emitting module CardExprTests
+[13/16] Compiling CardExprTests PerfTests.swift
+[14/16] Compiling CardExprTests CardExprTests.swift
+[15/18] Emitting module CardExprPackageTests
+[16/18] Compiling CardExprPackageTests runner.swift
+[16/18] Write Objects.LinkFileList
+[17/18] Linking CardExprPackageTests
+Build complete! (8.39s)
+◇ Test run started.
+↳ Testing Library Version: 1902
+↳ Target Platform: arm64e-apple-macos14.0
+◇ Suite "CardExpr" started.
+◇ Suite PerfTests started.
+◇ Test tokenSpans() started.
+◇ Test parseTimeIsLinear() started.
+◇ Test parseShape(src:expected:) started.
+◇ Test lexerErrorPosition(src:line:col:) started.
+◇ Test parseError(src:message:) started.
+◇ Test parseErrorPosition(src:line:col:) started.
+◇ Test lexerError(src:message:) started.
+◇ Test tokenStream(src:expected:) started.
+◇ Test fuzzNeverTraps() started.
+◇ Test tokenAccessors() started.
+◇ Test topLevelSpan(_:) started.
+◇ Test roundTrip() started.
+◇ Test nodeCount(src:expected:) started.
+◇ Test case passing 2 arguments src → "1", expected → "1" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "42", expected → "42" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "'hi'", expected → "'hi'" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "''", expected → "''" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "", message → "unexpected end of input" to parseError(src:message:) started.
+◇ Test case passing 3 arguments src → "a$", line → 1, col → 2 to lexerErrorPosition(src:line:col:) started.
+◇ Test case passing 2 arguments src → "true", expected → "true" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "   ", message → "unexpected end of input" to parseError(src:message:) started.
+◇ Test case passing 2 arguments src → "false", expected → "false" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "
+", message → "unexpected end of input" to parseError(src:message:) started.
+◇ Test case passing 3 arguments src → "a
+$", line → 2, col → 1 to lexerErrorPosition(src:line:col:) started.
+◇ Test case passing 2 arguments src → "null", expected → "null" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "a", expected → "a" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "in", message → "unexpected token 'in'" to parseError(src:message:) started.
+◇ Test case passing 2 arguments src → "a_b", expected → "a_b" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "true false", message → "unexpected token 'false'" to parseError(src:message:) started.
+◇ Test case passing 3 arguments src → "'ab", line → 1, col → 1 to lexerErrorPosition(src:line:col:) started.
+◇ Test case passing 2 arguments src → "1 2", message → "unexpected token '2'" to parseError(src:message:) started.
+◇ Test case passing 2 arguments src → "a1", expected → "a1" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "a b", message → "unexpected token 'b'" to parseError(src:message:) started.
+◇ Test case passing 2 arguments src → "z9_", expected → "z9_" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "1 +", message → "unexpected end of input" to parseError(src:message:) started.
+◇ Test case passing 3 arguments src → "99999999999999999999", line → 1, col → 1 to lexerErrorPosition(src:line:col:) started.
+◇ Test case passing 2 arguments src → "1*2+3", expected → "1 * 2 + 3" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "(1", message → "expected ')' but found eof" to parseError(src:message:) started.
+◇ Test case passing 2 arguments src → "1-2*3", expected → "1 - 2 * 3" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "[1", message → "expected ']' but found eof" to parseError(src:message:) started.
+◇ Test case passing 2 arguments src → "1+2-3", expected → "1 + 2 - 3" to parseShape(src:expected:) started.
+◇ Test case passing 3 arguments src → "  $", line → 1, col → 3 to lexerErrorPosition(src:line:col:) started.
+◇ Test case passing 2 arguments src → "a.", message → "expected an identifier after '.' but found eof" to parseError(src:message:) started.
+◇ Test case passing 2 arguments src → "1-(2-3)", expected → "1 - (2 - 3)" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "[1,]", message → "unexpected token ']'" to parseError(src:message:) started.
+◇ Test case passing 3 arguments src → "a
+$b", line → 2, col → 1 to lexerErrorPosition(src:line:col:) started.
+◇ Test case passing 2 arguments src → "1*2/3", expected → "1 * 2 / 3" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "a ? b", message → "expected ':' but found eof" to parseError(src:message:) started.
+◇ Test case passing 2 arguments src → "1/2*3", expected → "1 / 2 * 3" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "a ? b :", message → "unexpected end of input" to parseError(src:message:) started.
+◇ Test case passing 3 arguments src → "
+
+$", line → 3, col → 1 to lexerErrorPosition(src:line:col:) started.
+◇ Test case passing 2 arguments src → "1/2/3", expected → "1 / 2 / 3" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "a in", message → "unexpected end of input" to parseError(src:message:) started.
+◇ Test case passing 2 arguments src → "1/(2/3)", expected → "1 / (2 / 3)" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "a in b c", message → "unexpected token 'c'" to parseError(src:message:) started.
+◇ Test case passing 3 arguments src → "'ab
+cd'", line → 1, col → 1 to lexerErrorPosition(src:line:col:) started.
+◇ Test case passing 2 arguments src → "1+2*3-4/5", expected → "1 + 2 * 3 - 4 / 5" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "a..b", message → "expected an identifier after '.' but found op(.)" to parseError(src:message:) started.
+◇ Test case passing 2 arguments src → "(1+2)*3", expected → "(1 + 2) * 3" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "a(1,)", message → "unexpected token ')'" to parseError(src:message:) started.
+◇ Test case passing 2 arguments src → "1+(2*3)", expected → "1 + 2 * 3" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "a[1", message → "expected ']' but found eof" to parseError(src:message:) started.
+◇ Test case passing 2 arguments src → "((1))", expected → "1" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "a.b(c", message → "expected ')' but found eof" to parseError(src:message:) started.
+◇ Test case passing 2 arguments src → "1<2", expected → "1 < 2" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "a?b:c?", message → "unexpected end of input" to parseError(src:message:) started.
+◇ Test case passing 2 arguments src → "1<=2", expected → "1 <= 2" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "a||", message → "unexpected end of input" to parseError(src:message:) started.
+◇ Test case passing 3 arguments src → "1 +", line → 1, col → 4 to parseErrorPosition(src:line:col:) started.
+◇ Test case passing 2 arguments src → "1>2", expected → "1 > 2" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "a&&", message → "unexpected end of input" to parseError(src:message:) started.
+◇ Test case passing 2 arguments src → "1>=2", expected → "1 >= 2" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "a==", message → "unexpected end of input" to parseError(src:message:) started.
+◇ Test case passing 3 arguments src → "(1", line → 1, col → 3 to parseErrorPosition(src:line:col:) started.
+◇ Test case passing 2 arguments src → "1<2+3", expected → "1 < 2 + 3" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "a!=", message → "unexpected end of input" to parseError(src:message:) started.
+◇ Test case passing 3 arguments src → "a.", line → 1, col → 3 to parseErrorPosition(src:line:col:) started.
+◇ Test case passing 2 arguments src → "1+2<3", expected → "1 + 2 < 3" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "a<", message → "unexpected end of input" to parseError(src:message:) started.
+◇ Test case passing 2 arguments src → "1<2<3", expected → "1 < 2 < 3" to parseShape(src:expected:) started.
+◇ Test case passing 3 arguments src → "[1,]", line → 1, col → 4 to parseErrorPosition(src:line:col:) started.
+◇ Test case passing 2 arguments src → "a*", message → "unexpected end of input" to parseError(src:message:) started.
+◇ Test case passing 2 arguments src → "1<2<=3", expected → "1 < 2 <= 3" to parseShape(src:expected:) started.
+◇ Test case passing 3 arguments src → "a
+b", line → 2, col → 1 to parseErrorPosition(src:line:col:) started.
+◇ Test case passing 2 arguments src → "a/", message → "unexpected end of input" to parseError(src:message:) started.
+◇ Test case passing 2 arguments src → "1==2", expected → "1 == 2" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "a%", message → "unexpected end of input" to parseError(src:message:) started.
+◇ Test case passing 2 arguments src → "1!=2", expected → "1 != 2" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "a-", message → "unexpected end of input" to parseError(src:message:) started.
+◇ Test case passing 3 arguments src → "a in
+", line → 2, col → 1 to parseErrorPosition(src:line:col:) started.
+◇ Test case passing 2 arguments src → "1==2+3", expected → "1 == 2 + 3" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "a+", message → "unexpected end of input" to parseError(src:message:) started.
+◇ Test case passing 3 arguments src → "(1 +
+", line → 2, col → 1 to parseErrorPosition(src:line:col:) started.
+◇ Test case passing 2 arguments src → "1+2==3", expected → "1 + 2 == 3" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "!", message → "unexpected end of input" to parseError(src:message:) started.
+◇ Test case passing 2 arguments src → "1==2==3", expected → "1 == 2 == 3" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "-", message → "unexpected end of input" to parseError(src:message:) started.
+◇ Test case passing 3 arguments src → "[1,
+]", line → 2, col → 1 to parseErrorPosition(src:line:col:) started.
+◇ Test case passing 2 arguments src → "1==2!=3", expected → "1 == 2 != 3" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "a.b.", message → "expected an identifier after '.' but found eof" to parseError(src:message:) started.
+◇ Test case passing 2 arguments src → "1<2==3", expected → "1 < 2 == 3" to parseShape(src:expected:) started.
+◇ Test case passing 3 arguments src → "a
+
+b", line → 3, col → 1 to parseErrorPosition(src:line:col:) started.
+◇ Test case passing 2 arguments src → "a in b in", message → "unexpected end of input" to parseError(src:message:) started.
+◇ Test case passing 2 arguments src → "1==2<3", expected → "1 == 2 < 3" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "a ? b : c ?", message → "unexpected end of input" to parseError(src:message:) started.
+◇ Test case passing 3 arguments src → "x in
+", line → 2, col → 1 to parseErrorPosition(src:line:col:) started.
+◇ Test case passing 2 arguments src → "a&&b", expected → "a && b" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "[1,2", message → "expected ']' but found eof" to parseError(src:message:) started.
+◇ Test case passing 2 arguments src → "a&&b||c", expected → "a && b || c" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "(1+2", message → "expected ')' but found eof" to parseError(src:message:) started.
+◇ Test case passing 2 arguments src → "a||b&&c", expected → "a || b && c" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "a&&b&&c", expected → "a && b && c" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "a[", message → "unexpected end of input" to parseError(src:message:) started.
+◇ Test case passing 2 arguments src → "a(", message → "unexpected end of input" to parseError(src:message:) started.
+◇ Test case passing 2 arguments src → "a||b||c", expected → "a || b || c" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "a&&b||c&&d", expected → "a && b || c && d" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "$", message → "unexpected character '$'" to lexerError(src:message:) started.
+◇ Test case passing 2 arguments src → "[", message → "unexpected end of input" to parseError(src:message:) started.
+◇ Test case passing 2 arguments src → "[1,", message → "unexpected end of input" to parseError(src:message:) started.
+◇ Test case passing 2 arguments src → "!a", expected → "!a" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "a$", message → "unexpected character '$'" to lexerError(src:message:) started.
+◇ Test case passing 2 arguments src → "a?", message → "unexpected end of input" to parseError(src:message:) started.
+◇ Test case passing 2 arguments src → "!a&&b", expected → "!a && b" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "a
+$", message → "unexpected character '$'" to lexerError(src:message:) started.
+◇ Test case passing 2 arguments src → "a?b:c?d", message → "expected ':' but found eof" to parseError(src:message:) started.
+◇ Test case passing 2 arguments src → "!a||b", expected → "!a || b" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "!!a", expected → "!!a" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "(", message → "unexpected end of input" to parseError(src:message:) started.
+◇ Test case passing 2 arguments src → "'ab", message → "unterminated string literal" to lexerError(src:message:) started.
+◇ Test case passing 2 arguments src → "!-a", expected → "!-a" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → ")", message → "unexpected token ')'" to parseError(src:message:) started.
+◇ Test case passing 2 arguments src → "'ab
+cd'", message → "unterminated string literal" to lexerError(src:message:) started.
+◇ Test case passing 2 arguments src → "-!a", expected → "-!a" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "]", message → "unexpected token ']'" to parseError(src:message:) started.
+◇ Test case passing 2 arguments src → "!a.b", expected → "!a.b" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → ",", message → "unexpected token ','" to parseError(src:message:) started.
+◇ Test case passing 2 arguments src → "99999999999999999999", message → "integer literal out of range" to lexerError(src:message:) started.
+◇ Test case passing 2 arguments src → "!a[0]", expected → "!a[0]" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → ":", message → "unexpected token ':'" to parseError(src:message:) started.
+◇ Test case passing 2 arguments src → "!a(1)", expected → "!a(1)" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "a|b", message → "unexpected character '|'" to lexerError(src:message:) started.
+◇ Test case passing 2 arguments src → "!(a+b)", expected → "!(a + b)" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "a&b", message → "unexpected character '&'" to lexerError(src:message:) started.
+◇ Test case passing 2 arguments src → "?", message → "unexpected token '?'" to parseError(src:message:) started.
+◇ Test case passing 2 arguments src → "1..", message → "expected an identifier after '.' but found op(.)" to parseError(src:message:) started.
+◇ Test case passing 2 arguments src → "-(a+b)", expected → "-(a + b)" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "a=b", message → "unexpected character '='" to lexerError(src:message:) started.
+◇ Test case passing 2 arguments src → "a.1", message → "expected an identifier after '.' but found int(1)" to parseError(src:message:) started.
+◇ Test case passing 2 arguments src → "-a", expected → "-a" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "a#b", message → "unexpected character '#'" to lexerError(src:message:) started.
+◇ Test case passing 2 arguments src → "a.b[0", message → "expected ']' but found eof" to parseError(src:message:) started.
+◇ Test case passing 2 arguments src → "-a+b", expected → "-a + b" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "a@b", message → "unexpected character '@'" to lexerError(src:message:) started.
+◇ Test case passing 2 arguments src → "a(1", message → "expected ')' but found eof" to parseError(src:message:) started.
+◇ Test case passing 2 arguments src → "a+-b", expected → "a + -b" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "a;b", message → "unexpected character ';'" to lexerError(src:message:) started.
+◇ Test case passing 2 arguments src → "a(1,2", message → "expected ')' but found eof" to parseError(src:message:) started.
+◇ Test case passing 2 arguments src → "a--b", expected → "a - -b" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "a"b", message → "unexpected character '"'" to lexerError(src:message:) started.
+◇ Test case passing 2 arguments src → "in a", message → "unexpected token 'in'" to parseError(src:message:) started.
+◇ Test case passing 2 arguments src → "a*-b", expected → "a * -b" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "a~b", message → "unexpected character '~'" to lexerError(src:message:) started.
+◇ Test case passing 2 arguments src → "a/-b", expected → "a / -b" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "a 1", message → "unexpected token '1'" to parseError(src:message:) started.
+◇ Test case passing 2 arguments src → "a^b", message → "unexpected character '^'" to lexerError(src:message:) started.
+◇ Test case passing 2 arguments src → "a%-b", expected → "a % -b" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "1 in", message → "unexpected end of input" to parseError(src:message:) started.
+◇ Test case passing 2 arguments src → "a{b}", message → "unexpected character '{'" to lexerError(src:message:) started.
+◇ Test case passing 2 arguments src → "-a*b", expected → "-a * b" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "a}b", message → "unexpected character '}'" to lexerError(src:message:) started.
+◇ Test case passing 2 arguments src → "x in xs", expected → "x in xs" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "a\b", message → "unexpected character '\'" to lexerError(src:message:) started.
+◇ Test case passing 2 arguments src → "x in xs in ys", expected → "x in xs in ys" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "x in a+b", expected → "x in a + b" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "a+b in x", expected → "a + b in x" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "a?b:c", expected → "a ? b : c" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "a`b", message → "unexpected character '`'" to lexerError(src:message:) started.
+◇ Test case passing 2 arguments src → "a?b:c?d:e", expected → "a ? b : c ? d : e" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "123", expected → ["int(123)", "eof"] to tokenStream(src:expected:) started.
+◇ Test case passing 2 arguments src → "$", message → "unexpected character '$'" to lexerError(src:message:) started.
+◇ Test case passing 2 arguments src → "a?b?c:d:e", expected → "a ? b ? c : d : e" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → """, message → "unexpected character '"'" to lexerError(src:message:) started.
+◇ Test case passing 2 arguments src → "a", expected → ["id(a)", "eof"] to tokenStream(src:expected:) started.
+◇ Test case passing 2 arguments src → "(a?b:c)?d:e", expected → "(a ? b : c) ? d : e" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "#", message → "unexpected character '#'" to lexerError(src:message:) started.
+◇ Test case passing 2 arguments src → "a.b", expected → ["id(a)", "op(.)", "id(b)", "eof"] to tokenStream(src:expected:) started.
+◇ Test case passing 2 arguments src → "a?b:c?d:e?f:g", expected → "a ? b : c ? d : e ? f : g" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "@", message → "unexpected character '@'" to lexerError(src:message:) started.
+◇ Test case passing 2 arguments src → "a&&b?c:d", expected → "a && b ? c : d" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "true", expected → ["kw(true)", "eof"] to tokenStream(src:expected:) started.
+◇ Test case passing 2 arguments src → ";", message → "unexpected character ';'" to lexerError(src:message:) started.
+◇ Test case passing 2 arguments src → "a?b&&c:d", expected → "a ? b && c : d" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "false", expected → ["kw(false)", "eof"] to tokenStream(src:expected:) started.
+◇ Test case passing 2 arguments src → "~", message → "unexpected character '~'" to lexerError(src:message:) started.
+◇ Test case passing 2 arguments src → "a?b:c&&d", expected → "a ? b : c && d" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "^", message → "unexpected character '^'" to lexerError(src:message:) started.
+◇ Test case passing 2 arguments src → "a?b?c&&d:e:f", expected → "a ? b ? c && d : e : f" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "null", expected → ["kw(null)", "eof"] to tokenStream(src:expected:) started.
+◇ Test case passing 2 arguments src → "{", message → "unexpected character '{'" to lexerError(src:message:) started.
+◇ Test case passing 2 arguments src → "in", expected → ["kw(in)", "eof"] to tokenStream(src:expected:) started.
+◇ Test case passing 2 arguments src → "[]", expected → "[]" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "}", message → "unexpected character '}'" to lexerError(src:message:) started.
+◇ Test case passing 2 arguments src → "a_b1", expected → ["id(a_b1)", "eof"] to tokenStream(src:expected:) started.
+◇ Test case passing 2 arguments src → "[1]", expected → "[1]" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "\", message → "unexpected character '\'" to lexerError(src:message:) started.
+◇ Test case passing 2 arguments src → "1+2", expected → ["int(1)", "op(+)", "int(2)", "eof"] to tokenStream(src:expected:) started.
+◇ Test case passing 2 arguments src → "[1,2]", expected → "[1, 2]" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "|", message → "unexpected character '|'" to lexerError(src:message:) started.
+◇ Test case passing 2 arguments src → "[1,2,3]", expected → "[1, 2, 3]" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "1-2", expected → ["int(1)", "op(-)", "int(2)", "eof"] to tokenStream(src:expected:) started.
+◇ Test case passing 2 arguments src → "&", message → "unexpected character '&'" to lexerError(src:message:) started.
+◇ Test case passing 2 arguments src → "[[1],[2,3]]", expected → "[[1], [2, 3]]" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "=", message → "unexpected character '='" to lexerError(src:message:) started.
+◇ Test case passing 2 arguments src → "1*2", expected → ["int(1)", "op(*)", "int(2)", "eof"] to tokenStream(src:expected:) started.
+◇ Test case passing 2 arguments src → "[a,b,c]", expected → "[a, b, c]" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "$$$", message → "unexpected character '$'" to lexerError(src:message:) started.
+◇ Test case passing 2 arguments src → "['x',1,true]", expected → "['x', 1, true]" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "1/2", expected → ["int(1)", "op(/)", "int(2)", "eof"] to tokenStream(src:expected:) started.
+◇ Test case passing 2 arguments src → "a b $", message → "unexpected character '$'" to lexerError(src:message:) started.
+◇ Test case passing 2 arguments src → "[a?b:c]", expected → "[a ? b : c]" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "1%2", expected → ["int(1)", "op(%)", "int(2)", "eof"] to tokenStream(src:expected:) started.
+◇ Test case passing 2 arguments src → "a.b", expected → "a.b" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "a[0]", expected → "a[0]" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "!a", expected → ["op(!)", "id(a)", "eof"] to tokenStream(src:expected:) started.
+◇ Test case passing 2 arguments src → "a[0][1]", expected → "a[0][1]" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "a&&b", expected → ["id(a)", "op(&&)", "id(b)", "eof"] to tokenStream(src:expected:) started.
+◇ Test case passing 2 arguments src → "a[0].b", expected → "a[0].b" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "a||b", expected → ["id(a)", "op(||)", "id(b)", "eof"] to tokenStream(src:expected:) started.
+◇ Test case passing 2 arguments src → "a.b[0]", expected → "a.b[0]" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "a(1)", expected → "a(1)" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "a()", expected → "a()" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "a==b", expected → ["id(a)", "op(==)", "id(b)", "eof"] to tokenStream(src:expected:) started.
+◇ Test case passing 2 arguments src → "a(1,2)", expected → "a(1, 2)" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "a!=b", expected → ["id(a)", "op(!=)", "id(b)", "eof"] to tokenStream(src:expected:) started.
+◇ Test case passing 2 arguments src → "a.b(1)", expected → "a.b(1)" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "a.b(1).c", expected → "a.b(1).c" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "a<b", expected → ["id(a)", "op(<)", "id(b)", "eof"] to tokenStream(src:expected:) started.
+◇ Test case passing 2 arguments src → "a.b(1).c(2)", expected → "a.b(1).c(2)" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "a<=b", expected → ["id(a)", "op(<=)", "id(b)", "eof"] to tokenStream(src:expected:) started.
+◇ Test case passing 2 arguments src → "a.b(1)[2]", expected → "a.b(1)[2]" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "a[1](2)", expected → "a[1](2)" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "a>b", expected → ["id(a)", "op(>)", "id(b)", "eof"] to tokenStream(src:expected:) started.
+◇ Test case passing 1 argument spanCase → SpanCase(source: "1 + 2", startLine: 1, startCol: 1, endLine: 1, endCol: 5) to topLevelSpan(_:) started.
+◇ Test case passing 2 arguments src → "a[1](2).b", expected → "a[1](2).b" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "a>=b", expected → ["id(a)", "op(>=)", "id(b)", "eof"] to tokenStream(src:expected:) started.
+◇ Test case passing 2 arguments src → "1+2+3+4", expected → "1 + 2 + 3 + 4" to parseShape(src:expected:) started.
+◇ Test case passing 1 argument spanCase → SpanCase(source: "a\n+ b", startLine: 1, startCol: 1, endLine: 2, endCol: 3) to topLevelSpan(_:) started.
+◇ Test case passing 2 arguments src → "1*2*3*4", expected → "1 * 2 * 3 * 4" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "a in b", expected → ["id(a)", "kw(in)", "id(b)", "eof"] to tokenStream(src:expected:) started.
+◇ Test case passing 2 arguments src → "1-2-3-4", expected → "1 - 2 - 3 - 4" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "(a)", expected → ["op(()", "id(a)", "op())", "eof"] to tokenStream(src:expected:) started.
+◇ Test case passing 1 argument spanCase → SpanCase(source: "a\n\n\n+ b", startLine: 1, startCol: 1, endLine: 4, endCol: 3) to topLevelSpan(_:) started.
+◇ Test case passing 2 arguments src → "1/2/3/4", expected → "1 / 2 / 3 / 4" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "[a]", expected → ["op([)", "id(a)", "op(])", "eof"] to tokenStream(src:expected:) started.
+◇ Test case passing 2 arguments src → "1%2%3", expected → "1 % 2 % 3" to parseShape(src:expected:) started.
+◇ Test case passing 1 argument spanCase → SpanCase(source: "  1", startLine: 1, startCol: 3, endLine: 1, endCol: 3) to topLevelSpan(_:) started.
+◇ Test case passing 2 arguments src → "1+2%3", expected → "1 + 2 % 3" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "a,b", expected → ["id(a)", "op(,)", "id(b)", "eof"] to tokenStream(src:expected:) started.
+◇ Test case passing 1 argument spanCase → SpanCase(source: "\'ab\'", startLine: 1, startCol: 1, endLine: 1, endCol: 4) to topLevelSpan(_:) started.
+◇ Test case passing 2 arguments src → "1*2%3+4", expected → "1 * 2 % 3 + 4" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "a?b:c", expected → ["id(a)", "op(?)", "id(b)", "op(:)", "id(c)", "eof"] to tokenStream(src:expected:) started.
+◇ Test case passing 2 arguments src → "a-b-c", expected → "a - b - c" to parseShape(src:expected:) started.
+◇ Test case passing 1 argument spanCase → SpanCase(source: "a.b", startLine: 1, startCol: 1, endLine: 1, endCol: 3) to topLevelSpan(_:) started.
+◇ Test case passing 2 arguments src → "a.b(c)", expected → ["id(a)", "op(.)", "id(b)", "op(()", "id(c)", "op())", "eof"] to tokenStream(src:expected:) started.
+◇ Test case passing 2 arguments src → "--a", expected → "--a" to parseShape(src:expected:) started.
+◇ Test case passing 1 argument spanCase → SpanCase(source: "a[1]", startLine: 1, startCol: 1, endLine: 1, endCol: 4) to topLevelSpan(_:) started.
+◇ Test case passing 2 arguments src → "-a.b", expected → "-a.b" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "a[1]", expected → ["id(a)", "op([)", "int(1)", "op(])", "eof"] to tokenStream(src:expected:) started.
+◇ Test case passing 2 arguments src → "-a[0]", expected → "-a[0]" to parseShape(src:expected:) started.
+◇ Test case passing 1 argument spanCase → SpanCase(source: "a(1)", startLine: 1, startCol: 1, endLine: 1, endCol: 4) to topLevelSpan(_:) started.
+◇ Test case passing 2 arguments src → "'hi'", expected → ["str(\'hi\')", "eof"] to tokenStream(src:expected:) started.
+◇ Test case passing 2 arguments src → "(a+b)*c", expected → "(a + b) * c" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "''", expected → ["str(\'\')", "eof"] to tokenStream(src:expected:) started.
+◇ Test case passing 2 arguments src → "(a?b:c)+1", expected → "(a ? b : c) + 1" to parseShape(src:expected:) started.
+◇ Test case passing 1 argument spanCase → SpanCase(source: "a?b:c", startLine: 1, startCol: 1, endLine: 1, endCol: 5) to topLevelSpan(_:) started.
+◇ Test case passing 2 arguments src → "(a in xs)&&b", expected → "a in xs && b" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "a.b(c,d)", expected → ["id(a)", "op(.)", "id(b)", "op(()", "id(c)", "op(,)", "id(d)", "op())", "eof"] to tokenStream(src:expected:) started.
+◇ Test case passing 1 argument spanCase → SpanCase(source: "!a", startLine: 1, startCol: 1, endLine: 1, endCol: 2) to topLevelSpan(_:) started.
+◇ Test case passing 2 arguments src → "!(a in xs)", expected → "!(a in xs)" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "-(a?b:c)", expected → "-(a ? b : c)" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "a(1,2)", expected → ["id(a)", "op(()", "int(1)", "op(,)", "int(2)", "op())", "eof"] to tokenStream(src:expected:) started.
+◇ Test case passing 1 argument spanCase → SpanCase(source: "-(a+b)", startLine: 1, startCol: 1, endLine: 1, endCol: 5) to topLevelSpan(_:) started.
+◇ Test case passing 2 arguments src → "[a[0]]", expected → "[a[0]]" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "a()", expected → ["id(a)", "op(()", "op())", "eof"] to tokenStream(src:expected:) started.
+◇ Test case passing 2 arguments src → "[[a]]", expected → "[[a]]" to parseShape(src:expected:) started.
+◇ Test case passing 1 argument spanCase → SpanCase(source: "[1, 2]", startLine: 1, startCol: 1, endLine: 1, endCol: 6) to topLevelSpan(_:) started.
+◇ Test case passing 2 arguments src → "-1", expected → ["op(-)", "int(1)", "eof"] to tokenStream(src:expected:) started.
+◇ Test case passing 2 arguments src → "[[a,b],[c]]", expected → "[[a, b], [c]]" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "!true", expected → ["op(!)", "kw(true)", "eof"] to tokenStream(src:expected:) started.
+◇ Test case passing 1 argument spanCase → SpanCase(source: "1 + 2 + 3", startLine: 1, startCol: 1, endLine: 1, endCol: 9) to topLevelSpan(_:) started.
+◇ Test case passing 2 arguments src → "[1,[2,[3]]]", expected → "[1, [2, [3]]]" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "'a b'", expected → ["str(\'a b\')", "eof"] to tokenStream(src:expected:) started.
+◇ Test case passing 2 arguments src → "a.b.c.d", expected → "a.b.c.d" to parseShape(src:expected:) started.
+◇ Test case passing 1 argument spanCase → SpanCase(source: "a +\nb\n+ c", startLine: 1, startCol: 1, endLine: 3, endCol: 3) to topLevelSpan(_:) started.
+◇ Test case passing 2 arguments src → "a[0][1][2]", expected → "a[0][1][2]" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "a[0].b", expected → ["id(a)", "op([)", "int(0)", "op(])", "op(.)", "id(b)", "eof"] to tokenStream(src:expected:) started.
+◇ Test case passing 2 arguments src → "a.b[0].c[1].d(2)", expected → "a.b[0].c[1].d(2)" to parseShape(src:expected:) started.
+◇ Test case passing 1 argument spanCase → SpanCase(source: "[1,\n2]", startLine: 1, startCol: 1, endLine: 2, endCol: 2) to topLevelSpan(_:) started.
+◇ Test case passing 2 arguments src → "a.b.c(1,2,3)", expected → "a.b.c(1, 2, 3)" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "a&&b||c", expected → ["id(a)", "op(&&)", "id(b)", "op(||)", "id(c)", "eof"] to tokenStream(src:expected:) started.
+◇ Test case passing 1 argument spanCase → SpanCase(source: "a ?\nb : c", startLine: 1, startCol: 1, endLine: 2, endCol: 5) to topLevelSpan(_:) started.
+◇ Test case passing 2 arguments src → "f(a?b:c,[1,2])", expected → "f(a ? b : c, [1, 2])" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "!a&&b||!c&&d", expected → "!a && b || !c && d" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "a in [1]", expected → ["id(a)", "kw(in)", "op([)", "int(1)", "op(])", "eof"] to tokenStream(src:expected:) started.
+◇ Test case passing 2 arguments src → "a&&b||c&&d||e", expected → "a && b || c && d || e" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "!(a&&b)||c", expected → "!(a && b) || c" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "1<2==true", expected → "1 < 2 == true" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "a==b&&c==d", expected → "a == b && c == d" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "a!=b<c", expected → "a != b < c" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "x in [1,2,3]", expected → "x in [1, 2, 3]" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "x in a.b", expected → "x in a.b" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "-1<2", expected → "-1 < 2" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "1", expected → 1 to nodeCount(src:expected:) started.
+◇ Test case passing 2 arguments src → "!true==false", expected → "!true == false" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "'x'", expected → 1 to nodeCount(src:expected:) started.
+◇ Test case passing 2 arguments src → "(1+2)*(3+4)", expected → "(1 + 2) * (3 + 4)" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "true", expected → 1 to nodeCount(src:expected:) started.
+◇ Test case passing 2 arguments src → "a==true?x:y", expected → "a == true ? x : y" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "null", expected → 1 to nodeCount(src:expected:) started.
+◇ Test case passing 2 arguments src → "a", expected → 1 to nodeCount(src:expected:) started.
+◇ Test case passing 2 arguments src → "[a&&b,c||d]", expected → "[a && b, c || d]" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "1+2", expected → 3 to nodeCount(src:expected:) started.
+◇ Test case passing 2 arguments src → "a[0]?b:c", expected → "a[0] ? b : c" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "1+2*3", expected → 5 to nodeCount(src:expected:) started.
+◇ Test case passing 2 arguments src → "a.b?c:d", expected → "a.b ? c : d" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "a.b", expected → 2 to nodeCount(src:expected:) started.
+◇ Test case passing 2 arguments src → "a&&b in xs", expected → "a && b in xs" to parseShape(src:expected:) started.
+◇ Test case passing 2 arguments src → "a.b.c", expected → 3 to nodeCount(src:expected:) started.
+◇ Test case passing 2 arguments src → "a(1,2)", expected → 4 to nodeCount(src:expected:) started.
+◇ Test case passing 2 arguments src → "a()", expected → 2 to nodeCount(src:expected:) started.
+◇ Test case passing 2 arguments src → "[1,2,3]", expected → 4 to nodeCount(src:expected:) started.
+◇ Test case passing 2 arguments src → "[]", expected → 1 to nodeCount(src:expected:) started.
+◇ Test case passing 2 arguments src → "a?b:c", expected → 4 to nodeCount(src:expected:) started.
+◇ Test case passing 2 arguments src → "!a", expected → 2 to nodeCount(src:expected:) started.
+◇ Test case passing 2 arguments src → "((1))", expected → 1 to nodeCount(src:expected:) started.
+◇ Test case passing 2 arguments src → "a[1]", expected → 3 to nodeCount(src:expected:) started.
+◇ Test case passing 2 arguments src → "a.b(c.d(e.f))", expected → 8 to nodeCount(src:expected:) started.
+◇ Test case passing 2 arguments src → "1+2+3+4", expected → 7 to nodeCount(src:expected:) started.
+✔ Test tokenSpans() passed after 0.022 seconds.
+◇ Test case passing 2 arguments src → "a.b.c.d", expected → 4 to nodeCount(src:expected:) started.
+◇ Test case passing 2 arguments src → "a[0][1]", expected → 5 to nodeCount(src:expected:) started.
+◇ Test case passing 2 arguments src → "[[1],[2]]", expected → 5 to nodeCount(src:expected:) started.
+◇ Test case passing 2 arguments src → "[[]]", expected → 2 to nodeCount(src:expected:) started.
+◇ Test case passing 2 arguments src → "a(1,2,3)", expected → 5 to nodeCount(src:expected:) started.
+◇ Test case passing 2 arguments src → "a?b:c?d:e", expected → 7 to nodeCount(src:expected:) started.
+◇ Test case passing 2 arguments src → "!-a", expected → 3 to nodeCount(src:expected:) started.
+◇ Test case passing 2 arguments src → "-!a", expected → 3 to nodeCount(src:expected:) started.
+◇ Test case passing 2 arguments src → "x in xs", expected → 3 to nodeCount(src:expected:) started.
+◇ Test case passing 2 arguments src → "1<2<3", expected → 5 to nodeCount(src:expected:) started.
+◇ Test case passing 2 arguments src → "a&&b&&c", expected → 5 to nodeCount(src:expected:) started.
+✔ Test parseShape(src:expected:) with 140 test cases passed after 0.023 seconds.
+◇ Test case passing 2 arguments src → "''", expected → 1 to nodeCount(src:expected:) started.
+◇ Test case passing 2 arguments src → "a.b[0].c", expected → 5 to nodeCount(src:expected:) started.
+◇ Test case passing 2 arguments src → "f(1).g", expected → 4 to nodeCount(src:expected:) started.
+✔ Test lexerErrorPosition(src:line:col:) with 8 test cases passed after 0.023 seconds.
+✔ Test parseError(src:message:) with 58 test cases passed after 0.023 seconds.
+✔ Test parseErrorPosition(src:line:col:) with 10 test cases passed after 0.023 seconds.
+✔ Test lexerError(src:message:) with 34 test cases passed after 0.023 seconds.
+✔ Test tokenStream(src:expected:) with 40 test cases passed after 0.023 seconds.
+✔ Test tokenAccessors() passed after 0.023 seconds.
+✔ Test topLevelSpan(_:) with 16 test cases passed after 0.023 seconds.
+✔ Test roundTrip() passed after 0.023 seconds.
+✔ Test nodeCount(src:expected:) with 33 test cases passed after 0.023 seconds.
+✔ Test parseTimeIsLinear() passed after 0.037 seconds.
+✔ Suite PerfTests passed after 0.038 seconds.
+✔ Test fuzzNeverTraps() passed after 0.117 seconds.
+✔ Suite "CardExpr" passed after 0.118 seconds.
+✔ Test run with 13 tests in 2 suites passed after 0.119 seconds.
+=== reports/coverage/CardModel.log (      37 lines) ===
+Building for debugging...
+[0/7] /Users/runner/work/Geist3/Geist3/Packages/CardModel/.build/arm64-apple-macosx/debug/CardModelPackageTests.derived/runner.swift
+[1/7] Write sources
+[4/7] Write swift-version-7974D3F7F03D5E95.txt
+[6/10] Compiling CardModel CardFace.swift
+[7/11] Emitting module CardModel
+[8/11] Compiling CardModel Deck.swift
+[9/11] Compiling CardModel Seat.swift
+[10/13] Compiling CardModelTests CardModelTests.swift
+[11/13] Emitting module CardModelTests
+[12/15] Emitting module CardModelPackageTests
+[13/15] Compiling CardModelPackageTests runner.swift
+[13/15] Write Objects.LinkFileList
+[14/15] Linking CardModelPackageTests
+Build complete! (15.91s)
+◇ Test run started.
+↳ Testing Library Version: 1902
+↳ Target Platform: arm64e-apple-macos14.0
+◇ Suite "CardModel — card identity and decks" started.
+◇ Test faceCodableRoundTrip() started.
+◇ Test everyCatalogIDHasSpecOrIsCustom() started.
+◇ Test faceIdentifierFormat() started.
+◇ Test duplicateDecksProduceDistinctInstances() started.
+◇ Test deckContents() started.
+◇ Test deckSizes() started.
+◇ Test seatCodable() started.
+◇ Test seatSetBitOperations() started.
+✔ Test faceIdentifierFormat() passed after 0.001 seconds.
+✔ Test everyCatalogIDHasSpecOrIsCustom() passed after 0.001 seconds.
+✔ Test faceCodableRoundTrip() passed after 0.001 seconds.
+✔ Test duplicateDecksProduceDistinctInstances() passed after 0.001 seconds.
+✔ Test seatCodable() passed after 0.001 seconds.
+✔ Test seatSetBitOperations() passed after 0.001 seconds.
+✔ Test deckSizes() passed after 0.002 seconds.
+✔ Test deckContents() passed after 0.002 seconds.
+✔ Suite "CardModel — card identity and decks" passed after 0.002 seconds.
+✔ Test run with 8 tests in 1 suite passed after 0.003 seconds.
+=== reports/coverage/RulesEngine.log (     389 lines) ===
+warning: 'rulesengine': found 20 file(s) which are unhandled; explicitly declare them as resources or exclude from the target
+    /Users/runner/work/Geist3/Geist3/Packages/RulesEngine/Tests/Fixtures/Replays/toy-high-card-17.json
+    /Users/runner/work/Geist3/Geist3/Packages/RulesEngine/Tests/Fixtures/Replays/toy-high-card-19.json
+    /Users/runner/work/Geist3/Geist3/Packages/RulesEngine/Tests/Fixtures/Replays/toy-high-card-00.json
+    /Users/runner/work/Geist3/Geist3/Packages/RulesEngine/Tests/Fixtures/Replays/toy-high-card-01.json
+    /Users/runner/work/Geist3/Geist3/Packages/RulesEngine/Tests/Fixtures/Replays/toy-high-card-09.json
+    /Users/runner/work/Geist3/Geist3/Packages/RulesEngine/Tests/Fixtures/Replays/toy-high-card-06.json
+    /Users/runner/work/Geist3/Geist3/Packages/RulesEngine/Tests/Fixtures/Replays/toy-high-card-11.json
+    /Users/runner/work/Geist3/Geist3/Packages/RulesEngine/Tests/Fixtures/Replays/toy-high-card-10.json
+    /Users/runner/work/Geist3/Geist3/Packages/RulesEngine/Tests/Fixtures/Replays/toy-high-card-05.json
+    /Users/runner/work/Geist3/Geist3/Packages/RulesEngine/Tests/Fixtures/Replays/toy-high-card-14.json
+    /Users/runner/work/Geist3/Geist3/Packages/RulesEngine/Tests/Fixtures/Replays/toy-high-card-08.json
+    /Users/runner/work/Geist3/Geist3/Packages/RulesEngine/Tests/Fixtures/Replays/toy-high-card-03.json
+    /Users/runner/work/Geist3/Geist3/Packages/RulesEngine/Tests/Fixtures/Replays/toy-high-card-07.json
+    /Users/runner/work/Geist3/Geist3/Packages/RulesEngine/Tests/Fixtures/Replays/toy-high-card-12.json
+    /Users/runner/work/Geist3/Geist3/Packages/RulesEngine/Tests/Fixtures/Replays/toy-high-card-15.json
+    /Users/runner/work/Geist3/Geist3/Packages/RulesEngine/Tests/Fixtures/Replays/toy-high-card-18.json
+    /Users/runner/work/Geist3/Geist3/Packages/RulesEngine/Tests/Fixtures/Replays/toy-high-card-04.json
+    /Users/runner/work/Geist3/Geist3/Packages/RulesEngine/Tests/Fixtures/Replays/toy-high-card-02.json
+    /Users/runner/work/Geist3/Geist3/Packages/RulesEngine/Tests/Fixtures/Replays/toy-high-card-13.json
+    /Users/runner/work/Geist3/Geist3/Packages/RulesEngine/Tests/Fixtures/Replays/toy-high-card-16.json
+Building for debugging...
+[0/14] /Users/runner/work/Geist3/Geist3/Packages/RulesEngine/.build/arm64-apple-macosx/debug/RulesEnginePackageTests.derived/runner.swift
+[1/14] Write sources
+[5/14] Write golden-gen-entitlement.plist
+[6/14] Write sources
+[8/14] Write swift-version-7974D3F7F03D5E95.txt
+[10/17] Compiling CardModel CardFace.swift
+[11/17] Emitting module CardModel
+[12/17] Compiling CardModel Deck.swift
+[13/18] Compiling CardModel Seat.swift
+[14/27] Compiling RulesEngine Actions.swift
+[15/27] Compiling RulesEngine DealMechanic.swift
+[16/27] Compiling RulesEngine Engine.swift
+[17/27] Compiling RulesEngine EvalCall.swift
+[18/31] Compiling RulesEngine GameState.swift
+[19/31] Compiling RulesEngine Knowledge.swift
+[20/31] Compiling RulesEngine Mechanic.swift
+[21/31] Compiling RulesEngine Observation.swift
+[22/31] Emitting module RulesEngine
+[23/31] Compiling RulesEngine SHA256.swift
+/Users/runner/work/Geist3/Geist3/Packages/RulesEngine/Sources/SeededRNG.swift:69:13: warning: variable 'state0' was never mutated; consider changing to 'let' constant
+ 67 |     public init(seed: UInt64) {
+ 68 |         var splitmix = SplitMix64(seed: seed)
+ 69 |         var state0 = splitmix.next()
+    |             `- warning: variable 'state0' was never mutated; consider changing to 'let' constant
+ 70 |         var state1 = splitmix.next()
+ 71 |         var state2 = splitmix.next()
+
+/Users/runner/work/Geist3/Geist3/Packages/RulesEngine/Sources/SeededRNG.swift:70:13: warning: variable 'state1' was never mutated; consider changing to 'let' constant
+ 68 |         var splitmix = SplitMix64(seed: seed)
+ 69 |         var state0 = splitmix.next()
+ 70 |         var state1 = splitmix.next()
+    |             `- warning: variable 'state1' was never mutated; consider changing to 'let' constant
+ 71 |         var state2 = splitmix.next()
+ 72 |         var state3 = splitmix.next()
+
+/Users/runner/work/Geist3/Geist3/Packages/RulesEngine/Sources/SeededRNG.swift:71:13: warning: variable 'state2' was never mutated; consider changing to 'let' constant
+ 69 |         var state0 = splitmix.next()
+ 70 |         var state1 = splitmix.next()
+ 71 |         var state2 = splitmix.next()
+    |             `- warning: variable 'state2' was never mutated; consider changing to 'let' constant
+ 72 |         var state3 = splitmix.next()
+ 73 |         if state0 == 0 && state1 == 0 && state2 == 0 && state3 == 0 {
+[24/31] Compiling RulesEngine SeededRNG.swift
+/Users/runner/work/Geist3/Geist3/Packages/RulesEngine/Sources/SeededRNG.swift:69:13: warning: variable 'state0' was never mutated; consider changing to 'let' constant
+ 67 |     public init(seed: UInt64) {
+ 68 |         var splitmix = SplitMix64(seed: seed)
+ 69 |         var state0 = splitmix.next()
+    |             `- warning: variable 'state0' was never mutated; consider changing to 'let' constant
+ 70 |         var state1 = splitmix.next()
+ 71 |         var state2 = splitmix.next()
+
+/Users/runner/work/Geist3/Geist3/Packages/RulesEngine/Sources/SeededRNG.swift:70:13: warning: variable 'state1' was never mutated; consider changing to 'let' constant
+ 68 |         var splitmix = SplitMix64(seed: seed)
+ 69 |         var state0 = splitmix.next()
+ 70 |         var state1 = splitmix.next()
+    |             `- warning: variable 'state1' was never mutated; consider changing to 'let' constant
+ 71 |         var state2 = splitmix.next()
+ 72 |         var state3 = splitmix.next()
+
+/Users/runner/work/Geist3/Geist3/Packages/RulesEngine/Sources/SeededRNG.swift:71:13: warning: variable 'state2' was never mutated; consider changing to 'let' constant
+ 69 |         var state0 = splitmix.next()
+ 70 |         var state1 = splitmix.next()
+ 71 |         var state2 = splitmix.next()
+    |             `- warning: variable 'state2' was never mutated; consider changing to 'let' constant
+ 72 |         var state3 = splitmix.next()
+ 73 |         if state0 == 0 && state1 == 0 && state2 == 0 && state3 == 0 {
+[25/31] Compiling RulesEngine TrickPlayMechanic.swift
+/Users/runner/work/Geist3/Geist3/Packages/RulesEngine/Sources/SeededRNG.swift:69:13: warning: variable 'state0' was never mutated; consider changing to 'let' constant
+ 67 |     public init(seed: UInt64) {
+ 68 |         var splitmix = SplitMix64(seed: seed)
+ 69 |         var state0 = splitmix.next()
+    |             `- warning: variable 'state0' was never mutated; consider changing to 'let' constant
+ 70 |         var state1 = splitmix.next()
+ 71 |         var state2 = splitmix.next()
+
+/Users/runner/work/Geist3/Geist3/Packages/RulesEngine/Sources/SeededRNG.swift:70:13: warning: variable 'state1' was never mutated; consider changing to 'let' constant
+ 68 |         var splitmix = SplitMix64(seed: seed)
+ 69 |         var state0 = splitmix.next()
+ 70 |         var state1 = splitmix.next()
+    |             `- warning: variable 'state1' was never mutated; consider changing to 'let' constant
+ 71 |         var state2 = splitmix.next()
+ 72 |         var state3 = splitmix.next()
+
+/Users/runner/work/Geist3/Geist3/Packages/RulesEngine/Sources/SeededRNG.swift:71:13: warning: variable 'state2' was never mutated; consider changing to 'let' constant
+ 69 |         var state0 = splitmix.next()
+ 70 |         var state1 = splitmix.next()
+ 71 |         var state2 = splitmix.next()
+    |             `- warning: variable 'state2' was never mutated; consider changing to 'let' constant
+ 72 |         var state3 = splitmix.next()
+ 73 |         if state0 == 0 && state1 == 0 && state2 == 0 && state3 == 0 {
+[26/31] Compiling RulesEngine ZoneStore.swift
+/Users/runner/work/Geist3/Geist3/Packages/RulesEngine/Sources/SeededRNG.swift:69:13: warning: variable 'state0' was never mutated; consider changing to 'let' constant
+ 67 |     public init(seed: UInt64) {
+ 68 |         var splitmix = SplitMix64(seed: seed)
+ 69 |         var state0 = splitmix.next()
+    |             `- warning: variable 'state0' was never mutated; consider changing to 'let' constant
+ 70 |         var state1 = splitmix.next()
+ 71 |         var state2 = splitmix.next()
+
+/Users/runner/work/Geist3/Geist3/Packages/RulesEngine/Sources/SeededRNG.swift:70:13: warning: variable 'state1' was never mutated; consider changing to 'let' constant
+ 68 |         var splitmix = SplitMix64(seed: seed)
+ 69 |         var state0 = splitmix.next()
+ 70 |         var state1 = splitmix.next()
+    |             `- warning: variable 'state1' was never mutated; consider changing to 'let' constant
+ 71 |         var state2 = splitmix.next()
+ 72 |         var state3 = splitmix.next()
+
+/Users/runner/work/Geist3/Geist3/Packages/RulesEngine/Sources/SeededRNG.swift:71:13: warning: variable 'state2' was never mutated; consider changing to 'let' constant
+ 69 |         var state0 = splitmix.next()
+ 70 |         var state1 = splitmix.next()
+ 71 |         var state2 = splitmix.next()
+    |             `- warning: variable 'state2' was never mutated; consider changing to 'let' constant
+ 72 |         var state3 = splitmix.next()
+ 73 |         if state0 == 0 && state1 == 0 && state2 == 0 && state3 == 0 {
+[27/33] Emitting module ToyGame
+[28/33] Compiling ToyGame ToyGame.swift
+[29/41] Compiling golden_gen main.swift
+[30/41] Emitting module golden_gen
+[30/41] Write Objects.LinkFileList
+[31/41] Linking golden-gen
+[32/41] Applying golden-gen
+[34/41] Compiling RulesEngineTests RedactionTests.swift
+[35/41] Compiling RulesEngineTests ReplayTests.swift
+[36/43] Compiling RulesEngineTests SeededRNGTests.swift
+[37/43] Compiling RulesEngineTests StoreTests.swift
+[38/43] Emitting module RulesEngineTests
+[39/43] Compiling RulesEngineTests EngineTests.swift
+/Users/runner/work/Geist3/Geist3/Packages/RulesEngine/Tests/EngineTests.swift:106:13: warning: variable 'state' was never mutated; consider changing to 'let' constant
+104 |     @Test func illegalIntentsRejectedWithRuleIDs() throws {
+105 |         let engine = ToyGame.engine()
+106 |         var state = try engine.start(seed: 1).state
+    |             `- warning: variable 'state' was never mutated; consider changing to 'let' constant
+107 |         // Seat 0 plays while seat 1 must lead.
+108 |         do {
+
+/Users/runner/work/Geist3/Geist3/Packages/RulesEngine/Tests/PerfTests.swift:78:57: warning: result of call to 'apply(_:to:)' is unused [#no-usage]
+ 76 |         for _ in 0..<50 { _ = try engine.apply(action, to: state) }
+ 77 |         for _ in 0..<2_000 {
+ 78 |             samples.append(try sampleNanos { try engine.apply(action, to: state) })
+    |                                                         `- warning: result of call to 'apply(_:to:)' is unused [#no-usage]
+ 79 |         }
+ 80 |         samples.sort()
+
+/Users/runner/work/Geist3/Geist3/Packages/RulesEngine/Tests/PerfTests.swift:93:49: warning: result of call to 'observation(of:for:)' is unused [#no-usage]
+ 91 |         for _ in 0..<50 { _ = engine.observation(of: state, for: .seat(Seat(0))) }
+ 92 |         for _ in 0..<2_000 {
+ 93 |             samples.append(sampleNanos { engine.observation(of: state, for: .seat(Seat(0))) })
+    |                                                 `- warning: result of call to 'observation(of:for:)' is unused [#no-usage]
+ 94 |         }
+ 95 |         samples.sort()
+[40/43] Compiling RulesEngineTests MechanicAndRedactorTests.swift
+/Users/runner/work/Geist3/Geist3/Packages/RulesEngine/Tests/EngineTests.swift:106:13: warning: variable 'state' was never mutated; consider changing to 'let' constant
+104 |     @Test func illegalIntentsRejectedWithRuleIDs() throws {
+105 |         let engine = ToyGame.engine()
+106 |         var state = try engine.start(seed: 1).state
+    |             `- warning: variable 'state' was never mutated; consider changing to 'let' constant
+107 |         // Seat 0 plays while seat 1 must lead.
+108 |         do {
+
+/Users/runner/work/Geist3/Geist3/Packages/RulesEngine/Tests/PerfTests.swift:78:57: warning: result of call to 'apply(_:to:)' is unused [#no-usage]
+ 76 |         for _ in 0..<50 { _ = try engine.apply(action, to: state) }
+ 77 |         for _ in 0..<2_000 {
+ 78 |             samples.append(try sampleNanos { try engine.apply(action, to: state) })
+    |                                                         `- warning: result of call to 'apply(_:to:)' is unused [#no-usage]
+ 79 |         }
+ 80 |         samples.sort()
+
+/Users/runner/work/Geist3/Geist3/Packages/RulesEngine/Tests/PerfTests.swift:93:49: warning: result of call to 'observation(of:for:)' is unused [#no-usage]
+ 91 |         for _ in 0..<50 { _ = engine.observation(of: state, for: .seat(Seat(0))) }
+ 92 |         for _ in 0..<2_000 {
+ 93 |             samples.append(sampleNanos { engine.observation(of: state, for: .seat(Seat(0))) })
+    |                                                 `- warning: result of call to 'observation(of:for:)' is unused [#no-usage]
+ 94 |         }
+ 95 |         samples.sort()
+[41/43] Compiling RulesEngineTests PerfTests.swift
+/Users/runner/work/Geist3/Geist3/Packages/RulesEngine/Tests/EngineTests.swift:106:13: warning: variable 'state' was never mutated; consider changing to 'let' constant
+104 |     @Test func illegalIntentsRejectedWithRuleIDs() throws {
+105 |         let engine = ToyGame.engine()
+106 |         var state = try engine.start(seed: 1).state
+    |             `- warning: variable 'state' was never mutated; consider changing to 'let' constant
+107 |         // Seat 0 plays while seat 1 must lead.
+108 |         do {
+
+/Users/runner/work/Geist3/Geist3/Packages/RulesEngine/Tests/PerfTests.swift:78:57: warning: result of call to 'apply(_:to:)' is unused [#no-usage]
+ 76 |         for _ in 0..<50 { _ = try engine.apply(action, to: state) }
+ 77 |         for _ in 0..<2_000 {
+ 78 |             samples.append(try sampleNanos { try engine.apply(action, to: state) })
+    |                                                         `- warning: result of call to 'apply(_:to:)' is unused [#no-usage]
+ 79 |         }
+ 80 |         samples.sort()
+
+/Users/runner/work/Geist3/Geist3/Packages/RulesEngine/Tests/PerfTests.swift:93:49: warning: result of call to 'observation(of:for:)' is unused [#no-usage]
+ 91 |         for _ in 0..<50 { _ = engine.observation(of: state, for: .seat(Seat(0))) }
+ 92 |         for _ in 0..<2_000 {
+ 93 |             samples.append(sampleNanos { engine.observation(of: state, for: .seat(Seat(0))) })
+    |                                                 `- warning: result of call to 'observation(of:for:)' is unused [#no-usage]
+ 94 |         }
+ 95 |         samples.sort()
+[42/45] Emitting module RulesEnginePackageTests
+[43/45] Compiling RulesEnginePackageTests runner.swift
+[43/45] Write Objects.LinkFileList
+[44/45] Linking RulesEnginePackageTests
+Build complete! (29.26s)
+[1/4] Testing RulesEngineTests.PerfTests/testMeasureObservation
+[2/4] Testing RulesEngineTests.PerfTests/testMeasureApply
+[3/4] Testing RulesEngineTests.PerfTests/testApplyP99UnderOneMillisecond
+[4/4] Testing RulesEngineTests.PerfTests/testObservationP99UnderHalfMillisecond
+◇ Test run started.
+↳ Testing Library Version: 1902
+↳ Target Platform: arm64e-apple-macos14.0
+◇ Suite ZoneStoreEdgeTests started.
+◇ Suite DealMechanicEdgeTests started.
+◇ Suite KnowledgeStoreTests started.
+◇ Suite VarStoreTests started.
+◇ Suite SeededRNGHelperTests started.
+◇ Suite "RulesEngine — state, zones, and reducer (P1.3–P1.5)" started.
+◇ Suite "RulesEngine — Observation and Redactor (§9.6)" started.
+◇ Suite "RulesEngine — SeededRNG (§10.1)" started.
+◇ Suite "RulesEngine — Replays (§10.4)" started.
+◇ Suite RedactorUnitTests started.
+◇ Test batchMove() started.
+◇ Test placeRemovesFromPreviousZone() started.
+◇ Test placeCapacityFull() started.
+◇ Test shuffleZoneAndQueries() started.
+◇ Test exhaustedSourceThrows() started.
+◇ Test allSeatsHelper() started.
+◇ Test codableRoundTrip() started.
+◇ Test dealIsAutomatic() started.
+◇ Test cutDepthAndFaceUpReveal() started.
+◇ Test popTopEdges() started.
+◇ Test canonicalCodableRoundTrip() started.
+◇ Test seatScopedStorageKeys() started.
+◇ Test codableRoundTrip() started.
+◇ Test revealAndViewers() started.
+◇ Test declareSetGetAdd() started.
+◇ Test allZeroStateGuard() started.
+◇ Test shuffledArray() started.
+◇ Test dealSeedAndSplitMixDerive() started.
+◇ Test belowIntAndInRange() started.
+◇ Test hiddenDeclaration() started.
+◇ Test legalIntentsCarryNoForeignFaces() started.
+◇ Test observationByteScanNoHiddenFaces() started.
+◇ Test dealtEventsRedactedPerViewer() started.
+◇ Test hiddenZonesExposeCountsOnly() started.
+◇ Test boundedIntegers() started.
+◇ Test splitMix64Derivation() started.
+◇ Test seedExpansionNeverAllZero() started.
+◇ Test shuffleUniformity() started.
+◇ Test referenceVectorAgainstAuthorsImplementation() started.
+◇ Test dealSeedFormula() started.
+◇ Test codableRoundTripPreservesStream() started.
+◇ Test replayMatchesPlayedGame() started.
+◇ Test belowRejectionLoop() started.
+◇ Test twentyGoldenReplaysMatch() started.
+◇ Test observedZoneCodableBothCases() started.
+◇ Test zoneRedactionWrapper() started.
+◇ Test eventRedactionOther() started.
+◇ Test truncatedReplayChangesHash() started.
+◇ Test eventRedactionDealt() started.
+◇ Test maySeeViewerKinds() started.
+✘ Test twentyGoldenReplaysMatch() recorded an issue at ReplayTests.swift:79:13: Expectation failed: (golden.rulesetHash → "54b104e6f3f27d75f501c6e0e15f61f871d561a94f775f9322afd4293467009a") == (ReplayTests.hex(engine.rulesetHash) → "939484695cafac8e08124d06cae5e749ecf38ac0d6912a6f343e32b2a0aab727")
+↳ toy-high-card-00.json: ruleset hash mismatch — the toy game configuration changed
+✘ Test twentyGoldenReplaysMatch() recorded an issue at ReplayTests.swift:79:13: Expectation failed: (golden.rulesetHash → "54b104e6f3f27d75f501c6e0e15f61f871d561a94f775f9322afd4293467009a") == (ReplayTests.hex(engine.rulesetHash) → "939484695cafac8e08124d06cae5e749ecf38ac0d6912a6f343e32b2a0aab727")
+↳ toy-high-card-01.json: ruleset hash mismatch — the toy game configuration changed
+✘ Test twentyGoldenReplaysMatch() recorded an issue at ReplayTests.swift:79:13: Expectation failed: (golden.rulesetHash → "54b104e6f3f27d75f501c6e0e15f61f871d561a94f775f9322afd4293467009a") == (ReplayTests.hex(engine.rulesetHash) → "939484695cafac8e08124d06cae5e749ecf38ac0d6912a6f343e32b2a0aab727")
+↳ toy-high-card-02.json: ruleset hash mismatch — the toy game configuration changed
+✘ Test twentyGoldenReplaysMatch() recorded an issue at ReplayTests.swift:79:13: Expectation failed: (golden.rulesetHash → "54b104e6f3f27d75f501c6e0e15f61f871d561a94f775f9322afd4293467009a") == (ReplayTests.hex(engine.rulesetHash) → "939484695cafac8e08124d06cae5e749ecf38ac0d6912a6f343e32b2a0aab727")
+↳ toy-high-card-03.json: ruleset hash mismatch — the toy game configuration changed
+✘ Test twentyGoldenReplaysMatch() recorded an issue at ReplayTests.swift:79:13: Expectation failed: (golden.rulesetHash → "54b104e6f3f27d75f501c6e0e15f61f871d561a94f775f9322afd4293467009a") == (ReplayTests.hex(engine.rulesetHash) → "939484695cafac8e08124d06cae5e749ecf38ac0d6912a6f343e32b2a0aab727")
+↳ toy-high-card-04.json: ruleset hash mismatch — the toy game configuration changed
+✘ Test twentyGoldenReplaysMatch() recorded an issue at ReplayTests.swift:79:13: Expectation failed: (golden.rulesetHash → "54b104e6f3f27d75f501c6e0e15f61f871d561a94f775f9322afd4293467009a") == (ReplayTests.hex(engine.rulesetHash) → "939484695cafac8e08124d06cae5e749ecf38ac0d6912a6f343e32b2a0aab727")
+↳ toy-high-card-05.json: ruleset hash mismatch — the toy game configuration changed
+✘ Test twentyGoldenReplaysMatch() recorded an issue at ReplayTests.swift:79:13: Expectation failed: (golden.rulesetHash → "54b104e6f3f27d75f501c6e0e15f61f871d561a94f775f9322afd4293467009a") == (ReplayTests.hex(engine.rulesetHash) → "939484695cafac8e08124d06cae5e749ecf38ac0d6912a6f343e32b2a0aab727")
+↳ toy-high-card-06.json: ruleset hash mismatch — the toy game configuration changed
+✔ Test batchMove() passed after 0.130 seconds.
+◇ Test toyGameTenThousandSeeds() started.
+◇ Test zoneCapacityEnforced() started.
+◇ Test cardIDFaceIndependence() started.
+◇ Test gameStateHashOrderStable() started.
+◇ Test zoneConservation() started.
+◇ Test determinismSameSeedSameGame() started.
+✔ Test shuffleZoneAndQueries() passed after 0.130 seconds.
+◇ Test mustFollowSuitEnforced() started.
+◇ Test illegalIntentsRejectedWithRuleIDs() started.
+✔ Test placeRemovesFromPreviousZone() passed after 0.130 seconds.
+✔ Test allSeatsHelper() passed after 0.130 seconds.
+✔ Test exhaustedSourceThrows() passed after 0.131 seconds.
+✔ Test codableRoundTrip() passed after 0.131 seconds.
+✔ Test dealIsAutomatic() passed after 0.131 seconds.
+✔ Test cutDepthAndFaceUpReveal() passed after 0.131 seconds.
+✔ Test popTopEdges() passed after 0.131 seconds.
+✔ Test canonicalCodableRoundTrip() passed after 0.131 seconds.
+✔ Test seatScopedStorageKeys() passed after 0.131 seconds.
+✔ Test revealAndViewers() passed after 0.131 seconds.
+✔ Test declareSetGetAdd() passed after 0.131 seconds.
+✔ Test allZeroStateGuard() passed after 0.131 seconds.
+✔ Test codableRoundTrip() passed after 0.131 seconds.
+✔ Test dealSeedAndSplitMixDerive() passed after 0.131 seconds.
+✔ Test shuffledArray() passed after 0.131 seconds.
+✔ Test hiddenDeclaration() passed after 0.131 seconds.
+✔ Test belowIntAndInRange() passed after 0.131 seconds.
+✔ Test placeCapacityFull() passed after 0.131 seconds.
+✔ Test dealtEventsRedactedPerViewer() passed after 0.131 seconds.
+✔ Test hiddenZonesExposeCountsOnly() passed after 0.131 seconds.
+✔ Test boundedIntegers() passed after 0.131 seconds.
+✔ Test splitMix64Derivation() passed after 0.131 seconds.
+✔ Test seedExpansionNeverAllZero() passed after 0.131 seconds.
+✔ Test legalIntentsCarryNoForeignFaces() passed after 0.131 seconds.
+✔ Test referenceVectorAgainstAuthorsImplementation() passed after 0.131 seconds.
+✘ Test twentyGoldenReplaysMatch() recorded an issue at ReplayTests.swift:79:13: Expectation failed: (golden.rulesetHash → "54b104e6f3f27d75f501c6e0e15f61f871d561a94f775f9322afd4293467009a") == (ReplayTests.hex(engine.rulesetHash) → "939484695cafac8e08124d06cae5e749ecf38ac0d6912a6f343e32b2a0aab727")
+↳ toy-high-card-07.json: ruleset hash mismatch — the toy game configuration changed
+✔ Test dealSeedFormula() passed after 0.133 seconds.
+✔ Test codableRoundTripPreservesStream() passed after 0.133 seconds.
+✔ Test replayMatchesPlayedGame() passed after 0.133 seconds.
+✔ Test belowRejectionLoop() passed after 0.133 seconds.
+✔ Test shuffleUniformity() passed after 0.133 seconds.
+✔ Test observedZoneCodableBothCases() passed after 0.133 seconds.
+✔ Test zoneRedactionWrapper() passed after 0.133 seconds.
+✔ Test eventRedactionOther() passed after 0.133 seconds.
+✔ Test truncatedReplayChangesHash() passed after 0.133 seconds.
+✔ Test eventRedactionDealt() passed after 0.133 seconds.
+✔ Test maySeeViewerKinds() passed after 0.133 seconds.
+✘ Test twentyGoldenReplaysMatch() recorded an issue at ReplayTests.swift:79:13: Expectation failed: (golden.rulesetHash → "54b104e6f3f27d75f501c6e0e15f61f871d561a94f775f9322afd4293467009a") == (ReplayTests.hex(engine.rulesetHash) → "939484695cafac8e08124d06cae5e749ecf38ac0d6912a6f343e32b2a0aab727")
+↳ toy-high-card-08.json: ruleset hash mismatch — the toy game configuration changed
+✘ Test twentyGoldenReplaysMatch() recorded an issue at ReplayTests.swift:79:13: Expectation failed: (golden.rulesetHash → "54b104e6f3f27d75f501c6e0e15f61f871d561a94f775f9322afd4293467009a") == (ReplayTests.hex(engine.rulesetHash) → "939484695cafac8e08124d06cae5e749ecf38ac0d6912a6f343e32b2a0aab727")
+↳ toy-high-card-09.json: ruleset hash mismatch — the toy game configuration changed
+✘ Test twentyGoldenReplaysMatch() recorded an issue at ReplayTests.swift:79:13: Expectation failed: (golden.rulesetHash → "54b104e6f3f27d75f501c6e0e15f61f871d561a94f775f9322afd4293467009a") == (ReplayTests.hex(engine.rulesetHash) → "939484695cafac8e08124d06cae5e749ecf38ac0d6912a6f343e32b2a0aab727")
+↳ toy-high-card-10.json: ruleset hash mismatch — the toy game configuration changed
+✘ Test twentyGoldenReplaysMatch() recorded an issue at ReplayTests.swift:79:13: Expectation failed: (golden.rulesetHash → "54b104e6f3f27d75f501c6e0e15f61f871d561a94f775f9322afd4293467009a") == (ReplayTests.hex(engine.rulesetHash) → "939484695cafac8e08124d06cae5e749ecf38ac0d6912a6f343e32b2a0aab727")
+↳ toy-high-card-11.json: ruleset hash mismatch — the toy game configuration changed
+✘ Test twentyGoldenReplaysMatch() recorded an issue at ReplayTests.swift:79:13: Expectation failed: (golden.rulesetHash → "54b104e6f3f27d75f501c6e0e15f61f871d561a94f775f9322afd4293467009a") == (ReplayTests.hex(engine.rulesetHash) → "939484695cafac8e08124d06cae5e749ecf38ac0d6912a6f343e32b2a0aab727")
+↳ toy-high-card-12.json: ruleset hash mismatch — the toy game configuration changed
+✘ Test twentyGoldenReplaysMatch() recorded an issue at ReplayTests.swift:79:13: Expectation failed: (golden.rulesetHash → "54b104e6f3f27d75f501c6e0e15f61f871d561a94f775f9322afd4293467009a") == (ReplayTests.hex(engine.rulesetHash) → "939484695cafac8e08124d06cae5e749ecf38ac0d6912a6f343e32b2a0aab727")
+↳ toy-high-card-13.json: ruleset hash mismatch — the toy game configuration changed
+✘ Test twentyGoldenReplaysMatch() recorded an issue at ReplayTests.swift:79:13: Expectation failed: (golden.rulesetHash → "54b104e6f3f27d75f501c6e0e15f61f871d561a94f775f9322afd4293467009a") == (ReplayTests.hex(engine.rulesetHash) → "939484695cafac8e08124d06cae5e749ecf38ac0d6912a6f343e32b2a0aab727")
+↳ toy-high-card-14.json: ruleset hash mismatch — the toy game configuration changed
+✘ Test twentyGoldenReplaysMatch() recorded an issue at ReplayTests.swift:79:13: Expectation failed: (golden.rulesetHash → "54b104e6f3f27d75f501c6e0e15f61f871d561a94f775f9322afd4293467009a") == (ReplayTests.hex(engine.rulesetHash) → "939484695cafac8e08124d06cae5e749ecf38ac0d6912a6f343e32b2a0aab727")
+↳ toy-high-card-15.json: ruleset hash mismatch — the toy game configuration changed
+✘ Test twentyGoldenReplaysMatch() recorded an issue at ReplayTests.swift:79:13: Expectation failed: (golden.rulesetHash → "54b104e6f3f27d75f501c6e0e15f61f871d561a94f775f9322afd4293467009a") == (ReplayTests.hex(engine.rulesetHash) → "939484695cafac8e08124d06cae5e749ecf38ac0d6912a6f343e32b2a0aab727")
+↳ toy-high-card-16.json: ruleset hash mismatch — the toy game configuration changed
+✘ Test twentyGoldenReplaysMatch() recorded an issue at ReplayTests.swift:79:13: Expectation failed: (golden.rulesetHash → "54b104e6f3f27d75f501c6e0e15f61f871d561a94f775f9322afd4293467009a") == (ReplayTests.hex(engine.rulesetHash) → "939484695cafac8e08124d06cae5e749ecf38ac0d6912a6f343e32b2a0aab727")
+↳ toy-high-card-17.json: ruleset hash mismatch — the toy game configuration changed
+✘ Test twentyGoldenReplaysMatch() recorded an issue at ReplayTests.swift:79:13: Expectation failed: (golden.rulesetHash → "54b104e6f3f27d75f501c6e0e15f61f871d561a94f775f9322afd4293467009a") == (ReplayTests.hex(engine.rulesetHash) → "939484695cafac8e08124d06cae5e749ecf38ac0d6912a6f343e32b2a0aab727")
+↳ toy-high-card-18.json: ruleset hash mismatch — the toy game configuration changed
+✘ Test twentyGoldenReplaysMatch() recorded an issue at ReplayTests.swift:79:13: Expectation failed: (golden.rulesetHash → "54b104e6f3f27d75f501c6e0e15f61f871d561a94f775f9322afd4293467009a") == (ReplayTests.hex(engine.rulesetHash) → "939484695cafac8e08124d06cae5e749ecf38ac0d6912a6f343e32b2a0aab727")
+↳ toy-high-card-19.json: ruleset hash mismatch — the toy game configuration changed
+✔ Suite ZoneStoreEdgeTests passed after 0.739 seconds.
+✘ Test twentyGoldenReplaysMatch() failed after 0.738 seconds with 20 issues.
+✔ Test zoneCapacityEnforced() passed after 0.608 seconds.
+✔ Test cardIDFaceIndependence() passed after 0.608 seconds.
+✔ Test gameStateHashOrderStable() passed after 0.608 seconds.
+✔ Test zoneConservation() passed after 0.608 seconds.
+✔ Test determinismSameSeedSameGame() passed after 0.608 seconds.
+✔ Test mustFollowSuitEnforced() passed after 0.608 seconds.
+✔ Test illegalIntentsRejectedWithRuleIDs() passed after 0.608 seconds.
+✔ Suite DealMechanicEdgeTests passed after 0.739 seconds.
+✔ Suite KnowledgeStoreTests passed after 0.739 seconds.
+✔ Suite VarStoreTests passed after 0.739 seconds.
+✔ Suite SeededRNGHelperTests passed after 0.739 seconds.
+✔ Suite "RulesEngine — SeededRNG (§10.1)" passed after 0.739 seconds.
+✔ Suite RedactorUnitTests passed after 0.739 seconds.
+✘ Suite "RulesEngine — Replays (§10.4)" failed after 0.739 seconds with 20 issues.
+✔ Test toyGameTenThousandSeeds() passed after 3.474 seconds.
+✔ Suite "RulesEngine — state, zones, and reducer (P1.3–P1.5)" passed after 3.605 seconds.
+✔ Test observationByteScanNoHiddenFaces() passed after 33.995 seconds.
+✔ Suite "RulesEngine — Observation and Redactor (§9.6)" passed after 33.997 seconds.
+✘ Test run with 48 tests in 10 suites failed after 33.997 seconds with 20 issues.
