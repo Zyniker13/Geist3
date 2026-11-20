@@ -153,98 +153,154 @@ public enum EngineBuilder {
         _ params: TrickPlayParams, phaseId: String,
         seatCount: Int
     ) throws -> RulesEngine.TrickPlayParams {
-        try rejectUnsupportedTrickPlay(params)
-
-        let tricks: Int
+        // How many tricks the phase plays: a count, the `untilHandsEmpty`
+        // keyword, or a constant expression.
+        let tricks: RulesEngine.TrickPlayParams.TricksSpec
         switch params.tricks {
-        case .count(let n): tricks = n
-        case .text(let text): tricks = try constantInt(text, param: "\(phaseId).tricks")
-        case nil: throw SimulationError.config("trick-play phase '\(phaseId)' has no tricks count")
-        }
-        guard tricks > 0 else {
-            throw SimulationError.config("trick count \(tricks) must be positive")
+        case .count(let n):
+            guard n > 0 else {
+                throw SimulationError.config("trick count \(n) must be positive")
+            }
+            tricks = .count(n)
+        case .text("untilHandsEmpty"):
+            tricks = .untilHandsEmpty
+        case .text(let text):
+            let n = try constantInt(text, param: "\(phaseId).tricks")
+            guard n > 0 else {
+                throw SimulationError.config("trick count \(n) must be positive")
+            }
+            tricks = .count(n)
+        case nil:
+            throw SimulationError.config("trick-play phase '\(phaseId)' has no tricks count")
         }
 
-        let activeSeats: [Seat]
-        if let expr = params.activeSeats {
-            activeSeats = try constantSeats(expr.source, param: "activeSeats")
+        // Rank order: "natural" (or absent) means standard ascending order,
+        // which the engine models with its default `orderRanks`.
+        if let order = params.order {
+            guard order == "natural" else {
+                throw SimulationError.unsupported("card order '\(order)'")
+            }
+        }
+
+        let follow = RulesEngine.TrickPlayParams.Follow(
+            mustFollow: params.follow?.mustFollow ?? true,
+            mustTrumpIfVoid: params.follow?.mustTrumpIfVoid ?? false,
+            mustOvertrump: params.follow?.mustOvertrump ?? false,
+            mustHeadTrick: params.follow?.mustHeadTrick ?? false,
+            ruleId: params.follow?.rule ?? "follow")
+
+        // Trump: the literal "none" means no trump suit; anything else is a
+        // runtime expression evaluated at phase entry.
+        let trump: RulesEngine.SuitOrExpr?
+        if let t = params.trump, t.source != "none" {
+            trump = .expr(ExprRef(pointer: "\(phaseId).trump", source: t.source))
         } else {
-            activeSeats = (0..<seatCount).map { Seat($0) }
-        }
-        guard !activeSeats.isEmpty else {
-            throw SimulationError.config("trick-play phase '\(phaseId)' has no active seats")
+            trump = nil
         }
 
-        let firstLeader: Seat
-        if let expr = params.firstLeader {
-            firstLeader = try constantSeat(expr.source, param: "firstLeader")
-        } else {
-            firstLeader = Seat(0)
-        }
-
-        let winnerRule = try trickWinnerRule(params)
-        let followRuleId = try trickFollowRule(params.follow)
+        let winner = try trickWinner(params, trump: trump, phaseId: phaseId)
 
         return RulesEngine.TrickPlayParams(
-            seatCount: seatCount, tricks: tricks,
-            activeSeats: activeSeats, firstLeader: firstLeader,
-            winnerRule: winnerRule, followRuleId: followRuleId)
+            seatCount: seatCount,
+            tricks: tricks,
+            follow: follow,
+            leadAllowed: try params.leadAllowed.map {
+                try playGuard($0, phaseId: phaseId, key: "leadAllowed")
+            },
+            playAllowed: try params.playAllowed.map {
+                try playGuard($0, phaseId: phaseId, key: "playAllowed")
+            },
+            suitOf: params.suitOf.map {
+                ExprRef(pointer: "\(phaseId).suitOf", source: $0.source)
+            },
+            strength: params.strength.map {
+                ExprRef(pointer: "\(phaseId).strength", source: $0.source)
+            },
+            trump: trump,
+            activeSeats: params.activeSeats.map {
+                .expr(ExprRef(pointer: "\(phaseId).activeSeats", source: $0.source))
+            },
+            firstLeader: params.firstLeader.map {
+                .expr(ExprRef(pointer: "\(phaseId).firstLeader", source: $0.source))
+            },
+            nextLeader: params.nextLeader.map {
+                ExprRef(pointer: "\(phaseId).nextLeader", source: $0.source)
+            },
+            winner: winner,
+            dummy: try params.dummy.map {
+                try dummySpec($0, phaseId: phaseId)
+            },
+            claims: try params.claims.map {
+                try claimsSpec($0, phaseId: phaseId)
+            },
+            onCardPlayed: try mapEffects(params.onCardPlayedEffects),
+            onTrickEnd: try mapEffects(params.onTrickEndEffects))
     }
 
-    /// Rejected extras: anything the P1 engine does not model.
-    private static func rejectUnsupportedTrickPlay(_ params: TrickPlayParams) throws {
-        for (name, present) in [
-            ("suitOf", params.suitOf), ("strength", params.strength),
-            ("winner", params.winner), ("nextLeader", params.nextLeader),
-        ] where present != nil {
-            throw SimulationError.unsupported("trick-play.\(name) expression")
-        }
-        if params.leadAllowed != nil || params.playAllowed != nil {
-            throw SimulationError.unsupported("trick-play play guards")
-        }
-        if params.dummy != nil { throw SimulationError.unsupported("trick-play dummy") }
-        if params.claims != nil { throw SimulationError.unsupported("trick-play claims") }
-        if params.onCardPlayedEffects != nil || params.onTrickEndEffects != nil {
-            throw SimulationError.unsupported("trick-play effects")
-        }
-        if let order = params.order, order != "desc" {
-            throw SimulationError.unsupported("card order '\(order)'")
-        }
-        if let firstLeaderRule = params.firstLeaderRule {
-            throw SimulationError.unsupported("firstLeaderRule '\(firstLeaderRule)'")
-        }
-    }
-
-    private static func trickWinnerRule(_ params: TrickPlayParams) throws -> TrickWinnerRule {
-        switch params.winnerRule {
+    /// The trick winner rule: a built-in name (`highestOfLedSuit`,
+    /// `highestTrumpElseLedSuit`) or a user definition referenced by name.
+    private static func trickWinner(
+        _ params: TrickPlayParams, trump: RulesEngine.SuitOrExpr?,
+        phaseId: String
+    ) throws -> RulesEngine.TrickPlayParams.WinnerSpec {
+        switch params.winner?.source {
         case "highestOfLedSuit", nil:
-            if params.trump != nil {
-                throw SimulationError.config("trump set but winnerRule is not 'highestTrumpElseLedSuit'")
+            if trump != nil {
+                throw SimulationError.config(
+                    "trump set but winnerRule is not 'highestTrumpElseLedSuit'")
             }
             return .highestOfLed
         case "highestTrumpElseLedSuit":
-            guard let trumpExpr = params.trump else {
-                throw SimulationError.config("winnerRule 'highestTrumpElseLedSuit' needs a trump expression")
+            guard trump != nil else {
+                throw SimulationError.config(
+                    "winnerRule 'highestTrumpElseLedSuit' needs a trump expression")
             }
-            let trump = try constantString(trumpExpr.source, param: "trump")
-            return .highestWithTrump(trump: trump)
-        case let other?:
-            throw SimulationError.unsupported("winnerRule '\(other)'")
+            return .highestTrumpElseLed
+        case let custom?:
+            return .custom(ExprRef(pointer: "\(phaseId).winner", source: custom))
         }
     }
 
-    private static func trickFollowRule(_ follow: FollowRules?) throws -> String {
-        var followRuleId = "follow"
-        if let follow = follow {
-            if follow.mustFollow == false {
-                throw SimulationError.unsupported("follow.mustFollow = false")
-            }
-            if follow.mustTrumpIfVoid == true || follow.mustOvertrump == true || follow.mustHeadTrick == true {
-                throw SimulationError.unsupported("trump-follow obligations")
-            }
-            if let rule = follow.rule { followRuleId = rule }
+    private static func playGuard(
+        _ guardSpec: PlayGuard, phaseId: String, key: String
+    ) throws -> RulesEngine.TrickPlayParams.PlayGuard {
+        RulesEngine.TrickPlayParams.PlayGuard(
+            expr: ExprRef(pointer: "\(phaseId).\(key).expr", source: guardSpec.expr.source),
+            otherwise: guardSpec.otherwise,
+            ruleId: guardSpec.rule)
+    }
+
+    private static func dummySpec(
+        _ spec: DummySpec, phaseId: String
+    ) throws -> RulesEngine.TrickPlayParams.DummySpec {
+        let revealAfter: RulesEngine.TrickPlayParams.DummySpec.RevealAfter
+        switch spec.revealAfter {
+        case "openingLead": revealAfter = .afterLead
+        case "immediately": revealAfter = .immediately
+        case let other: throw SimulationError.unsupported("dummy.revealAfter '\(other)'")
         }
-        return followRuleId
+        return RulesEngine.TrickPlayParams.DummySpec(
+            seat: .expr(ExprRef(pointer: "\(phaseId).dummy.seat", source: spec.seat.source)),
+            revealAfter: revealAfter,
+            controlledBy: .expr(
+                ExprRef(pointer: "\(phaseId).dummy.controlledBy", source: spec.controlledBy.source)),
+            ruleId: spec.rule)
+    }
+
+    private static func claimsSpec(
+        _ spec: ClaimsSpec, phaseId: String
+    ) throws -> RulesEngine.TrickPlayParams.ClaimsSpec {
+        RulesEngine.TrickPlayParams.ClaimsSpec(
+            enabled: spec.enabled.map {
+                ExprRef(pointer: "\(phaseId).claims.enabled", source: $0.source)
+            },
+            by: spec.by.map {
+                .expr(ExprRef(pointer: "\(phaseId).claims.by", source: $0.source))
+            },
+            acceptedBy: spec.acceptedBy.map {
+                ExprRef(pointer: "\(phaseId).claims.acceptedBy", source: $0.source)
+            },
+            ruleId: spec.rule)
     }
 
     // MARK: - deck conversion

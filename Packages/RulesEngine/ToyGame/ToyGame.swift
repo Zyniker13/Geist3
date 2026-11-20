@@ -32,11 +32,10 @@ import CardModel
             TrickPlayMechanic.self,
             params: TrickPlayParams(
                 seatCount: seatCount,
-                tricks: tricks,
-                activeSeats: [Seat(0), Seat(1)],
-                firstLeader: Seat(1),  // left of dealer (seat 0) in a two-hand game
-                winnerRule: .highestOfLed,
-                followRuleId: "toy.follow"
+                tricks: .count(tricks),
+                follow: TrickPlayParams.Follow(mustFollow: true, ruleId: "toy.follow"),
+                firstLeader: .seat(Seat(1)),  // left of dealer (seat 0) in a two-hand game
+                winner: .highestOfLed
             ))
         return Engine(
             phases: [
