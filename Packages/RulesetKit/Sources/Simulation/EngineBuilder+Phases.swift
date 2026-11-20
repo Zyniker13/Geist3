@@ -69,6 +69,42 @@ extension EngineBuilder {
                     mechanic: AnyMechanic(
                         ExchangePassMechanic.self, params: engineParams),
                     gate: gate)
+            case ("exchange.kitty", .exchangeKitty(let params)):
+                let engineParams = try exchangeKittyParams(params, phaseId: phase.id)
+                config = PhaseConfig(
+                    id: phase.id,
+                    mechanic: AnyMechanic(
+                        ExchangeKittyMechanic.self, params: engineParams),
+                    gate: gate)
+            case ("exchange.discardTo", .exchangeDiscardTo(let params)):
+                let engineParams = try exchangeDiscardToParams(
+                    params, phaseId: phase.id, seatZones: seatZoneIds,
+                    sharedZones: sharedZoneIds)
+                config = PhaseConfig(
+                    id: phase.id,
+                    mechanic: AnyMechanic(
+                        ExchangeDiscardToMechanic.self, params: engineParams),
+                    gate: gate)
+            case ("count-play", .countPlay(let params)):
+                let engineParams = try countPlayParams(
+                    params, phaseId: phase.id, seatZones: seatZoneIds)
+                config = PhaseConfig(
+                    id: phase.id,
+                    mechanic: AnyMechanic(
+                        CountPlayMechanic.self, params: engineParams),
+                    gate: gate)
+            case ("show", .show(let params)):
+                let engineParams = try showParams(params, phaseId: phase.id)
+                config = PhaseConfig(
+                    id: phase.id,
+                    mechanic: AnyMechanic(ShowMechanic.self, params: engineParams),
+                    gate: gate)
+            case ("score", .score(let params)):
+                let engineParams = try scoreParams(params, phaseId: phase.id)
+                config = PhaseConfig(
+                    id: phase.id,
+                    mechanic: AnyMechanic(ScoreMechanic.self, params: engineParams),
+                    gate: gate)
             case (let mechanic, _):
                 throw SimulationError.unsupported("mechanic '\(mechanic)'")
             }
@@ -186,13 +222,203 @@ extension EngineBuilder {
         _ expr: Expr?, param: String, declared: Set<String>, kind: String
     ) throws -> String {
         guard let expr else { throw SimulationError.config("\(param) is missing") }
-        let source = expr.source.trimmingCharacters(in: .whitespaces)
-        if declared.contains(source) { return source }
-        if let ast = try? parseConstant(source, param: param),
-            case .string(let name, _) = ast, declared.contains(name)
+        return try zoneName(expr.source, param: param, declared: declared, kind: kind)
+    }
+
+    static func zoneName(
+        _ source: String?, param: String, declared: Set<String>, kind: String
+    ) throws -> String {
+        guard let source else { throw SimulationError.config("\(param) is missing") }
+        let name = source.trimmingCharacters(in: .whitespaces)
+        if declared.contains(name) { return name }
+        if let ast = try? parseConstant(name, param: param),
+            case .string(let string, _) = ast, declared.contains(string)
         {
-            return name
+            return string
         }
         throw SimulationError.config("\(param) '\(source)' is not a declared \(kind) zone")
+    }
+
+    /// Zone parameter that accepts a JSON int as well (NumOrExpr).
+    static func zoneName(
+        _ value: NumOrExpr?, param: String, declared: Set<String>, kind: String
+    ) throws -> String {
+        let source: String?
+        switch value {
+        case .int(let n): source = "\(n)"
+        case .expr(let expr): source = expr.source
+        case nil: source = nil
+        }
+        return try zoneName(source, param: param, declared: declared, kind: kind)
+    }
+
+    // MARK: - exchange.kitty / exchange.discardTo
+
+    static func exchangeKittyParams(
+        _ params: ExchangeKittyParams, phaseId: String
+    ) throws -> RulesEngine.ExchangeKittyParams {
+        func ref(_ expr: Expr?, _ key: String) throws -> ExprRef? {
+            guard let expr else { return nil }
+            return ExprRef(pointer: "/phases/\(phaseId)/\(key)", source: expr.source)
+        }
+        func numRef(_ value: NumOrExpr?, _ key: String) throws -> ExprRef? {
+            let source: String?
+            switch value {
+            case .int(let n): source = "\(n)"
+            case .expr(let expr): source = expr.source
+            case nil: source = nil
+            }
+            guard let source else { return nil }
+            return ExprRef(pointer: "/phases/\(phaseId)/\(key)", source: source)
+        }
+        return RulesEngine.ExchangeKittyParams(
+            seat: try ref(params.seat, "seat"),
+            take: try numRef(params.take, "take"),
+            discard: try numRef(params.discard, "discard"),
+            discardTo: try ref(params.discardTo, "discardTo"),
+            skipIf: try ref(params.skipIf, "skipIf"))
+    }
+
+    static func exchangeDiscardToParams(
+        _ params: ExchangeDiscardToParams, phaseId: String, seatZones: Set<String>,
+        sharedZones: Set<String>
+    ) throws -> RulesEngine.ExchangeDiscardToParams {
+        let from = try zoneName(params.from, param: "\(phaseId).from", declared: seatZones, kind: "seat")
+        let to = try zoneName(
+            params.to, param: "\(phaseId).to", declared: sharedZones.union(seatZones), kind: "zone")
+        guard let count = params.count else {
+            throw SimulationError.config("exchange.discardTo phase '\(phaseId)' has no count")
+        }
+        let countSource: String
+        switch count {
+        case .int(let n): countSource = "\(n)"
+        case .expr(let expr): countSource = expr.source
+        }
+        let revealTo: String
+        switch params.revealTo?.stringValue {
+        case "nobody", nil: revealTo = "nobody"
+        case "all": revealTo = "all"
+        case let other?: throw SimulationError.config("revealTo '\(other)' is not nobody or all")
+        }
+        return RulesEngine.ExchangeDiscardToParams(
+            from: from, to: to, toScope: sharedZones.contains(to) ? "shared" : "seat",
+            count: ExprRef(pointer: "/phases/\(phaseId)/count", source: countSource),
+            revealTo: revealTo, simultaneous: params.simultaneous ?? false)
+    }
+
+    // MARK: - count-play
+
+    static func countPlayParams(
+        _ params: CountPlayParams, phaseId: String, seatZones: Set<String>
+    ) throws -> RulesEngine.CountPlayParams {
+        guard let firstPlayer = params.firstPlayer else {
+            throw SimulationError.config("count-play phase '\(phaseId)' has no firstPlayer")
+        }
+        guard let valueOf = params.valueOf else {
+            throw SimulationError.config("count-play phase '\(phaseId)' has no valueOf")
+        }
+        guard let limit = try intParam(params.limit, param: "\(phaseId).limit") else {
+            throw SimulationError.config("count-play phase '\(phaseId)' has no limit")
+        }
+        let award = try params.award.map { try splitLValue($0, param: "\(phaseId).award") }
+        return RulesEngine.CountPlayParams(
+            from: try zoneName(params.from, param: "\(phaseId).from", declared: seatZones, kind: "seat"),
+            to: try zoneName(params.to, param: "\(phaseId).to", declared: seatZones, kind: "seat"),
+            firstPlayer: ExprRef(
+                pointer: "/phases/\(phaseId)/firstPlayer", source: firstPlayer.source),
+            valueOf: ExprRef(pointer: "/phases/\(phaseId)/valueOf", source: valueOf.source),
+            limit: limit,
+            goLastCardPoints: try intParam(
+                params.go?.lastCardPoints, param: "\(phaseId).go.lastCardPoints") ?? 0,
+            goExactLimitPoints: try intParam(
+                params.go?.exactLimitPoints, param: "\(phaseId).go.exactLimitPoints") ?? 0,
+            pointsOnPlay: params.pointsOnPlay.map {
+                ExprRef(pointer: "/phases/\(phaseId)/pointsOnPlay", source: $0.source)
+            },
+            pointsRule: params.pointsRule,
+            awardName: award?.name, awardIndex: award?.index,
+            returnCards: params.returnCards ?? false)
+    }
+
+    /// Constant integer parameter: a JSON int or a literal expression.
+    static func intParam(_ value: NumOrExpr?, param: String) throws -> Int? {
+        switch value {
+        case .int(let n): return n
+        case .expr(let expr):
+            guard case .int(let raw, _) = try? parseConstant(expr.source, param: param) else {
+                throw SimulationError.config("\(param) must be a constant")
+            }
+            return Int(raw)
+        case nil: return nil
+        }
+    }
+
+    /// Splits an award lvalue like `match.score[seat]` into variable name
+    /// and index-expression source.
+    static func splitLValue(_ source: String, param: String) throws -> (name: String, index: String) {
+        guard let open = source.firstIndex(of: "["), source.hasSuffix("]") else {
+            throw SimulationError.config("\(param) '\(source)' is not an lvalue")
+        }
+        let name = source[..<open].trimmingCharacters(in: .whitespaces)
+        let index = source[source.index(after: open)..<source.index(before: source.endIndex)]
+            .trimmingCharacters(in: .whitespaces)
+        guard !name.isEmpty, source[open...].filter({ $0 == "[" }).count == 1 else {
+            throw SimulationError.config("\(param) '\(source)' is not a simple lvalue")
+        }
+        return (name, index)
+    }
+
+    // MARK: - show
+
+    static func showParams(_ params: ShowParams, phaseId: String) throws -> RulesEngine.ShowParams {
+        let order = params.order.map { entry in
+            RulesEngine.ShowEntryParams(
+                zone: entry.zone,
+                seat: entry.seat.map {
+                    ExprRef(pointer: "/phases/\(phaseId)/order/seat", source: $0.source)
+                },
+                award: entry.award.map {
+                    ExprRef(pointer: "/phases/\(phaseId)/order/award", source: $0.source)
+                },
+                isCrib: entry.isCrib)
+        }
+        let award = try splitLValue(
+            params.award?.source ?? "match.score[awardee]", param: "\(phaseId).award")
+        return RulesEngine.ShowParams(
+            order: order,
+            with: params.with.map {
+                ExprRef(pointer: "/phases/\(phaseId)/with", source: $0.source)
+            },
+            points: params.points.map {
+                ExprRef(pointer: "/phases/\(phaseId)/points", source: $0.source)
+            },
+            pointsRule: params.pointsRule,
+            manual: params.manual.map {
+                ExprRef(pointer: "/phases/\(phaseId)/manual", source: $0.source)
+            },
+            muggins: params.muggins.map {
+                ExprRef(pointer: "/phases/\(phaseId)/muggins", source: $0.source)
+            },
+            awardName: award.name, awardIndex: award.index)
+    }
+
+    // MARK: - score
+
+    static func scoreParams(_ params: ScoreParams, phaseId: String) throws -> RulesEngine.ScoreParams {
+        let effects = try mapEffects(params.effects)
+        let choices = try params.choices.map { list in
+            try list.map { choice in
+                RulesEngine.ScoreChoiceRef(
+                    id: choice.id,
+                    seat: ExprRef(
+                        pointer: "/phases/\(phaseId)/choices/\(choice.id)/seat",
+                        source: choice.seat.source),
+                    when: ExprRef(
+                        pointer: "/phases/\(phaseId)/choices/\(choice.id)/when",
+                        source: choice.when.source),
+                    values: choice.values)
+            }
+        }
+        return RulesEngine.ScoreParams(effects: effects, choices: choices)
     }
 }
