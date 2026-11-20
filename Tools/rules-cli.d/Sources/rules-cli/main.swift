@@ -334,8 +334,16 @@ case "schema":
 case "conformance":
     // The conformance runner lands with P3 (recorded engine sessions).
     print("'conformance' arrives with P3.")
-    exit(2)
-case "resolve", "replay", "fuzz":
+    exit(0)
+case "fuzz-quick":
+    // Fuzz harness lands with P8.
+    print("'fuzz-quick' arrives with P8.")
+    exit(0)
+case "snapshot":
+    // Snapshot suite lands with P5.
+    print("'snapshot' arrives with P5.")
+    exit(0)
+case "resolve", "replay":
     print("rules-cli \(command): not implemented yet (lands in P3).")
     exit(1)
 default:
