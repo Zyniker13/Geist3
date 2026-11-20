@@ -469,3 +469,28 @@ Branch `phase/P3-first-four-games` (from `main` after the G2 merge).
 - Evidence: `swift build` clean (RulesEngine + RulesetKit); `swift test`
   → **53/53** (RulesEngine), **154/154** (RulesetKit); `make lint` →
   exit 0 (warnings only, no errors).
+
+**P3.1 S5 — mechanics wave — IN PROGRESS (commits `baac7ae`, `8c35653`).**
+
+- `reveal.starter` + `exchange.pass` reworked onto the schema param
+  structs; engine phase `gate` (ruleset `when`) added (`baac7ae`).
+- Remaining five mechanics written and wired (`8c35653`):
+  `exchange.kitty` (take/discard counts, shared or seat-scoped target,
+  laid-away cards private to the discarder), `exchange.discardTo`
+  (fixed-count discards into a shared or per-seat zone, `revealTo`
+  nobody/all), `count-play` (cribbage pegging: run tracking, 31 limit,
+  pairs/runs scoring hooks via `pointsOnPlay`, go + last-card + exact-
+  limit points, award into the ruleset's lvalue), `show` (per-entry
+  zone/seat/award/isCrib ordering with §5.6 hand scoring, `with`/
+  `points` expressions, manual counting faults with a clear pointer,
+  muggins entry points), `score` (pure effects + optional `choices`
+  gating so e.g. hearts' moon choice gates the award).
+- EngineBuilder mapping for all five added in
+  `EngineBuilder+Phases.swift` (schema → engine params; lvalue award
+  paths split; NumOrExpr constants; zone declarations validated).
+- Evidence: `swift build` clean (RulesEngine + RulesetKit); `swift test`
+  → **53/53** (RulesEngine), **154/154** (RulesetKit); `make lint` →
+  0 errors. Pushed to `phase/P3-first-four-games` (`8c35653`); main
+  untouched and green at `84d58d8`.
+- Remaining in S5: unit tests exercising the new mechanics end-to-end
+  through EngineBuilder (a cribbage-shaped phase sequence), then S6.
