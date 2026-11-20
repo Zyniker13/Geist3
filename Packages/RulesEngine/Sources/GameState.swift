@@ -34,6 +34,11 @@ public struct GameState: Codable, Hashable, Sendable {
     public var version: UInt64
     /// Per-phase options set by mechanics (e.g., "passed_0", "passed_1").
     public var phaseOptions: [String: String]
+    /// True once the match end condition fired (§5.8); the host reads
+    /// `winners` to close the session.
+    public var matchOver: Bool
+    /// Winner seats in `end.rank` order; empty while the match runs.
+    public var winners: [Seat]
 
     static let recentEventLimit = 32
 
@@ -49,7 +54,9 @@ public struct GameState: Codable, Hashable, Sendable {
         history: [LoggedAction] = [],
         recentEvents: [GameEvent] = [],
         version: UInt64 = 0,
-        phaseOptions: [String: String] = [:]
+        phaseOptions: [String: String] = [:],
+        matchOver: Bool = false,
+        winners: [Seat] = []
     ) {
         self.rng = rng
         self.matchVars = matchVars
@@ -63,6 +70,8 @@ public struct GameState: Codable, Hashable, Sendable {
         self.recentEvents = recentEvents
         self.version = version
         self.phaseOptions = phaseOptions
+        self.matchOver = matchOver
+        self.winners = winners
     }
 
     // MARK: - Mechanic sub-state accessors (typed convenience)
@@ -113,6 +122,8 @@ public struct GameState: Codable, Hashable, Sendable {
         hasher.combine(recentEvents)
         hasher.combine(version)
         hasher.combine(phaseOptions)
+        hasher.combine(matchOver)
+        hasher.combine(winners)
     }
 
     public static func == (lhs: GameState, rhs: GameState) -> Bool {
@@ -128,5 +139,7 @@ public struct GameState: Codable, Hashable, Sendable {
             && lhs.recentEvents == rhs.recentEvents
             && lhs.version == rhs.version
             && lhs.phaseOptions == rhs.phaseOptions
+            && lhs.matchOver == rhs.matchOver
+            && lhs.winners == rhs.winners
     }
 }

@@ -6,6 +6,50 @@
 import CardModel
 import Foundation
 
+/// Tie policy for the §5.8 match rank: shared (all top scorers win) or
+/// sudden-death (the first listed top scorer wins — position order breaks
+/// the tie deterministically).
+public enum EngineTiePolicy: String, Sendable {
+    case shared
+    case suddenDeath = "suddenDeath"
+}
+
+/// The §5.8 rank: a seat- or team-indexed variable, ordered ascending or
+/// descending, with a tie policy.
+public struct EngineRankSpec: Sendable {
+    public let scope: EngineVarScope
+    public let name: String
+    public let descending: Bool
+    public let ties: EngineTiePolicy
+
+    public init(scope: EngineVarScope, name: String, descending: Bool, ties: EngineTiePolicy) {
+        self.scope = scope
+        self.name = name
+        self.descending = descending
+        self.ties = ties
+    }
+}
+
+/// The §5.8 end configuration: when the match closes and what runs then.
+/// `deals` counts completed deals; `condition` is an expression evaluated
+/// through the host runtime. Exactly one of the two must be configured.
+public struct EngineEndSpec: Sendable {
+    public let condition: String?
+    public let deals: Int?
+    public let rank: EngineRankSpec
+    public let matchEffects: [EngineEffect]
+
+    public init(
+        condition: String? = nil, deals: Int? = nil, rank: EngineRankSpec,
+        matchEffects: [EngineEffect] = []
+    ) {
+        self.condition = condition
+        self.deals = deals
+        self.rank = rank
+        self.matchEffects = matchEffects
+    }
+}
+
 /// One configured phase of the P1 phase list.
 @_spi(HostOnly)
 public struct PhaseConfig: Sendable {
@@ -76,41 +120,118 @@ public struct Engine: Sendable {
     public let expressionRuntime: (@Sendable (EvalCall, GameState) throws(EvalFailure) -> EvalValue)?
     /// SHA-256 of the resolved ruleset (P1: hash of the phase configuration).
     public let rulesetHash: Data
+    /// Ruleset variables (§5.5): name → declaration.
+    public let vars: [String: EngineVarDecl]
+    /// Seat spellings in seat order (§7.3).
+    public let seatNames: [String]
+    /// Team spellings in team order; empty means the ruleset has no teams.
+    public let teamNames: [String]
+    /// Maps a seat position to its team position.
+    public let teamOfSeat: [Int]
+    /// The phase whose completion closes one deal and re-enters itself (§5.7).
+    public let dealPhaseID: String?
+    /// Match end configuration (§5.8).
+    public let end: EngineEndSpec?
+    /// Effects run when a deal completes, before rotation and reset (§5.6).
+    public let afterDeal: [EngineEffect]
+    /// Rebuilds the table between deals: zones and deck restacking.
+    public let rebuild: (@Sendable (inout GameState) throws -> Void)?
+    /// Table options (§5.9).
+    public let options: [String: String]
 
     public init(
         phases: [PhaseConfig], seatCount: Int,
         setup: (@Sendable (inout GameState) throws -> Void)? = nil,
-        expressionRuntime: (@Sendable (EvalCall, GameState) throws(EvalFailure) -> EvalValue)? = nil
+        expressionRuntime: (@Sendable (EvalCall, GameState) throws(EvalFailure) -> EvalValue)? = nil,
+        vars: [String: EngineVarDecl] = [:],
+        seatNames: [String] = [],
+        teamNames: [String] = [],
+        teamOfSeat: [Int] = [],
+        dealPhaseID: String? = nil,
+        end: EngineEndSpec? = nil,
+        afterDeal: [EngineEffect] = [],
+        rebuild: (@Sendable (inout GameState) throws -> Void)? = nil,
+        options: [String: String] = [:]
     ) {
         self.phases = phases
         self.seatCount = seatCount
         self.setup = setup
         self.expressionRuntime = expressionRuntime
-        self.rulesetHash = Engine.hash(of: phases, expressionRuntime: expressionRuntime)
-    }
-
-    public static func hash(of phases: [PhaseConfig]) -> Data {
-        Engine.hash(of: phases, expressionRuntime: nil)
+        self.vars = vars
+        self.seatNames = seatNames.isEmpty ? (0..<seatCount).map { "S\($0 + 1)" } : seatNames
+        self.teamNames = teamNames
+        self.teamOfSeat = teamOfSeat
+        self.dealPhaseID = dealPhaseID
+        self.end = end
+        self.afterDeal = afterDeal
+        self.rebuild = rebuild
+        self.options = options
+        self.rulesetHash = Engine.hash(
+            of: phases, expressionRuntime: expressionRuntime, vars: vars,
+            seatNames: self.seatNames, teamNames: teamNames, teamOfSeat: teamOfSeat,
+            dealPhaseID: dealPhaseID, end: end, afterDeal: afterDeal, options: options)
     }
 
     /// Configuration hash: phase ids plus the identity of the installed
-    /// expression runtime (§ P1: cache invalidation across builds).
+    /// expression runtime (§ P1: cache invalidation across builds). The
+    /// ruleset-level configuration (vars, teams, end, effects, options)
+    /// changes game behavior, so it joins the hash (§10.4).
     public static func hash(
         of phases: [PhaseConfig],
-        expressionRuntime: (@Sendable (EvalCall, GameState) throws(EvalFailure) -> EvalValue)?
+        expressionRuntime: (@Sendable (EvalCall, GameState) throws(EvalFailure) -> EvalValue)?,
+        vars: [String: EngineVarDecl] = [:],
+        seatNames: [String] = [],
+        teamNames: [String] = [],
+        teamOfSeat: [Int] = [],
+        dealPhaseID: String? = nil,
+        end: EngineEndSpec? = nil,
+        afterDeal: [EngineEffect] = [],
+        options: [String: String] = [:]
     ) -> Data {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
-        let ids = phases.map { $0.id }
-        let payload = (try? encoder.encode(ids)) ?? Data()
+        var lines: [String] = phases.map { $0.id }
+        for name in vars.keys.sorted() {
+            guard let decl = vars[name] else { continue }
+            lines.append(
+                "var:\(name):\(decl.decl.scope.rawValue):\(decl.decl.isHidden ? "hidden" : "open")")
+        }
+        lines.append("seats:\(seatNames.joined(separator: ","))")
+        lines.append("teams:\(teamNames.joined(separator: ","))")
+        lines.append("teamOfSeat:\(teamOfSeat.map(String.init).joined(separator: ","))")
+        lines.append("dealPhase:\(dealPhaseID ?? "-")")
+        lines.append(
+            "options:\(options.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: ","))")
+        lines.append("afterDeal:\(afterDeal.count)")
+        if let end {
+            let rank = end.rank
+            let deals = end.deals.map(String.init) ?? "-"
+            lines.append(
+                "end:\(end.condition ?? "-"):\(deals):\(rank.scope.rawValue):"
+                    + "\(rank.name):\(rank.descending ? "desc" : "asc"):\(rank.ties.rawValue):\(end.matchEffects.count)"
+            )
+        }
+        let payload = (try? encoder.encode(lines)) ?? Data()
         var digest = SHA256()
         digest.update(data: payload)
         digest.update(data: Data("runtime:\(expressionRuntime != nil)".utf8))
         return Data(digest.finalize())
     }
 
-    private var ctx: EvalContext {
-        EvalContext(seatCount: seatCount, eval: expressionRuntime)
+    func ctx(_ state: GameState) -> EvalContext {
+        EvalContext(
+            seatCount: seatCount, dealer: state.dealer, eval: expressionRuntime,
+            seatNames: seatNames, teamNames: teamNames, teamOfSeat: teamOfSeat,
+            options: options, effects: effectsRunner)
+    }
+
+    /// One runner per call site is cheap: `EffectsRunner` only captures
+    /// context; all state it touches is passed per invocation.
+    var effectsRunner: EffectsRunner? {
+        guard expressionRuntime != nil else { return nil }
+        let bare = EvalContext(seatCount: seatCount, eval: expressionRuntime)
+        return EffectsRunner(
+            ctx: bare, seatNames: seatNames, teamNames: teamNames, varDecls: vars)
     }
 
     /// Fresh state: seed → RNG, dealer seat 0, phase 0 entered.
@@ -132,11 +253,12 @@ public struct Engine: Sendable {
                 throw AnyMechanic.violation(error)
             }
         }
+        try initializeVars(&state)
         guard let first = phases.first else {
             throw RuleViolation.engineFault(ruleId: nil, pointer: "engine has no phases")
         }
         state.enterPhase(first.id)
-        events += try first.mechanic.enter(&state, ctx)
+        events += try first.mechanic.enter(&state, ctx(state))
         try advanceIfAutomatic(&state, &events)
         state.recentEvents = events.suffix(GameState.recentEventLimit).map { $0 }
         return Transition(state: state, events: events)
@@ -154,18 +276,25 @@ public struct Engine: Sendable {
 
     private func advanceIfAutomaticInner(_ state: inout GameState, _ events: inout [GameEvent]) throws {
         while state.phase.phaseID != "done" {
+            if state.matchOver {
+                state.enterPhase("done")
+                events.append(.dealEnded)
+                continue
+            }
             guard let config = phases.first(where: { $0.id == state.phase.phaseID }) else {
                 throw RuleViolation.engineFault(ruleId: nil, pointer: "unknown phase \(state.phase.phaseID)")
             }
-            let outcome = config.mechanic.complete(state, ctx)
-            let pending = config.mechanic.pending(state, ctx)
+            let outcome = config.mechanic.complete(state, ctx(state))
+            let pending = config.mechanic.pending(state, ctx(state))
             if outcome == .continue || !pending.isEmpty { return }
             if let next = nextStateIndex(after: config.id) {
                 state.enterPhase(phases[next].id)
-                events += try phases[next].mechanic.enter(&state, ctx)
+                events += try phases[next].mechanic.enter(&state, ctx(state))
             } else {
-                state.enterPhase("done")
-                events.append(.dealEnded)
+                // Last phase of the deal list completes → the deal ends
+                // (§5.7): afterDeal effects, dealer rotation, per-deal
+                // resets, re-enter the deal phase or close the match.
+                try finishDeal(&state, &events)
             }
         }
     }
@@ -178,7 +307,7 @@ public struct Engine: Sendable {
 
     public func legalIntents(for seat: Seat, in state: GameState) -> [ActionIntent] {
         guard let config = phases.first(where: { $0.id == state.phase.phaseID }) else { return [] }
-        return config.mechanic.legal(state, seat, ctx)
+        return config.mechanic.legal(state, seat, ctx(state))
     }
 
     public func apply(_ action: Action, to state: GameState) throws(RuleViolation) -> Transition {
@@ -198,11 +327,11 @@ public struct Engine: Sendable {
         guard let config = phases.first(where: { $0.id == state.phase.phaseID }) else {
             throw RuleViolation.engineFault(ruleId: nil, pointer: "unknown phase \(state.phase.phaseID)")
         }
-        let pending = config.mechanic.pending(state, ctx)
+        let pending = config.mechanic.pending(state, ctx(state))
         guard pending.contains(action.seat) else {
             throw RuleViolation.notYourTurn(expected: pending)
         }
-        events += try config.mechanic.act(action.intent, action.seat, &state, ctx)
+        events += try config.mechanic.act(action.intent, action.seat, &state, ctx(state))
         state.history.append(LoggedAction(seat: action.seat, intent: action.intent, version: state.version))
         state.version += 1
         try advanceIfAutomatic(&state, &events)
@@ -257,7 +386,7 @@ public struct Engine: Sendable {
 
     public func pendingSeats(in state: GameState) -> SeatSet {
         guard let config = phases.first(where: { $0.id == state.phase.phaseID }) else { return SeatSet() }
-        return config.mechanic.pending(state, ctx)
+        return config.mechanic.pending(state, ctx(state))
     }
 
     /// Final-state hash for replay verification (§10.4).

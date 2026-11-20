@@ -31,14 +31,34 @@ public struct EvalContext: Sendable {
     /// Evaluates one expression (§7.5). The engine owns no evaluator;
     /// the host installs this through `Engine`.
     public let eval: (@Sendable (EvalCall, GameState) throws(EvalFailure) -> EvalValue)?
+    /// Seat spellings in seat order (§7.3); empty means `S1…Sn`.
+    public let seatNames: [String]
+    /// Team spellings in team order; empty means no teams.
+    public let teamNames: [String]
+    /// Maps a seat position to its team position.
+    public let teamOfSeat: [Int]
+    /// Table options (§5.9), keyed by name.
+    public let options: [String: String]
+    /// Runs ruleset effects (§5.6). Nil means the ruleset has no effects.
+    public let effects: EffectsRunner?
 
     public init(
         seatCount: Int, dealer: Seat? = nil,
-        eval: (@Sendable (EvalCall, GameState) throws(EvalFailure) -> EvalValue)? = nil
+        eval: (@Sendable (EvalCall, GameState) throws(EvalFailure) -> EvalValue)? = nil,
+        seatNames: [String] = [],
+        teamNames: [String] = [],
+        teamOfSeat: [Int] = [],
+        options: [String: String] = [:],
+        effects: EffectsRunner? = nil
     ) {
         self.seatCount = seatCount
         self.dealer = dealer
         self.eval = eval
+        self.seatNames = seatNames
+        self.teamNames = teamNames
+        self.teamOfSeat = teamOfSeat
+        self.options = options
+        self.effects = effects
     }
 
     /// Evaluates one expression, mapping any failure onto an engine

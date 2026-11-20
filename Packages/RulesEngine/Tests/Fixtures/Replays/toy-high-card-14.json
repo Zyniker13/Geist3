@@ -51,9 +51,9 @@
       "version" : 9
     }
   ],
-  "finalStateHash" : "876a18c1526504f5e3e0e00a2afd26b20fd026d27bcd0db5842703e778a292c5",
+  "finalStateHash" : "94398691bf40221ad068e69858d1207e36a42c18491d47ee33d53327d343ff76",
   "format" : "parlor.replay\/1",
-  "rulesetHash" : "939484695cafac8e08124d06cae5e749ecf38ac0d6912a6f343e32b2a0aab727",
+  "rulesetHash" : "7dc7978a8375c055fe42114d2b07abf2fe632a7c8e92eb348dabc8bc0cc8f460",
   "seatCount" : 2,
   "seed" : 500001
 }

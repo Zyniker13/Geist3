@@ -37,6 +37,7 @@ extension ExpressionRuntime {
         case .bool(let b): return .bool(b)
         case .string(let s): return .string(s)
         case .seat(let seat): return .string("S\(seat.raw + 1)")
+        case .null: return .null
         }
     }
 

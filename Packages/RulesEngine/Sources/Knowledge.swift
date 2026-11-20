@@ -62,6 +62,7 @@ public enum VarValue: Codable, Hashable, Sendable {
     case bool(Bool)
     case string(String)
     case seat(Seat)
+    case null
 }
 
 public enum VarScope: String, Codable, Sendable {
