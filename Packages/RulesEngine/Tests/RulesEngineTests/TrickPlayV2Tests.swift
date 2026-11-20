@@ -14,91 +14,6 @@ import Testing
 @Suite("RulesEngine — trick-play v2: trump, dummy, claims")
 struct TrickPlayV2Tests {
 
-    // MARK: - Fixture
-
-    private static func euchreDeck() -> [CardFace] {
-        // Pop order per seat; the dealer pops the stock tail, so the deck
-        // is stored reversed.
-        let pops: [(String, String)] = [
-            ("c", "9"), ("c", "10"), ("c", "J"), ("h", "J"), ("h", "10"), ("h", "9"),
-            ("d", "A"), ("d", "K"), ("d", "Q"), ("d", "J"), ("d", "10"), ("s", "9"),
-            ("c", "A"), ("c", "K"), ("c", "Q"), ("h", "A"), ("h", "K"), ("h", "Q"),
-            ("s", "A"), ("s", "K"), ("s", "Q"), ("s", "J"), ("s", "10"), ("d", "9"),
-        ]
-        return pops.reversed().map { CardFace(suit: Suit($0.0), rank: Rank($0.1)) }
-    }
-
-    private static func hand(_ state: GameState, _ seat: Seat) -> [CardInstance] {
-        state.zones.cards(in: ZoneKey(scope: .seat, owner: seat.raw, id: "hand"))
-    }
-
-    private static func card(_ state: GameState, _ seat: Seat, suit: String, rank: String) -> CardID {
-        let hit = hand(state, seat).first { $0.face.suit?.code == suit && $0.face.rank.code == rank }
-        return hit?.id ?? CardID(UInt16.max)
-    }
-
-    private static func euchreEngine(claims: TrickPlayParams.ClaimsSpec? = nil, dummy: TrickPlayParams.DummySpec? = nil)
-        -> Engine
-    {
-        let deal = AnyMechanic(
-            DealMechanic.self,
-            params: DealParams(
-                source: "stock",
-                packets: [
-                    DealPacket(to: Seat(0), each: 6), DealPacket(to: Seat(1), each: 6),
-                    DealPacket(to: Seat(2), each: 6), DealPacket(to: Seat(3), each: 6),
-                ],
-                shuffleFirst: false,
-                deckFaces: euchreDeck()))
-        let trick = AnyMechanic(
-            TrickPlayMechanic.self,
-            params: TrickPlayParams(
-                seatCount: 4,
-                tricks: .count(6),
-                orderRanks: ["9", "10", "J", "Q", "K", "A"],
-                follow: TrickPlayParams.Follow(mustFollow: true, ruleId: "euch.follow"),
-                trump: .suit("d"),
-                firstLeader: .seat(Seat(0)),
-                winner: .highestTrumpElseLed,
-                dummy: dummy,
-                claims: claims))
-        return Engine(
-            phases: [
-                PhaseConfig(id: "deal", mechanic: deal),
-                PhaseConfig(id: "tricks", mechanic: trick),
-            ],
-            seatCount: 4,
-            // Host expression runtime (§7.5): a minimal evaluator that
-            // answers exactly the expressions this fixture uses. The
-            // runtime itself is a host component, tested elsewhere; here
-            // it only unblocks the claims expressions.
-            expressionRuntime: { (call: EvalCall, _: GameState) throws(EvalFailure) -> EvalValue in
-                switch call.source {
-                case "true":
-                    return .bool(true)
-                case "['S2', 'S3', 'S4']":
-                    return .list([.string("S2"), .string("S3"), .string("S4")])
-                case "['S2']":
-                    return .list([.string("S2")])
-                default:
-                    throw .fault(
-                        pointer: call.pointer,
-                        detail: "test runtime: unsupported expression '\(call.source)'")
-                }
-            })
-    }
-
-    private static func play(_ engine: Engine, _ state: inout GameState, _ seat: Seat, _ cardID: CardID) throws {
-        state = try engine.apply(
-            Action(seat: seat, intent: .play(cardID), expectedVersion: state.version), to: state
-        ).state
-    }
-
-    private static func trickSub(_ state: GameState) -> TrickSubstate? {
-        if case .trick(let sub)? = state.phase.substate { return sub }
-        return nil
-    }
-
     // MARK: - Trump beats the led suit
 
     /// Seat 1 is void in the led club suit and trumps with the king of
@@ -329,4 +244,5 @@ struct TrickPlayV2Tests {
         }
         #expect(state.phase.phaseID == "done", "the engine advanced past trick play")
     }
+
 }

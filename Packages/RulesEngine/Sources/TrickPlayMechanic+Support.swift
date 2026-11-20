@@ -111,6 +111,11 @@ extension TrickPlayMechanic {
     static func nextToAct(_ params: Params, state: GameState, ctx: EvalContext) -> Seat? {
         let sub = state.trickSubstate()
         if sub.claimedBy != nil || sub.pendingClaim != nil { return nil }
+        // Once the phase is over (all tricks played, hands empty, or a claim
+        // settled) there is no next actor: leaving one would keep the phase
+        // pending forever (advanceIfAutomatic refuses to advance a phase that
+        // still has pending seats).
+        if isComplete(params, state: state, ctx: ctx) == .complete { return nil }
         guard sub.currentPlays.count < sub.activeSeats.count else { return nil }
         let index = sub.activeSeats.firstIndex(of: sub.leader) ?? 0
         let seat = sub.activeSeats[(index + sub.currentPlays.count) % sub.activeSeats.count]
@@ -142,11 +147,15 @@ extension TrickPlayMechanic {
             let led = sub.ledSuit
             var bestTrump: (seat: Seat, strength: Int)?
             var bestPlain: (seat: Seat, strength: Int)?
+            var bestOverall: (seat: Seat, strength: Int)? = nil
             for play in plays {
                 guard let instance = pile.first(where: { $0.id == play.card }) else { continue }
                 let suit = effectiveSuit(params, instance, state: state, ctx: ctx)
                 let isTrump = sub.trumpSuit != nil && suit == sub.trumpSuit
                 let value = cardStrength(params, instance, state: state, ctx: ctx)
+                if bestOverall == nil || value > bestOverall!.strength {
+                    bestOverall = (play.seat, value)
+                }
                 if params.winner == .highestOfLed {
                     // Only cards of the led suit contend (§5.6).
                     guard suit == led else { continue }
@@ -164,6 +173,12 @@ extension TrickPlayMechanic {
                         bestPlain = (play.seat, value)
                     }
                 }
+            }
+            if params.strength != nil, let bestOverall {
+                // A strength expression replaces rank for every comparison,
+                // so the strongest card wins outright — a pet card can beat
+                // even the highest trump (ties keep the earlier play).
+                return bestOverall.seat
             }
             if let bestTrump { return bestTrump.seat }
             return bestPlain?.seat ?? plays.first?.seat ?? sub.leader

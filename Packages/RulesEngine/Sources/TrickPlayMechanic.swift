@@ -372,6 +372,48 @@ public enum TrickPlayMechanic: Mechanic {
             let followers = hand.filter { effectiveSuit(params, $0, state: state, ctx: ctx) == led }
             if !followers.isEmpty { candidates = followers }
         }
+        // Follow-variant narrowing, mirroring apply's violations so that
+        // legality never advertises a card apply would reject.
+        if let led {
+            let ledCards = candidates.filter { effectiveSuit(params, $0, state: state, ctx: ctx) == led }
+            let trumps = candidates.filter { effectiveSuit(params, $0, state: state, ctx: ctx) == sub.trumpSuit }
+            // Void in the led suit: must trump if holding trump.
+            if params.follow.mustTrumpIfVoid, ledCards.isEmpty, !trumps.isEmpty {
+                candidates = trumps
+            }
+            // Overtrump: a trump play must beat the current best trump if able.
+            if params.follow.mustOvertrump, !trumps.isEmpty {
+                let bestTrump = bestStrength(
+                    params, sub, suit: sub.trumpSuit, pile: pileOf(state, sub), state: state, ctx: ctx)
+                if let bestTrump {
+                    let beaters = trumps.filter {
+                        cardStrength(params, $0, state: state, ctx: ctx) > bestTrump
+                    }
+                    if !beaters.isEmpty {
+                        candidates = candidates.filter {
+                            effectiveSuit(params, $0, state: state, ctx: ctx) != sub.trumpSuit
+                                || beaters.contains($0)
+                        }
+                    }
+                }
+            }
+            // Head the trick: following must beat the current best led card if able.
+            if params.follow.mustHeadTrick, !ledCards.isEmpty {
+                let bestLed = bestStrength(
+                    params, sub, suit: led, pile: pileOf(state, sub), state: state, ctx: ctx)
+                if let bestLed {
+                    let beaters = ledCards.filter {
+                        cardStrength(params, $0, state: state, ctx: ctx) > bestLed
+                    }
+                    if !beaters.isEmpty {
+                        candidates = candidates.filter {
+                            effectiveSuit(params, $0, state: state, ctx: ctx) != led
+                                || beaters.contains($0)
+                        }
+                    }
+                }
+            }
+        }
         // Guard predicates narrow further (failures defer to apply).
         if let guardSpec = (sub.currentPlays.isEmpty ? params.leadAllowed : params.playAllowed) {
             candidates = candidates.filter {
@@ -546,9 +588,26 @@ public enum TrickPlayMechanic: Mechanic {
         let trickCards = state.zones.cards(in: trickKey)
         for instance in trickCards { state.knowledge.makePublic(instance.id) }
         let winner = try winnerOf(params, sub: sub2, plays: sub2.currentPlays, pile: trickCards, state: state, ctx: ctx)
+        // The next leader: the expression overrides the winner, with the
+        // winner bound as `winner` (§7.4: a fault, never a silent fallback).
+        let leader: Seat
+        if let spec = params.nextLeader {
+            let value = try ctx.evalCall(
+                .init(
+                    pointer: "/phases/trick-play/nextLeader", source: spec.source, ruleId: nil,
+                    contextual: ["winner": .string(spelling(winner, ctx))]),
+                state: state)
+            guard let seat = seatValue(of: value, ctx: ctx), sub2.activeSeats.contains(seat) else {
+                throw RuleViolation.engineFault(
+                    ruleId: nil, pointer: "/phases/trick-play/nextLeader not an active seat")
+            }
+            leader = seat
+        } else {
+            leader = winner
+        }
         state.mutateSubstate {
             $0.tricksWon[winner.raw] += 1
-            $0.leader = winner
+            $0.leader = leader
             $0.currentPlays = []
             $0.trickIndex += 1
             $0.ledSuit = nil
