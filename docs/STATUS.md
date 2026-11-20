@@ -439,3 +439,33 @@ Branch `phase/P3-first-four-games` (from `main` after the G2 merge).
 - `DealConfigTests` (new): 3 end-to-end tests validating JSON deal configs (basic variable count, face-up shared zone, fixed `each`+`count`).
 - 20 replay fixtures updated with new ruleset hash `939484695cafac8e08124d06cae5e749ecf38ac0d6912a6f343e32b2a0aab727`.
 - Evidence: `swift test` → **154 tests in 18 suites passed** (RulesetKit, +3 DealConfigTests); `swift test` in RulesEngine → **53 tests** pass; `make lint` → exit 0 (warnings only, no errors).
+
+**P3.1 S3+S4 — match substrate + effects executor — DONE (commits `ef7b593`, this commit).**
+- `RulesEngine` (`ef7b593`): effects language runtime (`Effects.swift`,
+  `EngineEffect` + `EffectsRunner`, §5.5 vocabulary `set/add/let/if/forEach/
+  move/reveal/emit`), match lifecycle (`Engine+Match.swift`: §5.7 per-deal
+  reset, dealer rotation, end check `afterDeal/continuous/afterTrick`,
+  §5.8 rank winners with tie policies `shared/playOff/impossible`),
+  `Engine` rewritten (vars/teams/end/dealer setup, `setup` hook,
+  `EngineEndSpec`/`EngineDealerRotation`), `VarValue.null`,
+  `GameState.matchOver/winners/phaseOptions`.
+- This commit completes the S4 mapping: new
+  `EngineBuilder+Substrate.swift` maps the schema layer to the engine —
+  `vars` (declarations + literal initials parsed via CardExpr), teams
+  (partnership-opposite layout), `end` (condition/maxDeals, rank scope
+  resolved from the declared variable's scope — the `match.`/`deal.` path
+  prefix is the read surface and must agree with the var family), orders,
+  first-dealer picks (`randomCut/highCut/lowCut/firstJack` over
+  `CardFace.rank.code` with the ruleset's `orders.natural`), dealer
+  rotation, and the `setup` closure (zone declarations).
+- `Effects.swift`: `EngineEffect.reveal(zone:seat:to:)` +
+  `RevealTarget`; `runReveal` per §5.4 zone visibility.
+- Fixtures: P2-era toy/DealConfig fixtures gained `orders.natural`
+  (the cut needs a rank order — rulesets own their orders per §5.4).
+- Semantics fix found by the tests: `declareVar` now writes a
+  declaration's initial value to **every** instance (all seats / teams /
+  the plain slot), not just the dealer's index — match-end ranking reads
+  all positions and unset reads fault (§7.4).
+- Evidence: `swift build` clean (RulesEngine + RulesetKit); `swift test`
+  → **53/53** (RulesEngine), **154/154** (RulesetKit); `make lint` →
+  exit 0 (warnings only, no errors).

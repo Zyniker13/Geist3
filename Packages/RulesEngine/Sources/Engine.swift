@@ -6,12 +6,25 @@
 import CardModel
 import Foundation
 
-/// Tie policy for the §5.8 match rank: shared (all top scorers win) or
-/// sudden-death (the first listed top scorer wins — position order breaks
-/// the tie deterministically).
+/// Tie policy for the §5.8 match rank: `shared` (all top scorers win
+/// together), `playOff` (a playoff deal decides; P3's engine does not
+/// automate playoffs, so a tie under this policy is an engineFault), or
+/// `impossible` (the ruleset declares ties cannot occur; one occurring is
+/// an engineFault).
 public enum EngineTiePolicy: String, Sendable {
     case shared
-    case suddenDeath = "suddenDeath"
+    case playOff = "playOff"
+    case impossible
+}
+
+/// When the §5.8 end condition is checked: after each deal completes
+/// (default), after every applied action (a score crossing the target ends
+/// the match mid-deal), or after each trick (not automated in P3 — the
+/// builder refuses it).
+public enum EngineEndCheck: String, Sendable {
+    case afterDeal
+    case continuous
+    case afterTrick
 }
 
 /// The §5.8 rank: a seat- or team-indexed variable, ordered ascending or
@@ -33,21 +46,35 @@ public struct EngineRankSpec: Sendable {
 /// The §5.8 end configuration: when the match closes and what runs then.
 /// `deals` counts completed deals; `condition` is an expression evaluated
 /// through the host runtime. Exactly one of the two must be configured.
+/// `ruleId` attributes end-condition faults to the ruleset rule that owns
+/// the check.
 public struct EngineEndSpec: Sendable {
     public let condition: String?
     public let deals: Int?
     public let rank: EngineRankSpec
+    public let check: EngineEndCheck
+    public let ruleId: String?
     public let matchEffects: [EngineEffect]
 
     public init(
         condition: String? = nil, deals: Int? = nil, rank: EngineRankSpec,
+        check: EngineEndCheck = .afterDeal, ruleId: String? = nil,
         matchEffects: [EngineEffect] = []
     ) {
         self.condition = condition
         self.deals = deals
         self.rank = rank
+        self.check = check
+        self.ruleId = ruleId
         self.matchEffects = matchEffects
     }
+}
+
+/// §5.7 dealership: how the dealer moves between deals. `alternate` is the
+/// two-seat form of `left` (the builder rejects it with other seat counts);
+/// `fixed` keeps the same dealer every deal.
+public enum EngineDealerRotation: String, Sendable {
+    case left, right, alternate, fixed
 }
 
 /// One configured phase of the P1 phase list.
@@ -138,6 +165,8 @@ public struct Engine: Sendable {
     public let rebuild: (@Sendable (inout GameState) throws -> Void)?
     /// Table options (§5.9).
     public let options: [String: String]
+    /// How the dealer moves between deals (§5.7).
+    public let dealerRotation: EngineDealerRotation
 
     public init(
         phases: [PhaseConfig], seatCount: Int,
@@ -151,7 +180,8 @@ public struct Engine: Sendable {
         end: EngineEndSpec? = nil,
         afterDeal: [EngineEffect] = [],
         rebuild: (@Sendable (inout GameState) throws -> Void)? = nil,
-        options: [String: String] = [:]
+        options: [String: String] = [:],
+        dealerRotation: EngineDealerRotation = .left
     ) {
         self.phases = phases
         self.seatCount = seatCount
@@ -166,10 +196,12 @@ public struct Engine: Sendable {
         self.afterDeal = afterDeal
         self.rebuild = rebuild
         self.options = options
+        self.dealerRotation = dealerRotation
         self.rulesetHash = Engine.hash(
             of: phases, expressionRuntime: expressionRuntime, vars: vars,
             seatNames: self.seatNames, teamNames: teamNames, teamOfSeat: teamOfSeat,
-            dealPhaseID: dealPhaseID, end: end, afterDeal: afterDeal, options: options)
+            dealPhaseID: dealPhaseID, end: end, afterDeal: afterDeal, options: options,
+            dealerRotation: dealerRotation)
     }
 
     /// Configuration hash: phase ids plus the identity of the installed
@@ -186,7 +218,8 @@ public struct Engine: Sendable {
         dealPhaseID: String? = nil,
         end: EngineEndSpec? = nil,
         afterDeal: [EngineEffect] = [],
-        options: [String: String] = [:]
+        options: [String: String] = [:],
+        dealerRotation: EngineDealerRotation = .left
     ) -> Data {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
@@ -203,12 +236,14 @@ public struct Engine: Sendable {
         lines.append(
             "options:\(options.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: ","))")
         lines.append("afterDeal:\(afterDeal.count)")
+        lines.append("dealerRotation:\(dealerRotation.rawValue)")
         if let end {
             let rank = end.rank
             let deals = end.deals.map(String.init) ?? "-"
             lines.append(
                 "end:\(end.condition ?? "-"):\(deals):\(rank.scope.rawValue):"
-                    + "\(rank.name):\(rank.descending ? "desc" : "asc"):\(rank.ties.rawValue):\(end.matchEffects.count)"
+                    + "\(rank.name):\(rank.descending ? "desc" : "asc"):\(rank.ties.rawValue):"
+                    + "\(end.check.rawValue):\(end.matchEffects.count)"
             )
         }
         let payload = (try? encoder.encode(lines)) ?? Data()
@@ -334,6 +369,7 @@ public struct Engine: Sendable {
         events += try config.mechanic.act(action.intent, action.seat, &state, ctx(state))
         state.history.append(LoggedAction(seat: action.seat, intent: action.intent, version: state.version))
         state.version += 1
+        try checkContinuousEnd(&state, &events)
         try advanceIfAutomatic(&state, &events)
         state.recentEvents = (state.recentEvents + events).suffix(GameState.recentEventLimit).map { $0 }
         return Transition(state: state, events: events)

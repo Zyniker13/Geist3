@@ -53,6 +53,7 @@ public enum EngineBuilder {
         }
 
         var enginePhases: [PhaseConfig] = []
+        var dealPhaseID: String? = nil
         for phase in phases {
             guard phase.when == nil, phase.before == nil, phase.after == nil, phase.next == nil else {
                 throw SimulationError.unsupported("phase-level flow control on '\(phase.id)'")
@@ -66,6 +67,10 @@ public enum EngineBuilder {
                 guard params.thenEffects == nil else {
                     throw SimulationError.unsupported("deal.then effects")
                 }
+                if dealPhaseID != nil {
+                    throw SimulationError.unsupported("more than one deal phase")
+                }
+                dealPhaseID = phase.id
                 let packets = try dealPackets(
                     params.packets, phaseId: phase.id, seatCount: seatCount,
                     seatZones: seatZoneIds, sharedZones: sharedZoneIds)
@@ -88,11 +93,32 @@ public enum EngineBuilder {
             enginePhases.append(config)
         }
 
+        // Match substrate (§5.2–5.3, §5.6–5.8): variables, teams, the end
+        // declaration, and the first-dealer procedure. A ruleset without a
+        // `setup` block (the P2-era fixtures) deals from seat 0, rotating
+        // left.
+        let vars = try EngineBuilder.mapVars(document.vars)
+        let teams = try EngineBuilder.mapTeams(players, seatCount: seatCount)
+        let endSpec = try EngineBuilder.mapEnd(document.end, vars: vars)
+        var orders: [String: [String]] = [:]
+        for field in document.orders ?? [] {
+            guard let ranks = field.value.arrayValue?.compactMap(\.stringValue) else {
+                throw SimulationError.config("order '\(field.key)' must be an array of rank names")
+            }
+            orders[field.key] = ranks
+        }
+        let (firstDealer, rotation) = try EngineBuilder.firstDealerSetup(
+            document.setup, seatCount: seatCount, deckFaces: deckFaces ?? [], orders: orders)
+
         let zoneCaps = capacities
+        let dealerPick = firstDealer
         let setup: @Sendable (inout GameState) throws -> Void = { state in
             for (key, capacity) in zoneCaps {
                 state.zones.ensureDeclared(key, capacity: capacity ?? nil)
             }
+            // First-dealer pick (§5.6): draws from the run's own seeded RNG,
+            // so a seed replays the pick exactly.
+            try dealerPick(&state)
             // The deck itself is stacked by DealMechanic from `deckFaces`
             // (declares the source if empty, then shuffles and assigns fresh
             // deal-order CardIDs); setup only declares zones here.
@@ -106,7 +132,9 @@ public enum EngineBuilder {
         }
         return Engine(
             phases: enginePhases, seatCount: seatCount, setup: setup,
-            expressionRuntime: eval)
+            expressionRuntime: eval, vars: vars, seatNames: players?.seatNames ?? [],
+            teamNames: teams.names, teamOfSeat: teams.teamOfSeat,
+            dealPhaseID: dealPhaseID, end: endSpec, dealerRotation: rotation)
     }
 
     // MARK: - deal

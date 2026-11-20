@@ -31,6 +31,7 @@ struct DealConfigTests {
           "name": {"default": "Deal Expression Test"},
           "players": {"counts": [4], "default": 4, "teams": "none"},
           "deck": {"base": "french-52"},
+          "orders": {"natural": ["2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A"]},
           "zones": [
             {"id": "stock", "scope": "shared", "visibility": "none", "capacity": 52},
             {"id": "hand", "scope": "seat", "visibility": "owner", "capacity": 13}
@@ -62,6 +63,7 @@ struct DealConfigTests {
           "name": {"default": "Deal FaceUp Test"},
           "players": {"counts": [4], "default": 4, "teams": "none"},
           "deck": {"base": "french-52"},
+          "orders": {"natural": ["2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A"]},
           "zones": [
             {"id": "stock", "scope": "shared", "visibility": "none", "capacity": 52},
             {"id": "hand", "scope": "seat", "visibility": "owner", "capacity": 13},
@@ -130,6 +132,7 @@ struct DealConfigTests {
           "name": {"default": "Deal Count Fixed Test"},
           "players": {"counts": [4], "default": 4, "teams": "none"},
           "deck": {"base": "french-52"},
+          "orders": {"natural": ["2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A"]},
           "zones": [
             {"id": "stock", "scope": "shared", "visibility": "none", "capacity": 52},
             {"id": "hand", "scope": "seat", "visibility": "owner", "capacity": 13}

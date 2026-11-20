@@ -63,12 +63,21 @@ public enum EngineEffect: Sendable {
     case forEach(owner: EngineOwnerKind, body: [EngineEffect])
     /// `move <cards> from <zone> to <zone>` with an optional seat/team owner.
     case move(from: String, to: String, owner: OwnerTarget?, cards: MoveCards)
+    /// `reveal <zone>` to a seat (or everyone).
+    case reveal(zone: String, seat: String?, to: RevealTarget)
     /// `emit <name>`
     case emit(name: String)
 
     public enum OwnerTarget: Sendable {
         case seat(String)
         case team(String)
+    }
+
+    /// Who learns the revealed contents: everyone, or the seats the
+    /// expression produces (a list of seat spellings).
+    public enum RevealTarget: Sendable {
+        case all
+        case seats(String)
     }
 
     public enum MoveCards: Sendable {
@@ -190,6 +199,11 @@ public final class EffectsRunner: Sendable {
                 from: from, to: to, owner: owner, cards: cards,
                 in: &state, bindings: bindings, events: &events, pointer: pointer)
 
+        case .reveal(let zone, let seatExpr, let target):
+            try runReveal(
+                zone: zone, seat: seatExpr, target: target,
+                in: &state, bindings: bindings, events: &events, pointer: pointer)
+
         case .emit(let name):
             events.append(.emitted(name: name))
         }
@@ -258,6 +272,57 @@ public final class EffectsRunner: Sendable {
             throw fault(pointer, "'\(value)' is not in the \(domain) order")
         }
         return position
+    }
+
+    /// Reveal a zone's current contents to the target seats (or everyone):
+    /// §5.4 `{ reveal: { zone, seat?, to } }`. `seat` scopes the zone to one
+    /// seat's copy; `to: "all"` makes the contents public knowledge.
+    private func runReveal(
+        zone: String,
+        seat: String?,
+        target: EngineEffect.RevealTarget,
+        in state: inout GameState,
+        bindings: [String: EvalValue],
+        events: inout [GameEvent],
+        pointer: String
+    ) throws(RuleViolation) {
+        let sourceKey: ZoneKey
+        if let seatExpr = seat {
+            let value = try evaluate(seatExpr, bindings, state, pointer)
+            let position = try position(of: value, in: seatNames, domain: "seat", pointer: pointer)
+            sourceKey = ZoneKey(scope: .seat, owner: position, id: zone)
+        } else {
+            sourceKey = ZoneKey(scope: .shared, owner: 0, id: zone)
+        }
+        guard state.zones.zones[sourceKey] != nil else {
+            throw fault(pointer, "unknown zone '\(zone)'")
+        }
+        let instances = state.zones.cards(in: sourceKey)
+        let viewers: SeatSet
+        switch target {
+        case .all:
+            viewers = SeatSet((0..<seatNames.count).map(Seat.init))
+        case .seats(let source):
+            let value = try evaluate(source, bindings, state, pointer)
+            guard case .list(let items) = value else {
+                throw fault(pointer, "reveal target must be a seat list, got \(value)")
+            }
+            var set = SeatSet()
+            for item in items {
+                guard case .string(let spelling) = item else {
+                    throw fault(pointer, "reveal target produced a non-seat value \(item)")
+                }
+                guard let seatPosition = seatNames.firstIndex(of: spelling) else {
+                    throw fault(pointer, "'\(spelling)' is not in the seat order")
+                }
+                set.insert(Seat(seatPosition))
+            }
+            viewers = set
+        }
+        for instance in instances {
+            state.knowledge.reveal(instance.id, to: viewers)
+        }
+        events.append(.revealed(zone: zone, cards: instances))
     }
 
     private func varStore(scope: EngineVarScope, state: GameState) -> VarStore {
