@@ -4,7 +4,7 @@ Purpose: the running log of the Parlor build (phases P0–P11 per `docs/plan/ROA
 
 ## Current Phase
 
-**P2 — Ruleset DSL and Validation** (starting) · G1 passed 2026-11-18 (branch `phase/P1-engine-core`, merged to `main`) · plan of record: `docs/plan/` (package moved verbatim from the repo root in P0.1; `docs/plan/` is followed and never edited).
+**P3 — First Four Games: Hearts, Euchre, Contract Bridge, Cribbage** (in progress; branch `phase/P3-first-four-games`) · G2 passed 2026-11-19 (branch `phase/P2-ruleset-dsl`, merged to `main`, tag `gate-G2-pass`) · plan of record: `docs/plan/` (package moved verbatim from the repo root in P0.1; `docs/plan/` is followed and never edited).
 
 ## Gate Ledger
 
@@ -12,6 +12,7 @@ Purpose: the running log of the Parlor build (phases P0–P11 per `docs/plan/ROA
 | --- | --- | --- | --- | --- |
 | G0 | P0 Setup and Tooling | GLM-SELF | **PASS** (2026-11-18) | below |
 | G1 | P1 Card Model and Engine Core | GLM-SELF; ASYNC: CLAUDE (engine API) | **PASS** (2026-11-18) | below |
+| G2 | P2 Ruleset DSL and Validation | GLM-SELF; ASYNC: CLAUDE | **PASS** (2026-11-19) | below |
 
 ## G0 — P0 Setup and Tooling (GLM-SELF) — PASSED (2026-11-18)
 
@@ -412,3 +413,21 @@ Phase tasks P2.1–P2.9 are implemented on branch `phase/P2-ruleset-dsl`.
 **G2 verdict:** all P2 tasks and gate checks pass with the evidence above;
 async Claude review requested in `docs/HANDOFF.md` (non-blocking per G2 mode
 GLM-SELF/ASYNC). Merged to `main`, tagged `gate-G2-pass`.
+
+## P3 — First Four Games: Hearts, Euchre, Contract Bridge, Cribbage (in progress)
+
+Branch `phase/P3-first-four-games` (from `main` after the G2 merge).
+
+**P3.1 S1 — expression runtime bridge — DONE (commit `15431fb`).**
+- `RulesEngine`: new `EvalCall`/`EvalValue` (`Sources/EvalCall.swift`);
+  `EvalContext` gains `eval` plus `evalCall`, which maps runtime failures to
+  `RuleViolation.engineFault` (§7.4 — faults never silently null).
+- `RulesetKit`: new `TypeContextFactory` (one `TypeContext` shared by
+  validation and the runtime), new `ExpressionRuntime`
+  (`Sources/Simulation/`, split into `+Environment` and `+Values`
+  extensions to satisfy type/file body limits) — compile cache keyed by
+  source + contextual names, per-call environment built from the
+  `GameState` snapshot (zones, trick substate, vars, orders, options),
+  `EngineBuilder` installs `ctx.eval`.
+- Evidence: `swift build` clean (0 errors/warnings); `swift test` →
+  **151 tests in 17 suites passed** (RulesetKit); `make lint` → exit 0.
