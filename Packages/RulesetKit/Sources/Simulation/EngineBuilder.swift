@@ -67,7 +67,7 @@ public enum EngineBuilder {
                     throw SimulationError.unsupported("deal.then effects")
                 }
                 let packets = try dealPackets(
-                    params.packets, seatCount: seatCount,
+                    params.packets, phaseId: phase.id, seatCount: seatCount,
                     seatZones: seatZoneIds, sharedZones: sharedZoneIds)
                 config = PhaseConfig(
                     id: phase.id,
@@ -112,32 +112,45 @@ public enum EngineBuilder {
     // MARK: - deal
 
     private static func dealPackets(
-        _ packets: [DealPacket], seatCount: Int,
+        _ packets: [DealPacket], phaseId: String, seatCount: Int,
         seatZones: Set<String>, sharedZones: Set<String>
     ) throws -> [RulesEngine.DealPacket] {
         var out: [RulesEngine.DealPacket] = []
-        for packet in packets {
+        for (index, packet) in packets.enumerated() {
             let faceUp = packet.faceUp ?? false
-            if faceUp { throw SimulationError.unsupported("face-up deal packets") }
-            let each = try constant(packet.each, param: "each")
-            let count = try constant(packet.count, param: "count")
+            let each = try countValue(packet.each, pointer: "/phases/\(phaseId)/packets/\(index)/each")
+            let count = try countValue(packet.count, pointer: "/phases/\(phaseId)/packets/\(index)/count")
             if seatZones.contains(packet.to) {
                 for seat in 0..<seatCount {
                     out.append(
                         RulesEngine.DealPacket(
                             to: ZoneKey(scope: .seat, owner: seat, id: packet.to),
-                            each: each ?? 0, packets: 1, count: count, faceUp: faceUp))
+                            each: each.fixed ?? 0, packets: 1, count: count.fixed, faceUp: faceUp,
+                            eachExpr: each.expr, countExpr: count.expr))
                 }
             } else if sharedZones.contains(packet.to) {
                 out.append(
                     RulesEngine.DealPacket(
                         to: ZoneKey(scope: .shared, id: packet.to),
-                        each: each ?? 0, packets: 1, count: count, faceUp: faceUp))
+                        each: each.fixed ?? 0, packets: 1, count: count.fixed, faceUp: faceUp,
+                        eachExpr: each.expr, countExpr: count.expr))
             } else {
                 throw SimulationError.config("deal packet target '\(packet.to)' is not a declared zone")
             }
         }
         return out
+    }
+
+    /// Wraps a JSON `each`/`count` value: integers pass through as fixed
+    /// counts, expressions are kept in source form for deal-time evaluation.
+    private static func countValue(
+        _ value: NumOrExpr?, pointer: String
+    ) throws -> (fixed: Int?, expr: RulesEngine.DealCountExpr?) {
+        switch value {
+        case .int(let n): return (n, nil)
+        case .expr(let expr): return (nil, RulesEngine.DealCountExpr(source: expr.source, pointer: pointer))
+        case nil: return (nil, nil)
+        }
     }
 
     // MARK: - trick-play

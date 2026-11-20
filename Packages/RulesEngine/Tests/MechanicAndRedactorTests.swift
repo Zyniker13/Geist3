@@ -12,6 +12,13 @@ struct DealMechanicEdgeTests {
         return (state, EvalContext(seatCount: 2))
     }
 
+    private func context(eval: @escaping @Sendable (EvalCall, GameState) throws(EvalFailure) -> EvalValue)
+        -> (GameState, EvalContext)
+    {
+        let state = GameState(rng: SeededRNG(seed: 11))
+        return (state, EvalContext(seatCount: 2, eval: eval))
+    }
+
     @Test func exhaustedSourceThrows() {
         let (state, ctx) = context()
         var s = state
@@ -84,6 +91,103 @@ struct DealMechanicEdgeTests {
             _ = try DealMechanic.apply(
                 DealParams(source: "stock", packets: [], shuffleFirst: false),
                 intent: .confirm, by: Seat(0), state: &s, ctx: ctx)
+        }
+    }
+
+    /// Expression `each` overrides the fixed count at deal time (§5.6).
+    @Test func expressionEachResolvesAtDealTime() throws {
+        let (state, ctx) = context { _, _ in .int(3) }
+        var s = state
+        let hand0 = ZoneKey(scope: .seat, owner: 0, id: "hand")
+        let hand1 = ZoneKey(scope: .seat, owner: 1, id: "hand")
+        let params = DealParams(
+            source: "stock",
+            packets: [
+                DealPacket(to: hand0, each: 0, eachExpr: DealCountExpr(source: "3", pointer: "/0/each")),
+                DealPacket(to: hand1, each: 0, eachExpr: DealCountExpr(source: "3", pointer: "/1/each")),
+            ],
+            shuffleFirst: false,
+            deckFaces: [
+                CardFace(suit: .hearts, rank: .two),
+                CardFace(suit: .hearts, rank: .three),
+                CardFace(suit: .hearts, rank: .four),
+                CardFace(suit: .hearts, rank: .five),
+                CardFace(suit: .hearts, rank: .six),
+                CardFace(suit: .hearts, rank: .seven),
+            ]
+        )
+        let events = try DealMechanic.enter(params, state: &s, ctx: ctx)
+        #expect(events.count == 2)
+        #expect(s.zones.cards(in: hand0).count == 3)
+        #expect(s.zones.cards(in: hand1).count == 3)
+    }
+
+    /// Expression `count` overrides `each * packets` at deal time.
+    @Test func expressionCountOverridesEach() throws {
+        let (state, ctx) = context { _, _ in .int(2) }
+        var s = state
+        let hand0 = ZoneKey(scope: .seat, owner: 0, id: "hand")
+        let hand1 = ZoneKey(scope: .seat, owner: 1, id: "hand")
+        let params = DealParams(
+            source: "stock",
+            packets: [
+                DealPacket(to: hand0, each: 10, packets: 5, countExpr: DealCountExpr(source: "2", pointer: "/0/count")),
+                DealPacket(to: hand1, each: 10, packets: 5, countExpr: DealCountExpr(source: "2", pointer: "/1/count")),
+            ],
+            shuffleFirst: false,
+            deckFaces: (2..<6).map { i in CardFace(suit: .hearts, rank: .two) }
+        )
+        let events = try DealMechanic.enter(params, state: &s, ctx: ctx)
+        #expect(events.count == 2)
+        #expect(s.zones.cards(in: hand0).count == 2)
+        #expect(s.zones.cards(in: hand1).count == 2)
+    }
+
+    /// A non-integer expression count is an engine fault with the JSON pointer.
+    @Test func nonIntegerCountExpressionFaults() {
+        let (state, ctx) = context { _, _ in .string("x") }
+        var s = state
+        let hand = ZoneKey(scope: .seat, owner: 0, id: "hand")
+        let params = DealParams(
+            source: "stock",
+            packets: [DealPacket(to: hand, each: 0, eachExpr: DealCountExpr(source: "\"x\"", pointer: "/0/each"))],
+            shuffleFirst: false,
+            deckFaces: [CardFace(suit: .hearts, rank: .two)]
+        )
+        #expect(throws: RuleViolation.self) {
+            _ = try DealMechanic.enter(params, state: &s, ctx: ctx)
+        }
+    }
+
+    /// A negative expression count is an engine fault.
+    @Test func negativeCountExpressionFaults() {
+        let (state, ctx) = context { _, _ in .int(-1) }
+        var s = state
+        let hand = ZoneKey(scope: .seat, owner: 0, id: "hand")
+        let params = DealParams(
+            source: "stock",
+            packets: [DealPacket(to: hand, each: 0, eachExpr: DealCountExpr(source: "-1", pointer: "/0/each"))],
+            shuffleFirst: false,
+            deckFaces: [CardFace(suit: .hearts, rank: .two)]
+        )
+        #expect(throws: RuleViolation.self) {
+            _ = try DealMechanic.enter(params, state: &s, ctx: ctx)
+        }
+    }
+
+    /// Deal with no expression runtime installed faults on expression count.
+    @Test func dealCountWithoutRuntimeFaults() {
+        let (state, ctx) = context()
+        var s = state
+        let hand = ZoneKey(scope: .seat, owner: 0, id: "hand")
+        let params = DealParams(
+            source: "stock",
+            packets: [DealPacket(to: hand, each: 0, eachExpr: DealCountExpr(source: "3", pointer: "/0/each"))],
+            shuffleFirst: false,
+            deckFaces: [CardFace(suit: .hearts, rank: .two)]
+        )
+        #expect(throws: RuleViolation.self) {
+            _ = try DealMechanic.enter(params, state: &s, ctx: ctx)
         }
     }
 

@@ -3,6 +3,20 @@
 
 import CardModel
 
+/// One JSON-configured count expression on a deal packet (§5.6): kept in
+/// source form and evaluated at deal time through the host runtime.
+public struct DealCountExpr: Codable, Hashable, Sendable {
+    /// The expression source.
+    public let source: String
+    /// JSON pointer of the expression, used in faults.
+    public let pointer: String
+
+    public init(source: String, pointer: String) {
+        self.source = source
+        self.pointer = pointer
+    }
+}
+
 public struct DealPacket: Codable, Hashable, Sendable {
     /// Target zone. JSON rulesets name a zone id; seat-scoped zones deal to
     /// every owner seat in turn (EngineBuilder expands them per owner).
@@ -15,15 +29,22 @@ public struct DealPacket: Codable, Hashable, Sendable {
     public let count: Int?
     /// Whether the dealt cards become known to their owner.
     public let faceUp: Bool
+    /// JSON `each` as an expression; overrides `each` when non-nil.
+    public let eachExpr: DealCountExpr?
+    /// JSON `count` as an expression; overrides `count` when non-nil.
+    public let countExpr: DealCountExpr?
 
     public init(
-        to: ZoneKey, each: Int, packets: Int = 1, count: Int? = nil, faceUp: Bool = false
+        to: ZoneKey, each: Int, packets: Int = 1, count: Int? = nil, faceUp: Bool = false,
+        eachExpr: DealCountExpr? = nil, countExpr: DealCountExpr? = nil
     ) {
         self.to = to
         self.each = each
         self.packets = packets
         self.count = count
         self.faceUp = faceUp
+        self.eachExpr = eachExpr
+        self.countExpr = countExpr
     }
 
     /// Convenience for dealing to a seat's hand zone.
@@ -83,7 +104,7 @@ public enum DealMechanic: Mechanic {
         var nextID: UInt16 = 0
         for packet in params.packets {
             let target = packet.to
-            let total = packet.count ?? packet.each * packet.packets
+            let total = try Self.packetTotal(packet, state: state, ctx: ctx)
             state.zones.ensureDeclared(target)
             var dealt: [CardInstance] = []
             for _ in 0..<total {
@@ -112,6 +133,38 @@ public enum DealMechanic: Mechanic {
             }
         }
         return events
+    }
+
+    /// Resolves a packet's total card count: JSON expressions evaluated at
+    /// deal time override the fixed fields (§5.6).
+    private static func packetTotal(
+        _ packet: DealPacket, state: GameState, ctx: EvalContext
+    ) throws(RuleViolation) -> Int {
+        let each = try resolveCount(packet.eachExpr, fallback: packet.each, state: state, ctx: ctx)
+        if let expr = packet.countExpr {
+            return try resolveCount(expr, fallback: 0, state: state, ctx: ctx)
+        }
+        if let count = packet.count {
+            return count
+        }
+        return each * packet.packets
+    }
+
+    /// Evaluates one deal-count expression; a non-integer (or negative)
+    /// result is an engine fault carrying the JSON pointer (§7.4).
+    private static func resolveCount(
+        _ expr: DealCountExpr?, fallback: Int, state: GameState, ctx: EvalContext
+    ) throws(RuleViolation) -> Int {
+        guard let expr else { return fallback }
+        let value = try ctx.evalCall(
+            EvalCall(pointer: expr.pointer, source: expr.source, ruleId: "deal.count"),
+            state: state, ruleId: "deal.count")
+        guard case .int(let n) = value, n >= 0, let exact = Int(exactly: n) else {
+            throw RuleViolation.engineFault(
+                ruleId: "deal.count",
+                pointer: "\(expr.pointer) deal count must be a non-negative integer")
+        }
+        return exact
     }
 
     public static func legalIntents(

@@ -431,3 +431,11 @@ Branch `phase/P3-first-four-games` (from `main` after the G2 merge).
   `EngineBuilder` installs `ctx.eval`.
 - Evidence: `swift build` clean (0 errors/warnings); `swift test` →
   **151 tests in 17 suites passed** (RulesetKit); `make lint` → exit 0.
+
+**P3.1 S2 — JSON-configured deal — DONE (commit pending).**
+- `DealMechanic`: new `DealCountExpr` enum, `DealPacket` carries `eachExpr`/`countExpr`; `packetTotal`/`resolveCount` resolve expressions at deal time via `ctx.evalCall`.
+- `EngineBuilder`: `countValue` helper distinguishes fixed ints from expressions; `dealPackets` parses both.
+- `MechanicAndRedactorTests`: new tests for expression deal counts (variable `players.count` = 4), fault handling (non-integer → engineFault, negative → engineFault).
+- `DealConfigTests` (new): 3 end-to-end tests validating JSON deal configs (basic variable count, face-up shared zone, fixed `each`+`count`).
+- 20 replay fixtures updated with new ruleset hash `939484695cafac8e08124d06cae5e749ecf38ac0d6912a6f343e32b2a0aab727`.
+- Evidence: `swift test` → **154 tests in 18 suites passed** (RulesetKit, +3 DealConfigTests); `swift test` in RulesEngine → **53 tests** pass; `make lint` → exit 0 (warnings only, no errors).
