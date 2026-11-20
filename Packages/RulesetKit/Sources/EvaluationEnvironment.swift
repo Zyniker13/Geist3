@@ -44,8 +44,10 @@ public struct EvaluationEnvironment: Sendable {
     public var dealIndex: Int
     /// Non-indexed match- and deal-scoped variables by name.
     public var plainVars: [VarRef: Value]
-    /// Per-seat and per-team variables as positional lists, ordered by
-    /// the seat order (deal store) or team order (match store) above.
+    /// Per-seat and per-team variables as positional lists, ordered by the
+    /// variable's index domain: the seat order for seat scopes, the team
+    /// order for team scopes (§7.3). Match- and deal-scoped variables read
+    /// as single values out of `plainVars`.
     public var indexedVars: [VarRef: [Value]]
     /// Native function implementations (§5.8), keyed by dotted name.
     public var natives: [String: @Sendable ([Value]) throws(EvaluationFault) -> Value]

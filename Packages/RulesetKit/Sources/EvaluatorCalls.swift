@@ -128,10 +128,12 @@ extension Evaluator {
         guard let values = env.indexedVars[ref] else {
             return try fault(.unsupportedValue, "internal: variable '\(ref.name)' is not bound")
         }
-        let order = ref.scope.store == .match ? env.teams : env.seats
+        // A per-seat variable indexes by the seat order, a per-team variable
+        // by the team order (§7.3), regardless of which store holds them.
+        let order = ref.scope.isSeatScoped ? env.seats : env.teams
         guard let position = order.firstIndex(where: { $0 == index }) else {
-            let store = ref.scope.store == .match ? "team" : "seat"
-            return try fault(.indexOutOfRange, "'\(key)' is not in the \(store) order")
+            let domain = ref.scope.isSeatScoped ? "seat" : "team"
+            return try fault(.indexOutOfRange, "'\(key)' is not in the \(domain) order")
         }
         guard position < values.count else {
             return try fault(.indexOutOfRange, "variable '\(ref.name)' has no value for '\(key)'")

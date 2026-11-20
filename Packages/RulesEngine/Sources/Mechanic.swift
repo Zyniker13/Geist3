@@ -19,13 +19,51 @@ public protocol Mechanic: Sendable {
     static func pendingSeats(_ params: Params, state: GameState, ctx: EvalContext) -> SeatSet
 }
 
-/// Evaluation context handed to mechanics. P1: seat count and dealer; the
-/// ruleset reference (CardExpr evaluation) arrives in P2.
+/// Evaluation context handed to mechanics (§7.3–§7.5): the seat count,
+/// the dealer, and the host-mediated expression runtime. `eval` is null
+/// only when the host installs no runtime (pure mechanics, unit tests);
+/// a mechanic that receives null where its parameters are expressions
+/// fails with `RuleViolation.engineFault` — never a silent default.
 @_spi(HostOnly)
 public struct EvalContext: Sendable {
     public let seatCount: Int
+    public let dealer: Seat?
+    /// Evaluates one expression (§7.5). The engine owns no evaluator;
+    /// the host installs this through `Engine`.
+    public let eval: (@Sendable (EvalCall, GameState) throws(EvalFailure) -> EvalValue)?
 
-    public init(seatCount: Int) {
+    public init(
+        seatCount: Int, dealer: Seat? = nil,
+        eval: (@Sendable (EvalCall, GameState) throws(EvalFailure) -> EvalValue)? = nil
+    ) {
         self.seatCount = seatCount
+        self.dealer = dealer
+        self.eval = eval
+    }
+
+    /// Evaluates one expression, mapping any failure onto an engine
+    /// fault carrying the rule and pointer (§7.4).
+    public func evalCall(
+        _ call: EvalCall, state: GameState, ruleId: String? = nil
+    ) throws(RuleViolation) -> EvalValue {
+        guard let eval else {
+            throw RuleViolation.engineFault(
+                ruleId: ruleId ?? call.ruleId,
+                pointer: "\(call.pointer) no expression runtime installed")
+        }
+        do {
+            return try eval(call, state)
+        } catch {
+            throw RuleViolation.engineFault(
+                ruleId: ruleId ?? call.ruleId,
+                pointer: "\(call.pointer) \(Self.describe(error))")
+        }
+    }
+
+    private static func describe(_ failure: EvalFailure) -> String {
+        switch failure {
+        case .budget: return "expression fuel exhausted"
+        case .fault(_, let detail): return detail
+        }
     }
 }

@@ -36,6 +36,15 @@ public enum VarScope: String, Sendable {
         }
     }
 
+    /// Whether the index domain is a seat (per-seat scopes) or a team
+    /// (per-team scopes); plain scopes index nothing.
+    public var isSeatScoped: Bool {
+        switch self {
+        case .seatMatch, .seatDeal: return true
+        case .match, .deal, .teamMatch, .teamDeal: return false
+        }
+    }
+
     /// The type of the index expression for indexed scopes.
     public var keyType: ExprType {
         switch self {

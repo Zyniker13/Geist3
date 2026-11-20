@@ -97,7 +97,16 @@ public enum EngineBuilder {
             // (declares the source if empty, then shuffles and assigns fresh
             // deal-order CardIDs); setup only declares zones here.
         }
-        return Engine(phases: enginePhases, seatCount: seatCount, setup: setup)
+
+        // Host-mediated expression evaluation (§7.5): mechanics reach the
+        // runtime through `ctx.eval`.
+        let runtime = try ExpressionRuntime(doc: document, seatCount: seatCount)
+        let eval: @Sendable (EvalCall, GameState) throws(EvalFailure) -> EvalValue = { call, state in
+            try runtime.evaluate(call, state)
+        }
+        return Engine(
+            phases: enginePhases, seatCount: seatCount, setup: setup,
+            expressionRuntime: eval)
     }
 
     // MARK: - deal
@@ -212,7 +221,7 @@ public enum EngineBuilder {
             }
             let trump = try constantString(trumpExpr.source, param: "trump")
             return .highestWithTrump(trump: trump)
-        case let other:
+        case let other?:
             throw SimulationError.unsupported("winnerRule '\(other)'")
         }
     }

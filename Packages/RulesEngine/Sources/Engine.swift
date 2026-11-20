@@ -69,27 +69,49 @@ public struct Engine: Sendable {
     /// Runs once on the fresh state before the first phase enters: ruleset
     /// zone setup (declare zones, stack the stock from the deck spec).
     public let setup: (@Sendable (inout GameState) throws -> Void)?
+    /// Host-mediated expression runtime (§7.5): the host installs its
+    /// evaluator; mechanics reach it through `ctx.eval`. Null when the
+    /// host has no runtime — mechanics must then fault on expression
+    /// parameters rather than invent values.
+    public let expressionRuntime: (@Sendable (EvalCall, GameState) throws(EvalFailure) -> EvalValue)?
     /// SHA-256 of the resolved ruleset (P1: hash of the phase configuration).
     public let rulesetHash: Data
 
-    public init(phases: [PhaseConfig], seatCount: Int, setup: (@Sendable (inout GameState) throws -> Void)? = nil) {
+    public init(
+        phases: [PhaseConfig], seatCount: Int,
+        setup: (@Sendable (inout GameState) throws -> Void)? = nil,
+        expressionRuntime: (@Sendable (EvalCall, GameState) throws(EvalFailure) -> EvalValue)? = nil
+    ) {
         self.phases = phases
         self.seatCount = seatCount
         self.setup = setup
-        self.rulesetHash = Engine.hash(of: phases)
+        self.expressionRuntime = expressionRuntime
+        self.rulesetHash = Engine.hash(of: phases, expressionRuntime: expressionRuntime)
     }
 
     public static func hash(of phases: [PhaseConfig]) -> Data {
+        Engine.hash(of: phases, expressionRuntime: nil)
+    }
+
+    /// Configuration hash: phase ids plus the identity of the installed
+    /// expression runtime (§ P1: cache invalidation across builds).
+    public static func hash(
+        of phases: [PhaseConfig],
+        expressionRuntime: (@Sendable (EvalCall, GameState) throws(EvalFailure) -> EvalValue)?
+    ) -> Data {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
         let ids = phases.map { $0.id }
         let payload = (try? encoder.encode(ids)) ?? Data()
         var digest = SHA256()
         digest.update(data: payload)
+        digest.update(data: Data("runtime:\(expressionRuntime != nil)".utf8))
         return Data(digest.finalize())
     }
 
-    private var ctx: EvalContext { EvalContext(seatCount: seatCount) }
+    private var ctx: EvalContext {
+        EvalContext(seatCount: seatCount, eval: expressionRuntime)
+    }
 
     /// Fresh state: seed → RNG, dealer seat 0, phase 0 entered.
     public func start(seed: UInt64) throws(RuleViolation) -> Transition {

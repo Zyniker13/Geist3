@@ -20,7 +20,10 @@ let package = Package(
         .testTarget(
             name: "RulesetKitTests",
             dependencies: ["RulesetKit", "CardModel", .product(name: "RulesEngine", package: "RulesEngine")],
-            path: "Tests"
+            path: "Tests",
+            // The toy fixture is read from the source tree via #filePath,
+            // not through Bundle.module.
+            exclude: ["RulesetKitTests/Fixtures/toy.ruleset.json"]
         ),
     ]
 )
