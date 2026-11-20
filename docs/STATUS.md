@@ -492,5 +492,28 @@ Branch `phase/P3-first-four-games` (from `main` after the G2 merge).
   → **53/53** (RulesEngine), **154/154** (RulesetKit); `make lint` →
   0 errors. Pushed to `phase/P3-first-four-games` (`8c35653`); main
   untouched and green at `84d58d8`.
-- Remaining in S5: unit tests exercising the new mechanics end-to-end
-  through EngineBuilder (a cribbage-shaped phase sequence), then S6.
+
+**P3.1 S5 — COMPLETE** (cribbage-shaped EngineBuilder end-to-end tests
+added in the S6 wave below; S5's own mechanics all exercised).
+
+**P3.1 S6 — trick-play extensions — IN PROGRESS.**
+
+- `331f7c3` + `bacc515`: `suitOf`, strength expressions, dummy spec,
+  claims spec, and pure effects on `TrickPlayParams`; the enum split
+  into `TrickPlayMechanic+Support.swift`.
+- New unit suite `TrickPlayV2Tests` (7 tests) covers: trump beats a
+  higher led card, off-suit plays don't contend, must-follow violations,
+  dummy seat reveal + play-by-controller, claim accepted (scored event,
+  phase → `done`), claim rejected resumes play, and `untilHandsEmpty`
+  completion.
+- **Engine defect found and fixed** (`winnerOf` in
+  `TrickPlayMechanic+Support.swift`): the winner compared trump and
+  led-suit strengths on one flat scale, so a high led-suit card could
+  beat a low trump. Now trumps are resolved first, then led-suit cards.
+  Caught by the new `trumpBeatsHigherLedCard` test; full suite green
+  after the fix (60/60 across 11 suites).
+- Claims expressions use the host `expressionRuntime` hook (§7.5) with
+  a minimal test evaluator; seat spellings are 1-based (`S2` = Seat(1)).
+- Evidence: `swift test` → **60/60**; `make lint` → 0 errors.
+- Remaining in S6: euchre/bridge/cribbage wiring onto the extended
+  params, then the S6 evidence pass.
