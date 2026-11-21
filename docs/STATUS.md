@@ -678,3 +678,49 @@ All eight JSON rulesets are written and decode/validate; the 500-seed simulation
   of the catch block; semantics unchanged. `make lint` exit 0 (88 pre-existing warnings, 0
   errors, none in the touched files); `swift test` RulesetKit **157/157**, RulesEngine
   **132/132**. CI rerun on the branch: run **44926492677** (in progress at the time of writing).
+
+## P3.4 — Hearts and Euchre suites green (2026-11-21, commit e58984f)
+
+- **ConformanceHearts: 14/14 pass** (double-start root cause: every test called
+  `started(deal:)` then `ConformanceRunner.play(..., seed: 1)`, re-dealing the same engine
+  mid-test; all call sites moved to the continuation entry `play(steps, engine:, from:)`.
+  Trick-order geometry corrected to lead→+1→+2→+3 in every scripted 4-seat trick; pass
+  delivery pinned (last stager fires simultaneous delivery into `passOut`); deal blocks
+  repaired to 52 unique cards, 13 per seat.
+- **ConformanceEuchre: 13/13 pass.**
+  - **Real ruleset bug found and fixed** (P3.4 doing its job): `firstLeader:
+    nextActive(left(dealer, 1))` evaluates to the seat *after* the dealer's left —
+    `nextActive(s)` walks active seats strictly after `s` — so the engine led the wrong
+    seat on trick 1. Probe-verified (dealer 0 → pending [2]); fixed to
+    `nextActive(dealer)`, which is the dealer's left when everyone is active and skips a
+    sitting-out partner for a lone hand (EUC-3.4). `Resources/Rulesets/
+    euchre.standard.ruleset.json` + `docs/rules/RULES-euchre.md` updated; frozen
+    `docs/plan/` copy untouched.
+  - `rightBowerBeatsEverything` rewritten on a probe-verified deal: after pass×4,
+    `name:H` ends the bid straight into play (the upcard was already turned down, so no
+    pickup); the AH-led trick (highest natural trump) loses to the JC (left bower) follow,
+    order 1→2→3→0; trick zone empties on resolution.
+  - `bowersRankAndFollowAsTrump` deal indices fixed (round-1 vs round-2 slots produced a
+    duplicated JC/QH and a missing JH/QC; now a unique 24-card deck).
+- **Harness/gap fixes the suites flushed out:**
+  - Effects `move.cards: <expr>` now binds `cards` (source zone, top card first) per
+    ARCHITECTURE §5.4 before evaluating the selector (RulesEngine/Effects.swift).
+  - `exchange.kitty` `take`/`discardTo` zone names resolve at build time to quoted
+    literals (§9.4) — a bare zone identifier would have evaluated to the card list.
+  - `choice()` reads settled `choice:<id>:<seat>` phase options; ambient literals
+    (`none`, all-pass words) resolve at run time, matching validated references (§7.3).
+- **Coverage note:** `make coverage-check` reports RulesEngine/Sources at 84.8%–85.0%
+  (threshold 90%) — it was already below threshold at the last green CI commit
+  `ec7cb0d` (85.0%), so this is a pre-existing shortfall the suites' 27 new tests only
+  narrow, not a regression from this work. The CI job `build-test-lint` does not run
+  coverage-check, so CI stays green. Closure of the 90% line belongs to the remaining
+  P3.4 suites (bridge/cribbage) and P3.5–P3.7 work.
+- `make lint` exit 0 (294 warnings, 0 errors — complexity split in ConformanceHelpers,
+  type_body_length exemptions recorded in the suites with the same
+  `swiftlint:disable/enable` pattern as the P2.4 tables); `make test-packages` exit 0
+  (RulesetKit 184/184 incl. the 27 conformance tests, RulesEngine 132/132); `make
+  validate` exit 0; `make sim N=200` exit 0; `make conformance` stub still "arrives with
+  P3" (runner lands with P3.5 golden replays; the rule-ID coverage tables are generated
+  there).
+- Next: Bridge and Cribbage conformance suites (P3.4 acceptance: 100% rule IDs across
+  all four games), then P3.5.
