@@ -596,6 +596,22 @@ Four real defects found by the tests and fixed (not papered over):
   seat that owes a choice; each seat answers its own choice in any
   order) — ADR-0028.
 
-Evidence: `swift test` (RulesEngine) → **131/131 in 16 suites** (was
-93/93; +38 mechanic tests); `swift test` (RulesetKit) → **154/154 in 18
-suites** (unchanged); `make format` + `make lint` → exit 0.
+Evidence: `swift test` (RulesEngine) → **132/132 in 16 suites** (was
+93/93; +38 mechanic tests plus one `deal` audit test); `swift test`
+(RulesetKit) → **154/154 in 18 suites** (unchanged); `make format` +
+`make lint` → exit 0.
+
+**P3.1 acceptance audit — SATISFIED.** All eleven §5.6 mechanics in the
+deliverable now have per-parameter unit tests including invalid-parameter
+validation: `deal` (MechanicAndRedactorTests — source exhaustion, packet
+each/count/faceUp, cut depth, deck setup, expression counts and their
+faults, and from this wave `shuffleFirst` seeded-shuffle determinism),
+`auction.ladder`/`auction.rounds` (AuctionTests, S6), `exchange.pass`,
+`exchange.kitty`, `exchange.discardTo`, `reveal.starter`, `count-play`,
+`show`, `score` (this wave), and `trick-play` (TrickPlayV2Tests +
+TrickPlayV2ParamsTests: follow/overtrump/head-trick/ruff guards,
+`leadAllowed`/`playAllowed`, `suitOf` left bower, `strength`,
+`activeSeats` exclusion and validation, `firstLeader`/`nextLeader`
+expressions, custom `winner`, per-card and per-trick effects, dummy
+validity). JSON configuration is exercised end-to-end by the RulesetKit
+schema round-trip, validation, and simulation suites.

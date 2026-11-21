@@ -70,6 +70,41 @@ struct DealMechanicEdgeTests {
         }
     }
 
+    @Test func shuffleFirstShufflesDeterministically() throws {
+        func dealt(seed: UInt64, shuffle: Bool) throws -> [String] {
+            var s = GameState(rng: SeededRNG(seed: seed))
+            let params = DealParams(
+                source: "stock",
+                packets: [DealPacket(to: Seat(0), each: 2), DealPacket(to: Seat(1), each: 2)],
+                shuffleFirst: shuffle,
+                deckFaces: [
+                    CardFace(suit: .hearts, rank: .two),
+                    CardFace(suit: .hearts, rank: .three),
+                    CardFace(suit: .hearts, rank: .four),
+                    CardFace(suit: .hearts, rank: .five),
+                ]
+            )
+            _ = try DealMechanic.enter(params, state: &s, ctx: EvalContext(seatCount: 2))
+            return
+                (s.zones.cards(in: ZoneKey(scope: .seat, owner: 0, id: "hand"))
+                + s.zones.cards(in: ZoneKey(scope: .seat, owner: 1, id: "hand")))
+                .map { $0.face.id }
+        }
+        // Unshuffled deals land in a fixed deck order; the seeded shuffle
+        // is reproducible per seed and reorders for some seed.
+        let ordered = try dealt(seed: 5, shuffle: false)
+        #expect(ordered.count == 4)
+        let shuffledOnce = try dealt(seed: 5, shuffle: true)
+        let shuffledAgain = try dealt(seed: 5, shuffle: true)
+        #expect(shuffledOnce == shuffledAgain)
+        #expect(shuffledOnce.count == 4)
+        var sawReorder = false
+        for seed in UInt64(0)..<40 where try dealt(seed: seed, shuffle: true) != ordered {
+            sawReorder = true
+        }
+        #expect(sawReorder)
+    }
+
     @Test func dealIsAutomatic() throws {
         let (_, ctx) = context()
         #expect(
