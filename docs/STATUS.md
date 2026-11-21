@@ -668,3 +668,13 @@ All eight JSON rulesets are written and decode/validate; the 500-seed simulation
   - Lint gate was failing at HEAD e43f076 independent of p34-2: swift-format `--strict` reported 18 findings across 9 committed files. Ran `swift-format format --in-place` on exactly those files; all mechanical (import order, line breaks, indentation, one stray `;`). `make lint` now passes (exit 0; warnings only).
 - Evidence (2026-11-21): `make lint` → **exit 0** (SwiftLint default + pure configs: 0 errors; swift-format strict: clean; `check-imports: OK`); `swift test` (RulesetKit) → **157 tests in 19 suites, all pass** (incl. DealOverrideSmokeTests); `make test-packages` → **exit 0** (all package suites green).
 
+- **CI red on the P3 branch (run 44919259333, commit `cf36df1`)**: Xcode 26.6's Swift 6.3.3
+  (the `macos-latest` runner default) aborts in SILGenCleanup/LinearLifetimeChecker while
+  compiling `ConformanceRunner.play` — the typed catch `catch let violation as RuleViolation`
+  (ConformanceHarness.swift:220, flagged first as "'as' test is always true"). Local Swift
+  6.4.2 compiles the same code fine; this is a 6.3.3 miscompile of the typed-catch binding,
+  not a logic error. Fix (commit `c03249e`): both typed catches (ConformanceHarness.swift,
+  TrickPlayV2Support.swift) rewritten as untyped `catch` + body downcast, no `continue` out
+  of the catch block; semantics unchanged. `make lint` exit 0 (88 pre-existing warnings, 0
+  errors, none in the touched files); `swift test` RulesetKit **157/157**, RulesEngine
+  **132/132**. CI rerun on the branch: run **44926492677** (in progress at the time of writing).
