@@ -1,0 +1,97 @@
+{
+  "format": "parlor.overlay/1",
+  "id": "contract-bridge.duplicate",
+  "kind": "variant",
+  "extends": "contract-bridge.rubber@^1.0",
+  "version": "1.0.0",
+  "name": {
+    "key": "game.bridge.duplicate.name",
+    "default": "Contract Bridge (duplicate)"
+  },
+  "sources": [
+    {
+      "id": "wbf-2017",
+      "title": "WBF: Laws of Duplicate Bridge (2017)",
+      "url": "https://www.worldbridge.org/regulations/2017-laws-of-duplicate-bridge/",
+      "role": "primary"
+    }
+  ],
+  "patch": [
+    {
+      "op": "add",
+      "path": "/vars/dealsPlayed",
+      "value": {
+        "scope": "match",
+        "type": "int",
+        "initial": "0"
+      }
+    },
+    {
+      "op": "replace",
+      "path": "/defs/vulnerable(t: team) -> bool",
+      "value": "[[false, false], [true, false], [false, true], [true, true]][match.dealsPlayed % 4][t == 'NS' ? 0 : 1]",
+      "note": "Board vulnerability cycles none, dealer's side, other side, both. Simplified to the four-board rotation (the tournament 16-board cycle is a presentation detail); indexing follows the chicago variant. Team-to-ordinal conversion by seat-parity spelling (NS/EW) because list indexing requires an int (the type checker rejects team-typed indices)."
+    },
+    {
+      "op": "replace",
+      "path": "/phases/byId/score/params/effects",
+      "value": [
+        {
+          "let": "dt",
+          "be": "team(deal.declarer)"
+        },
+        {
+          "let": "r",
+          "be": "bridge.score(deal.contract, declarerTricks(), vulnerable(dt), 'duplicate')"
+        },
+        {
+          "add": "match.above[dt]",
+          "value": "r.total"
+        },
+        {
+          "add": "match.above[opponents(dt)]",
+          "value": "r.defenders"
+        },
+        {
+          "add": "match.dealsPlayed",
+          "value": "1"
+        }
+      ],
+      "note": "Duplicate scoring: one running total per side, with the per-deal game (300/500) or part-score (50) bonus added by the native. Honors are not part of duplicate and drop out with the replaced effect list."
+    },
+    {
+      "op": "replace",
+      "path": "/phases/byId/score/when",
+      "value": "true"
+    },
+    {
+      "op": "replace",
+      "path": "/options/byId/passOut/default",
+      "value": "redealSameDealer",
+      "note": "A passed-out board is replayed within Engine 1.0's redeal actions rather than being scored zero."
+    },
+    {
+      "op": "replace",
+      "path": "/end",
+      "value": {
+        "check": "afterDeal",
+        "when": "match.dealsPlayed == 8",
+        "rank": "descending(match.above)",
+        "ties": "shared",
+        "rule": "BRG-D.1"
+      },
+      "note": "An eight-board session; the higher total wins."
+    },
+    {
+      "op": "append",
+      "path": "/rules",
+      "value": {
+        "id": "BRG-D.1",
+        "text": {
+          "key": "rule.brg.d.1",
+          "default": "A duplicate session is eight boards scored on a running total with fixed board vulnerability; the higher total wins."
+        }
+      }
+    }
+  ]
+}

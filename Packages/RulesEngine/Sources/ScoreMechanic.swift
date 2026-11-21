@@ -4,6 +4,9 @@
 // and the effects run with `choice(id, seat)` resolving the picks.
 
 import CardModel
+#if canImport(Foundation)
+import Foundation
+#endif
 
 @_spi(HostOnly)
 public struct ScoreChoiceRef: Codable, Hashable, Sendable {

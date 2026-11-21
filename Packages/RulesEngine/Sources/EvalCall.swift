@@ -9,6 +9,8 @@
 // dependency arrow stays engine ← host, and a ruleset that never
 // evaluates an expression never pays for the runtime.
 
+import CardModel
+
 /// A plain value the engine exchanges with the host expression runtime
 /// (§7.3: "data the engine owns is supplied to the host as plain
 /// values"). It mirrors the host's `Value` cases without importing it.
@@ -45,15 +47,21 @@ public struct EvalCall: Sendable, Equatable {
     public let source: String
     public let ruleId: String?
     public let contextual: [String: EvalValue]
+    /// The mechanic's resolved active-seat list (§5.6) for enter-time
+    /// evaluations that run before the phase substate is attached, so
+    /// `nextActive` skips sitting-out seats. Null elsewhere.
+    public let activeSeats: [Seat]?
 
     public init(
         pointer: String, source: String, ruleId: String? = nil,
-        contextual: [String: EvalValue] = [:]
+        contextual: [String: EvalValue] = [:],
+        activeSeats: [Seat]? = nil
     ) {
         self.pointer = pointer
         self.source = source
         self.ruleId = ruleId
         self.contextual = contextual
+        self.activeSeats = activeSeats
     }
 }
 

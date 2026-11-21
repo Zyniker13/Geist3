@@ -1,0 +1,34 @@
+{
+  "format": "parlor.overlay/1",
+  "id": "euchre.canadian-loner",
+  "kind": "variant",
+  "extends": "euchre.standard@^1.0",
+  "version": "1.0.0",
+  "name": { "key": "game.euchre.canadianLoner.name", "default": "Euchre (Canadian loner)" },
+  "sources": [ { "id": "wikipedia-euchre", "title": "Wikipedia: Euchre — Regional variations (dealer's partner must play alone in Canada)", "url": "https://en.wikipedia.org/wiki/Euchre", "role": "primary" } ],
+  "patch": [
+    {
+      "op": "add",
+      "path": "/phases/byId/bid/params/rounds/byId/orderUp/calls/byId/orderUp/allowed",
+      "value": "seat != partner(dealer)",
+      "note": "Canadian rule: the dealer's partner may not order up the turned card as an assist; ordering up is reserved for the other three players."
+    },
+    {
+      "op": "append",
+      "path": "/rules",
+      "value": { "id": "EUC-C.1", "text": { "key": "rule.euc.c.1", "default": "The dealer's partner may not order up the turned card as an assist; if they want the turned suit they must play the hand alone." } }
+    },
+    {
+      "op": "replace",
+      "path": "/phases/byId/bid/params/rounds/byId/orderUp/calls/byId/orderUpAlone/allowed",
+      "value": "options.goingAlone",
+      "note": "The alone form stays open to the dealer's partner: ordering up is still possible, but only by playing alone (the Canadian loner)."
+    },
+    {
+      "op": "replace",
+      "path": "/phases/byId/bid/params/rounds/byId/nameTrump/calls/byId/nameAlone/allowed",
+      "value": "options.goingAlone && param != zone('discard')[0].suit",
+      "note": "Round two is unchanged by the Canadian rule; re-stated so the overlay's intent is explicit about scope."
+    }
+  ]
+}

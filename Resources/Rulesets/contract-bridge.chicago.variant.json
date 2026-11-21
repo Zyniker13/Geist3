@@ -1,0 +1,94 @@
+{
+  "format": "parlor.overlay/1",
+  "id": "contract-bridge.chicago",
+  "kind": "variant",
+  "extends": "contract-bridge.rubber@^1.0",
+  "version": "1.0.0",
+  "name": {
+    "key": "game.bridge.chicago.name",
+    "default": "Contract Bridge (Chicago)"
+  },
+  "sources": [
+    {
+      "id": "pagat-chicago",
+      "title": "Pagat: Chicago (four-deal bridge)",
+      "url": "https://www.pagat.com/auctionwhist/bridge.html#chicago",
+      "role": "primary"
+    }
+  ],
+  "patch": [
+    {
+      "op": "add",
+      "path": "/vars/dealsPlayed",
+      "value": {
+        "scope": "match",
+        "type": "int",
+        "initial": "0"
+      }
+    },
+    {
+      "op": "replace",
+      "path": "/defs/vulnerable(t: team) -> bool",
+      "value": "[[false, false], [true, false], [false, true], [true, true]][match.dealsPlayed % 4][t == 'NS' ? 0 : 1]",
+      "note": "Deal 1 none, 2 dealer side (N-S when North deals first), 3 dealer side, 4 both; simplified to N-S/E-W indexing. Team-to-ordinal conversion by seat-parity spelling (NS/EW) because list indexing requires an int (the type checker rejects team-typed indices)."
+    },
+    {
+      "op": "replace",
+      "path": "/options/byId/passOut/default",
+      "value": "redealSameDealer"
+    },
+    {
+      "op": "replace",
+      "path": "/phases/byId/score/params/effects",
+      "value": [
+        {
+          "let": "dt",
+          "be": "team(deal.declarer)"
+        },
+        {
+          "let": "r",
+          "be": "bridge.score(deal.contract, declarerTricks(), vulnerable(dt), 'chicago')"
+        },
+        {
+          "add": "match.above[dt]",
+          "value": "r.total"
+        },
+        {
+          "add": "match.above[opponents(dt)]",
+          "value": "r.defenders"
+        },
+        {
+          "add": "match.dealsPlayed",
+          "value": "1"
+        }
+      ]
+    },
+    {
+      "op": "replace",
+      "path": "/phases/byId/score/when",
+      "value": "true"
+    },
+    {
+      "op": "replace",
+      "path": "/end",
+      "value": {
+        "check": "afterDeal",
+        "when": "match.dealsPlayed == 4",
+        "rank": "descending(match.above)",
+        "ties": "shared",
+        "rule": "BRG-C.1"
+      }
+    },
+    {
+      "op": "append",
+      "path": "/rules",
+      "value": {
+        "id": "BRG-C.1",
+        "text": {
+          "key": "rule.brg.c.1",
+          "default": "A Chicago chukker is four deals with fixed vulnerability; part-scores carry, and a part-score bonus is scored on the fourth deal."
+        }
+      }
+    }
+  ]
+}

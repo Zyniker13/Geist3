@@ -41,13 +41,16 @@ public struct Simulator: Sendable {
         var faults: [String] = []
         var exercised: Set<String> = []
         var actions = 0
+        var trace: [String] = []
 
         var state = try engine.start(seed: seed).state
         var totalCards = state.zones.totalCardCount
 
         while state.phase.phaseID != "done" {
             if actions >= actionLimit {
-                faults.append("simulator.action-cap")
+                faults.append(
+                    "simulator.action-cap at phase \(state.phase.phaseID) last: "
+                    + trace.joined(separator: " → "))
                 break
             }
             guard let pick = pickAction(state: state, actions: actions, bot: bot) else {
@@ -57,10 +60,12 @@ public struct Simulator: Sendable {
             do {
                 let transition = try engine.apply(pick.action, to: state)
                 state = transition.state
+                trace.append("\(pick.action.seat.raw):\(String(describing: pick.intent).prefix(48))")
+                if trace.count > 12 { trace.removeFirst() }
                 for event in transition.events {
                     if case .scored(_, _, _, let ruleId?) = event { exercised.insert(ruleId) }
                 }
-            } catch let violation as RuleViolation {
+            } catch let violation {
                 if case .illegal(let ruleId, _) = violation { exercised.insert(ruleId) }
                 faults.append("violation: \(violation)")
                 break
@@ -79,11 +84,14 @@ public struct Simulator: Sendable {
         for byte in Engine.finalStateHash(state) {
             hashHex += String(format: "%02x", byte)
         }
+        let context = faults.isEmpty ? "" : "phase=\(state.phase.phaseID) deal=\(state.dealIndex)"
+            + " match[\(state.matchVars.describe())]"
+            + " deal[\(state.dealVars.describe())]"
         let unexercised = declaredRules.subtracting(exercised).sorted()
         return SimulationRun(
             seed: seed, actions: actions, done: state.phase.phaseID == "done",
             finalHash: hashHex, faults: faults, unexercisedRules: unexercised,
-            finalState: state)
+            faultContext: context, finalState: state)
     }
 
     /// One round-robin turn: first seat with a legal intent acts. A bot that

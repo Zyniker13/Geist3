@@ -17,6 +17,16 @@ public protocol Mechanic: Sendable {
         throws(RuleViolation) -> [GameEvent]
     static func isComplete(_ params: Params, state: GameState, ctx: EvalContext) -> PhaseOutcome
     static func pendingSeats(_ params: Params, state: GameState, ctx: EvalContext) -> SeatSet
+    /// One internal automatic step (ADR-0032). Only invoked by the engine
+    /// while `isComplete` returns `.autoStep`; the engine runs the
+    /// continuous end check between steps. Default: no steps.
+    static func step(_ params: Params, state: inout GameState, ctx: EvalContext) throws(RuleViolation) -> [GameEvent]
+}
+
+public extension Mechanic {
+    static func step(_ params: Params, state: inout GameState, ctx: EvalContext) throws(RuleViolation) -> [GameEvent] {
+        []
+    }
 }
 
 /// Evaluation context handed to mechanics (§7.3–§7.5): the seat count,

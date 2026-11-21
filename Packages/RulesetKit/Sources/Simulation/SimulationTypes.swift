@@ -77,6 +77,9 @@ public struct SimulationRun: Sendable {
     public let faults: [String]
     /// Declared rule ids never exercised by this deal (informational).
     public let unexercisedRules: [String]
+    /// One-line summary of the state at fault time (phase, deal index, match
+    /// and deal variables); empty on a clean run. Host tooling only.
+    public let faultContext: String
     /// The terminal state (host tooling only: full state, never serialized).
     /// SPI-marked because `GameState` itself crosses only the host-only SPI.
     @_spi(HostOnly) public let finalState: GameState

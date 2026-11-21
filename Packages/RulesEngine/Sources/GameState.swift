@@ -34,6 +34,17 @@ public struct GameState: Codable, Hashable, Sendable {
     public var version: UInt64
     /// Per-phase options set by mechanics (e.g., "passed_0", "passed_1").
     public var phaseOptions: [String: String]
+
+    /// The cards each seat was dealt this deal (§7.5 `dealtHands()`),
+    /// recorded by the deal mechanic and cleared with the other deal-scoped
+    /// state (§5.7). Host-side only: the redactor builds observations
+    /// field-by-field and never copies this into an `Observation`.
+    /// Keyed by raw seat (scalar keys encode canonically, §10.4).
+    public var dealt: [Int: [CardInstance]]
+    /// Last completed trick-play substate of this deal (ADR-0033),
+    /// host-side only: kept for score-phase `tricksWon` lookups, never
+    /// copied into an `Observation`.
+    public var lastPlaySubstate: TrickSubstate?
     /// True once the match end condition fired (§5.8); the host reads
     /// `winners` to close the session.
     public var matchOver: Bool
@@ -55,6 +66,8 @@ public struct GameState: Codable, Hashable, Sendable {
         recentEvents: [GameEvent] = [],
         version: UInt64 = 0,
         phaseOptions: [String: String] = [:],
+        dealt: [Int: [CardInstance]] = [:],
+        lastPlaySubstate: TrickSubstate? = nil,
         matchOver: Bool = false,
         winners: [Seat] = []
     ) {
@@ -70,6 +83,8 @@ public struct GameState: Codable, Hashable, Sendable {
         self.recentEvents = recentEvents
         self.version = version
         self.phaseOptions = phaseOptions
+        self.dealt = dealt
+        self.lastPlaySubstate = lastPlaySubstate
         self.matchOver = matchOver
         self.winners = winners
     }
@@ -105,6 +120,28 @@ public struct GameState: Codable, Hashable, Sendable {
         phase = PhaseCursor(phaseID: phase.phaseID, substate: state)
     }
 
+    /// Show sub-state (ADR-0032): the index of the next `show.order`
+    /// entry to count, so the show runs one step per engine loop pass and
+    /// the continuous end check fires between entries (§5.3).
+    func showSubstate() -> ShowSubstate? {
+        if case .show(let sub) = phase.substate { return sub }
+        return nil
+    }
+
+    mutating func setShowSubstate(_ sub: ShowSubstate) {
+        phase = PhaseCursor(phaseID: phase.phaseID, substate: .show(sub))
+    }
+
+    /// Completed play record of this deal (ADR-0033): a copy of the last
+    /// trick-play substate, kept after the play phase ends so score-phase
+    /// expressions (`tricksWon`, §7.3 builtins) can still read the deal's
+    /// cumulative trick counts. Cleared on the per-deal reset.
+    public func lastPlayTrick() -> TrickSubstate? { lastPlaySubstate }
+
+    public mutating func setLastPlayTrick(_ sub: TrickSubstate) {
+        lastPlaySubstate = sub
+    }
+
     /// Advance to a phase and reset its mechanic sub-state.
     mutating func enterPhase(_ id: String, substate: MechanicSubstate? = nil) {
         phase = PhaseCursor(phaseID: id, substate: substate)
@@ -138,6 +175,7 @@ public struct GameState: Codable, Hashable, Sendable {
         hasher.combine(phaseOptions)
         hasher.combine(matchOver)
         hasher.combine(winners)
+        if let lastPlaySubstate { hasher.combine(lastPlaySubstate) }
     }
 
     public static func == (lhs: GameState, rhs: GameState) -> Bool {
@@ -155,5 +193,6 @@ public struct GameState: Codable, Hashable, Sendable {
             && lhs.phaseOptions == rhs.phaseOptions
             && lhs.matchOver == rhs.matchOver
             && lhs.winners == rhs.winners
+            && lhs.lastPlaySubstate == rhs.lastPlaySubstate
     }
 }

@@ -86,6 +86,9 @@ public enum DealMechanic: Mechanic {
         _ params: Params, state: inout GameState, ctx: EvalContext
     ) throws(RuleViolation) -> [GameEvent] {
         var events: [GameEvent] = []
+        // §7.5: record the cards each seat was dealt this deal so score-time
+        // expressions (`dealtHands()`) see the original hands after play.
+        var dealtRecord: [Int: [CardInstance]] = [:]
         let sourceKey = ZoneKey(scope: .shared, id: params.source)
         if state.zones.cards(in: sourceKey).isEmpty, let faces = params.deckFaces {
             // Deal setup: declare the zone and stack the deck (placeholder
@@ -127,11 +130,13 @@ public enum DealMechanic: Mechanic {
                 dealt.append(instance)
             }
             if target.scope == .seat {
+                dealtRecord[Seat(target.owner).raw, default: []].append(contentsOf: dealt)
                 events.append(.dealt(to: Seat(target.owner), cards: dealt))
             } else {
                 events.append(.cardsMoved(from: params.source, to: target.id, count: total))
             }
         }
+        state.dealt = dealtRecord
         return events
     }
 

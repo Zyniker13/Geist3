@@ -93,4 +93,9 @@ public enum PhaseOutcome: Hashable, Sendable {
     case complete
     case redeal
     case endDeal
+    /// ADR-0032: the mechanic has internal automatic steps left (no seat
+    /// acts); the engine applies one `step` at a time and runs the
+    /// continuous end check between steps (§5.3), so a win mid-sequence
+    /// (e.g. cribbage counting one hand at a time) ends the deal at once.
+    case autoStep
 }

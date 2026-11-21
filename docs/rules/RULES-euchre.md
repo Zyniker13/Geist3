@@ -62,9 +62,11 @@ official rules.)
 
 **EUC-2.5 — Going alone.** With the `goingAlone` option (default on), the
 player who makes trump may declare that they are going alone; their partner
-sits the deal out and does not play. Going alone is declared with the call
-that makes trump.
-(Implemented by the auction's per-call `alone` expression writing
+sits the deal out and does not play. Going alone is declared by making
+trump with the alone form of the making call (`orderUpAlone`, or
+`nameAlone` with a named suit); the option gates whether those alone forms
+are offered at all.
+(Implemented by the auction's alone-flavoured calls writing
 `deal.alone`; source: Pagat — Euchre, "Going alone"; WEF official rules.)
 
 ## 3. Play

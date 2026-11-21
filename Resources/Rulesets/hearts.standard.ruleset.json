@@ -1,0 +1,110 @@
+{
+  "format": "parlor.ruleset/1",
+  "id": "hearts.standard",
+  "game": "hearts",
+  "kind": "base",
+  "version": "1.0.0",
+  "engine": ">=1.0",
+  "name": { "key": "game.hearts.name", "default": "Hearts" },
+  "summary": { "key": "game.hearts.summary", "default": "Avoid taking hearts and the queen of spades, unless you can take them all." },
+  "classification": { "pagat": "outplay/trick-taking/reverse", "objective": "avoid-capturing", "tags": ["trick-taking", "penalty", "no-trump", "passing"] },
+  "sources": [
+    { "id": "pagat", "title": "Pagat: Hearts", "url": "https://www.pagat.com/reverse/hearts.html", "role": "primary" },
+    { "id": "yougov", "title": "YouGov: How Americans feel about 30 card games", "url": "https://yougov.com/en-us/articles/45795-how-americans-feel-about-30-card-games", "role": "context" }
+  ],
+  "players": { "counts": [4], "default": 4, "teams": "none" },
+  "deck": { "base": "french-52" },
+  "orders": { "natural": ["2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A"] },
+  "options": [
+    { "id": "passSchedule", "type": "enum", "values": ["leftRightAcrossHold", "leftRightAcross", "leftOnly", "none"], "default": "leftRightAcrossHold", "label": { "key": "opt.hearts.passSchedule", "default": "Passing order" }, "rules": ["HRT-2.1"] },
+    { "id": "passCount", "type": "int", "min": 1, "max": 4, "default": 3, "label": { "key": "opt.hearts.passCount", "default": "Cards passed" }, "rules": ["HRT-2.2"] },
+    { "id": "noPointsFirstTrick", "type": "bool", "default": true, "label": { "key": "opt.hearts.noPointsFirstTrick", "default": "No points on the first trick" }, "rules": ["HRT-3.3"] },
+    { "id": "breakingHearts", "type": "bool", "default": true, "label": { "key": "opt.hearts.breakingHearts", "default": "Hearts must be broken before they are led" }, "rules": ["HRT-3.4"] },
+    { "id": "queenBreaksHearts", "type": "bool", "default": true, "label": { "key": "opt.hearts.queenBreaksHearts", "default": "The queen of spades breaks hearts" }, "rules": ["HRT-3.4"] },
+    { "id": "moon", "type": "enum", "values": ["addToOthers", "subtractFromSelf", "shooterChooses"], "default": "addToOthers", "label": { "key": "opt.hearts.moon", "default": "Shooting the moon" }, "rules": ["HRT-4.3"] },
+    { "id": "jackOfDiamonds", "type": "bool", "default": false, "label": { "key": "opt.hearts.jackOfDiamonds", "default": "Jack of diamonds scores minus 10" }, "rules": ["HRT-4.4"] },
+    { "id": "target", "type": "int", "min": 25, "max": 500, "default": 100, "label": { "key": "opt.hearts.target", "default": "Game ends at" }, "rules": ["HRT-5.1"] }
+  ],
+  "rules": [
+    { "id": "HRT-1.1", "text": { "key": "rule.hrt.1.1", "default": "Four players each receive 13 cards." } },
+    { "id": "HRT-2.1", "text": { "key": "rule.hrt.2.1", "default": "Before play, each player passes cards in the direction for this deal." } },
+    { "id": "HRT-2.2", "text": { "key": "rule.hrt.2.2", "default": "Each player chooses the cards to pass before seeing the cards received." } },
+    { "id": "HRT-3.1", "text": { "key": "rule.hrt.3.1", "default": "The holder of the two of clubs leads it to the first trick." } },
+    { "id": "HRT-3.2", "text": { "key": "rule.hrt.3.2", "default": "You must follow suit if you can; otherwise you may play any card." } },
+    { "id": "HRT-3.3", "text": { "key": "rule.hrt.3.3", "default": "You may not play a heart or the queen of spades to the first trick unless you have nothing else." } },
+    { "id": "HRT-3.4", "text": { "key": "rule.hrt.3.4", "default": "You may not lead a heart until hearts are broken, unless you hold only hearts." } },
+    { "id": "HRT-3.5", "text": { "key": "rule.hrt.3.5", "default": "The highest card of the suit led wins the trick, and its winner leads next." } },
+    { "id": "HRT-4.1", "text": { "key": "rule.hrt.4.1", "default": "Each heart taken scores 1 penalty point and the queen of spades scores 13." } },
+    { "id": "HRT-4.3", "text": { "key": "rule.hrt.4.3", "default": "A player who takes all 26 penalty points shoots the moon." } },
+    { "id": "HRT-4.4", "text": { "key": "rule.hrt.4.4", "default": "With this option, the jack of diamonds subtracts 10 points from its taker." } },
+    { "id": "HRT-5.1", "text": { "key": "rule.hrt.5.1", "default": "When any player reaches the target, the player with the lowest score wins." } }
+  ],
+  "zones": [
+    { "id": "hand", "scope": "seat", "visibility": "owner", "sort": "bySuitThenRank" },
+    { "id": "passOut", "scope": "seat", "visibility": "owner" },
+    { "id": "trick", "scope": "shared", "visibility": "public", "ordered": true },
+    { "id": "taken", "scope": "seat", "visibility": "public", "faceDown": true }
+  ],
+  "vars": {
+    "score": { "scope": "seatMatch", "type": "int", "initial": "0" },
+    "dealPoints": { "scope": "seatDeal", "type": "int", "initial": "0" },
+    "heartsBroken": { "scope": "deal", "type": "bool", "initial": "false" }
+  },
+  "defs": {
+    "penalty(c: card) -> int": "c.suit == 'H' ? 1 : (c.id == 'QS' ? 13 : 0)",
+    "bonus(c: card) -> int": "options.jackOfDiamonds && c.id == 'JD' ? -10 : 0",
+    "passOffset() -> int": "options.passSchedule == 'none' ? 0 : (options.passSchedule == 'leftOnly' ? 1 : (options.passSchedule == 'leftRightAcross' ? [1, 3, 2][deal.index % 3] : [1, 3, 2, 0][deal.index % 4]))",
+    "penaltyTaken(s: seat) -> int": "zone('taken', s).map(c, penalty(c)).sum()"
+  },
+  "setup": { "firstDealer": "randomCut", "dealerRotation": "left" },
+  "phases": [
+    { "id": "deal", "mechanic": "deal", "rule": "HRT-1.1", "params": { "packets": [ { "to": "hand", "each": 13 } ] } },
+    {
+      "id": "pass", "mechanic": "exchange.pass", "rule": "HRT-2.1",
+      "when": "passOffset() != 0",
+      "params": { "from": "hand", "via": "passOut", "to": "hand", "count": "options.passCount", "target": "left(seat, passOffset())", "simultaneous": true, "revealTo": "recipient" }
+    },
+    {
+      "id": "play", "mechanic": "trick-play",
+      "params": {
+        "tricks": "untilHandsEmpty",
+        "trump": "none",
+        "order": "natural",
+        "follow": { "mustFollow": true, "rule": "HRT-3.2" },
+        "firstLeader": "holderOf('2C')",
+        "leadAllowed": { "expr": "trick.number == 1 ? c.id == '2C' : (!options.breakingHearts || deal.heartsBroken || c.suit != 'H')", "otherwise": "any", "rule": "HRT-3.4" },
+        "playAllowed": { "expr": "!(trick.number == 1 && options.noPointsFirstTrick && penalty(c) > 0)", "otherwise": "any", "rule": "HRT-3.3" },
+        "winner": "highestOfLedSuit",
+        "nextLeader": "winner",
+        "onCardPlayed": [
+          { "if": "c.suit == 'H' || (options.queenBreaksHearts && c.id == 'QS')", "then": [ { "set": "deal.heartsBroken", "to": "true" } ] }
+        ],
+        "onTrickEnd": [ { "move": { "from": "trick", "to": "taken", "toSeat": "trick.winner", "cards": "all" } } ]
+      }
+    },
+    {
+      "id": "score", "mechanic": "score", "rule": "HRT-4.1",
+      "params": {
+        "effects": [
+          { "forEach": "seat", "do": [ { "set": "deal.dealPoints[s]", "to": "penaltyTaken(s) + zone('taken', s).map(c, bonus(c)).sum()" } ] },
+          {
+            "if": "seats().exists(s, penaltyTaken(s) == 26)",
+            "then": [
+              { "let": "shooter", "be": "seats().filter(s, penaltyTaken(s) == 26)[0]" },
+              { "if": "options.moon == 'addToOthers' || (options.moon == 'shooterChooses' && choice('moon', shooter) == 'addToOthers')",
+                "then": [ { "forEach": "seat", "do": [ { "set": "deal.dealPoints[s]", "to": "s == shooter ? zone('taken', s).map(c, bonus(c)).sum() : 26 + zone('taken', s).map(c, bonus(c)).sum()" } ] } ],
+                "else": [ { "set": "deal.dealPoints[shooter]", "to": "-26 + zone('taken', shooter).map(c, bonus(c)).sum()" } ] }
+            ],
+            "rule": "HRT-4.3"
+          },
+          { "forEach": "seat", "do": [ { "add": "match.score[s]", "value": "deal.dealPoints[s]" } ] }
+        ],
+        "choices": [ { "id": "moon", "seat": "shooter", "when": "options.moon == 'shooterChooses'", "values": ["addToOthers", "subtractFromSelf"] } ]
+      }
+    }
+  ],
+  "end": { "check": "afterDeal", "when": "seats().exists(s, match.score[s] >= options.target)", "rank": "ascending(match.score)", "ties": "shared", "rule": "HRT-5.1" },
+  "display": { "layout": "fourAround", "scoreSheet": ["dealPoints", "score"], "showLastTrick": true, "trickHistory": "lastOnly" },
+  "ai": { "profile": "trick.generic", "params": { "avoidPoints": true, "moonAware": true } },
+  "teaching": { "lessons": ["hearts.l1-basics", "hearts.l2-passing", "hearts.l3-moon"] }
+}

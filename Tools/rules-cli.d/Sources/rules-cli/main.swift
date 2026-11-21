@@ -16,6 +16,7 @@
 
 import Foundation
 @_spi(HostOnly) @_spi(Tools) import RulesetKit
+@_spi(HostOnly) import RulesEngine
 
 func repoRoot() -> URL? {
     var dir = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
@@ -191,17 +192,43 @@ func simulate(_ urls: [URL], seeds: Int, firstSeed: UInt64, quiet: Bool) -> Int 
             continue
         }
         do {
-            let document = try RulesetDocument(json: try JSONParser.parse(text), path: "$")
-            let resolved = try Resolver.resolve(base: document)
-            let simulator = try Simulator(ruleset: resolved)
+            let parsed = try JSONParser.parse(text)
+            let resolved: ResolvedRuleset
+            if text.contains("\"parlor.overlay/1\"") {
+                // A variant overlay: resolve it against its base ruleset
+                // (found beside the overlay) and simulate the resolved
+                // document (§8.1).
+                let overlay = try OverlayDocument(json: parsed, path: "$")
+                let baseID = overlay.extends.split(separator: "@").first.map(String.init) ?? overlay.extends
+                let baseURL = url.deletingLastPathComponent()
+                    .appendingPathComponent("\(baseID).ruleset.json")
+                let baseData = try Data(contentsOf: baseURL)
+                let base = try RulesetDocument(
+                    json: try JSONParser.parse(String(decoding: baseData, as: UTF8.self)),
+                    path: "$")
+                resolved = try Resolver.resolve(base: base, variant: overlay)
+            } else {
+                let document = try RulesetDocument(json: parsed, path: "$")
+                resolved = try Resolver.resolve(base: document)
+            }
+            let envCap = ProcessInfo.processInfo.environment["RULES_SIM_MAX_ACTIONS"]
+                .flatMap(Int.init)
+            let simulator = try envCap.map { try Simulator(ruleset: resolved, maxActions: $0) }
+                ?? Simulator(ruleset: resolved)
 
             let started = Date()
             var faultSeeds: [UInt64: String] = [:]
+            var faultStates: [UInt64: String] = [:]
             var maxActions = 0
+            var firstFinal: SimulationRun?
             for offset in 0..<max(0, seeds) {
                 let run = try simulator.runDeal(seed: firstSeed &+ UInt64(offset))
                 maxActions = max(maxActions, run.actions)
-                if let fault = run.faults.first { faultSeeds[run.seed] = fault }
+                if firstFinal == nil { firstFinal = run }
+                if let fault = run.faults.first {
+                    faultSeeds[run.seed] = fault
+                    faultStates[run.seed] = run.faultContext
+                }
             }
             let elapsed = Date().timeIntervalSince(started)
 
@@ -222,8 +249,24 @@ func simulate(_ urls: [URL], seeds: Int, firstSeed: UInt64, quiet: Bool) -> Int 
                 }
             }
             if !reproducible { ok = false }
+            if ProcessInfo.processInfo.environment["RULES_CLI_DUMP"] != nil,
+               let run = firstFinal {
+                // Final-state summary of the first seed (host tooling only;
+                // the state never leaves the host). §10.4 SPI.
+                let state = run.finalState
+                print(
+                    "  final-state: phase=\(state.phase.phaseID) done=\(run.done)"
+                        + " faults=\(run.faults.count)"
+                        + " deals=\(state.dealIndex)"
+                        + " match[\(state.matchVars.describe())]"
+                        + " deal[\(state.dealVars.describe())]")
+            }
             for (seed, fault) in faultSeeds.sorted(by: { $0.key < $1.key }) {
                 print("\(name): FAULT seed \(seed): \(fault)")
+                if ProcessInfo.processInfo.environment["RULES_CLI_DUMP"] != nil,
+                   let state = faultStates[seed] {
+                    print("  fault-state: \(state)")
+                }
                 ok = false
             }
         } catch {

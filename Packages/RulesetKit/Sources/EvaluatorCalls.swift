@@ -1,3 +1,4 @@
+import Foundation
 import CardExpr
 
 /// Member access, indexing, calls, builtins, macros, and defs
@@ -204,8 +205,15 @@ extension Evaluator {
         return try walk(body)
     }
 
-    /// The trick snapshot fields (§7.3).
+    /// The trick snapshot fields (§7.3). A trick-end binding (the record
+    /// the trick-play mechanic passes to `onTrickEnd`) overrides the
+    /// phase snapshot, whose winner is always `.null` because the trick
+    /// has not been awarded at snapshot time.
     private func trickValue(_ field: TrickField) -> Value {
+        if case .record(_, let fields)? = env.contextual["trick"],
+           let bound = fields[field.rawValue] {
+            return bound
+        }
         switch field {
         case .number: return env.trick.number
         case .leader: return env.trick.leader

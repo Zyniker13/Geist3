@@ -168,6 +168,7 @@ struct ReferenceChecks {
             for (j, entry) in s.order.enumerated() {
                 zoneRef(entry.zone, "\(pointer)/params/order/\(j)/zone", "show entry")
             }
+            zoneRef(s.with, "\(pointer)/params/with", "show 'with'")
             ruleRef(s.pointsRule, "\(pointer)/params")
         case .score(let s):
             for effect in s.effects {

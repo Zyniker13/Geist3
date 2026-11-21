@@ -30,13 +30,19 @@ extension ExpressionRuntime {
         cardFaceValue(instance.face)
     }
 
-    /// An engine variable value as an expression value.
-    static func value(from varValue: RulesEngine.VarValue) -> Value {
+    /// An engine variable value as an expression value. Seat-typed
+    /// values spell with the declared seat names (§7.3) so seat builtin
+    /// calls like `left(deal.declarer, 1)` resolve against `seats()`;
+    /// unnamed layouts keep the positional `S<n>` spellings.
+    func value(from varValue: RulesEngine.VarValue) -> Value {
         switch varValue {
         case .int(let n): return .int(Int64(n))
         case .bool(let b): return .bool(b)
         case .string(let s): return .string(s)
-        case .seat(let seat): return .string("S\(seat.raw + 1)")
+        case .seat(let seat):
+            let spelling = seatSpellings.indices.contains(seat.raw)
+                ? seatSpellings[seat.raw] : "S\(seat.raw + 1)"
+            return .string(spelling)
         case .record(let name, let fields):
             return .record(
                 name: name,
@@ -85,6 +91,35 @@ extension ExpressionRuntime {
             return .record(
                 name: name,
                 fields: fields.mapValues(evalValue(from:)))
+        }
+    }
+
+    /// The static type a runtime binding presents to the checker (§7.5).
+    /// Strings erase to `any`: seat, team and suit spellings are plain
+    /// strings at run time, so the permissive erasure matches what the
+    /// evaluator resolves. Ints, bools, cards and records keep their kind
+    /// (records so member access checks), and a let-bound name thereby
+    /// shadows its canonical spelling with its real shape.
+    static func bindingType(_ value: EvalValue) -> ExprType {
+        switch value {
+        case .null, .string: return .any
+        case .bool: return .bool
+        case .int: return .int
+        case .card: return .card
+        case .list(let items):
+            var element: ExprType?
+            var mixed = false
+            for item in items {
+                let kind = bindingType(item)
+                if let known = element {
+                    if known != kind { mixed = true; break }
+                } else {
+                    element = kind
+                }
+            }
+            return mixed ? .list(.any) : .list(element ?? .any)
+        case .record(_, let fields):
+            return .record(RecordType(fields: fields.mapValues(bindingType)))
         }
     }
 

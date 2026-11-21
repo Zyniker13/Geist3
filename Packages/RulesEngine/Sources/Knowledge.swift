@@ -57,7 +57,7 @@ public struct KnowledgeStore: Codable, Hashable, Sendable {
 
 /// Variables by scope (§5.2 `vars`). Values are JSON-ish for the expression
 /// engine; CardExpr lands in P2, so P1 stores Swift-native values.
-public enum VarValue: Codable, Hashable, Sendable {
+public enum VarValue: Codable, Hashable, Sendable, CustomStringConvertible {
     case int(Int)
     case bool(Bool)
     case string(String)
@@ -66,6 +66,21 @@ public enum VarValue: Codable, Hashable, Sendable {
     /// `doubled`, `redoubled`); fields are JSON-ish values.
     case record(name: String, fields: [String: VarValue])
     case null
+
+    public var description: String {
+        switch self {
+        case .int(let i): return "\(i)"
+        case .bool(let b): return "\(b)"
+        case .string(let s): return "\"\(s)\""
+        case .seat(let s): return "seat\(s.raw)"
+        case .record(let name, let fields):
+            let sorted = fields.sorted { $0.key < $1.key }
+                .map { "\($0.key)=\($0.value)" }
+                .joined(separator: ",")
+            return "\(name){\(sorted)}"
+        case .null: return "null"
+        }
+    }
 }
 
 public enum VarScope: String, Codable, Sendable {
@@ -140,6 +155,13 @@ public struct VarStore: Codable, Hashable, Sendable {
         default: break  // type mismatch: silently ignored in P1; P2 validator owns this
         }
     }
+
+    /// Diagnostic summary (host tooling): sorted `key=value` pairs.
+    public func describe() -> String {
+        values.sorted { $0.key < $1.key }
+            .map { "\($0.key)=\($0.value)" }
+            .joined(separator: ", ")
+    }
 }
 
 /// The current phase and its mechanic sub-state (§9.1 `phase`).
@@ -159,4 +181,14 @@ public enum MechanicSubstate: Codable, Hashable, Sendable {
     case trick(TrickSubstate)
     case auctionRounds(AuctionSubstate)
     case auctionLadder(AuctionSubstate)
+    case show(ShowSubstate)
+}
+
+/// Show phase sub-state (ADR-0032): the index of the next `show.order`
+/// entry to reveal and count.
+public struct ShowSubstate: Codable, Hashable, Sendable {
+    public var position: Int
+    public init(position: Int) {
+        self.position = position
+    }
 }

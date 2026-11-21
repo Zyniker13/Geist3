@@ -115,9 +115,10 @@ extension EngineBuilder {
     }
 
     /// Spell one seat for team-name concatenation: the declared seat name
-    /// when present, otherwise a positional fallback.
+    /// when present, otherwise the engine's positional fallback ("S1"…),
+    /// so team spellings match the seat spellings expressions see.
     private static func seatName(_ seat: Int, _ seatNames: [String]) -> String {
-        guard seat < seatNames.count else { return "Seat \(seat)" }
+        guard seat < seatNames.count else { return "S\(seat + 1)" }
         return seatNames[seat]
     }
 
@@ -237,8 +238,8 @@ extension EngineBuilder {
         case .forEach(let kind, let body, _):
             let owner: EngineOwnerKind
             switch kind {
-            case "seats": owner = .seat
-            case "teams": owner = .team
+            case "seat": owner = .seat
+            case "team": owner = .team
             default: throw .unsupported("forEach over \(kind)")
             }
             return .forEach(owner: owner, body: try mapEffects(body))

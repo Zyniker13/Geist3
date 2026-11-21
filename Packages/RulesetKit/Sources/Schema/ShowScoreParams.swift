@@ -30,7 +30,9 @@ public struct ShowEntry: Equatable, Sendable, JSONCodable {
 
 public struct ShowParams: Equatable, Sendable, JSONCodable {
     public var order: [ShowEntry]
-    public var with: Expr?
+    /// A shared zone counted with every pile (§5.6), e.g. the cribbage
+    /// starter. Validators check the id against the declared zones.
+    public var with: String?
     public var points: Expr?
     public var pointsRule: String?
     public var manual: Expr?
@@ -40,7 +42,7 @@ public struct ShowParams: Equatable, Sendable, JSONCodable {
     public init(json: JSON, path: String) throws(SchemaError) {
         var reader = try FieldReader(json, path: path)
         order = try reader.array("order")
-        with = try reader.optionalDecoded("with") as Expr?
+        with = try reader.optionalString("with")
         points = try reader.optionalDecoded("points") as Expr?
         pointsRule = try reader.optionalString("pointsRule")
         manual = try reader.optionalDecoded("manual") as Expr?
@@ -51,7 +53,7 @@ public struct ShowParams: Equatable, Sendable, JSONCodable {
 
     public var json: JSON {
         var pairs: [(String, JSON)] = [("order", .array(order.map { $0.json }))]
-        if let with { pairs.append(("with", with.json)) }
+        if let with { pairs.append(("with", .string(with))) }
         if let points { pairs.append(("points", points.json)) }
         if let pointsRule { pairs.append(("pointsRule", .string(pointsRule))) }
         if let manual { pairs.append(("manual", manual.json)) }

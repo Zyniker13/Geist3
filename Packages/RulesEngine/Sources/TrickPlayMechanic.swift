@@ -1,3 +1,4 @@
+import Foundation
 import CardModel
 
 /// A seat named literally, or by a ruleset expression (§5.6).
@@ -61,7 +62,7 @@ public struct TrickPlayParams: Codable, Hashable, Sendable {
     public let follow: Follow
 
     /// An extra play guard: a predicate over the candidate card bound as
-    /// `card`. `leadAllowed` applies to the trick's first card,
+    /// `c`. `leadAllowed` applies to the trick's first card,
     /// `playAllowed` to every later play.
     public struct PlayGuard: Codable, Hashable, Sendable {
         public let expr: ExprRef
@@ -143,7 +144,7 @@ public struct TrickPlayParams: Codable, Hashable, Sendable {
     }
     public let claims: ClaimsSpec?
 
-    /// Effects run after every card is played, with `seat` and `card`
+    /// Effects run after every card is played, with `seat` and `c`
     /// bound.
     public let onCardPlayed: [EngineEffect]
     /// Effects run when a trick is decided, with `trick` (a record
@@ -267,9 +268,12 @@ public enum TrickPlayMechanic: Mechanic {
         }
         sub.activeSeats = active
 
-        // First leader must be one of the active seats.
+        // First leader must be one of the active seats; seat expressions
+        // see the filtered list so `nextActive` skips sitting-out seats.
         if let spec = params.firstLeader {
-            let seat = try seatOf(spec, pointer: "/phases/trick-play/firstLeader", state: state, ctx: ctx)
+            let seat = try seatOf(
+                spec, pointer: "/phases/trick-play/firstLeader",
+                state: state, ctx: ctx, activeSeats: active)
             guard sub.activeSeats.contains(seat) else {
                 throw RuleViolation.engineFault(
                     ruleId: nil, pointer: "/phases/trick-play/firstLeader not an active seat")
@@ -316,25 +320,41 @@ public enum TrickPlayMechanic: Mechanic {
             sub.dummyController = controller
         }
 
-        // Claim voters (the seats that must accept a claim).
+        // Claim voters (the seats that must accept a claim). The bare name
+        // `defenders` is claims vocabulary (§5.6): the seats opposing the
+        // claimer's team; anything else is a seat-list expression.
         if let claims = params.claims, let ref = claims.acceptedBy {
-            let value = try ctx.evalCall(
-                .init(pointer: "/phases/trick-play/claims/acceptedBy", source: ref.source, ruleId: claims.ruleId),
-                state: state)
-            guard case .list(let names) = value else {
-                throw RuleViolation.engineFault(
-                    ruleId: claims.ruleId, pointer: "/phases/trick-play/claims/acceptedBy not a seat list")
-            }
-            var voters: [Seat] = []
-            for item in names {
-                guard let seat = seatValue(of: item, ctx: ctx), seat.raw < params.seatCount else {
+            if ref.source.trimmingCharacters(in: .whitespaces) == "defenders" {
+                guard let claimer = try claimantSeat(params, claims: claims, state: state, ctx: ctx) else {
                     throw RuleViolation.engineFault(
                         ruleId: claims.ruleId,
-                        pointer: "/phases/trick-play/claims/acceptedBy not a seat list")
+                        pointer: "/phases/trick-play/claims/acceptedBy requires claims/by")
                 }
-                if !voters.contains(seat) { voters.append(seat) }
+                let claimerTeam =
+                    ctx.teamOfSeat.indices.contains(claimer.raw)
+                    ? ctx.teamOfSeat[claimer.raw] : claimer.raw
+                sub.claimVoters = sub.activeSeats.filter {
+                    (ctx.teamOfSeat.indices.contains($0.raw) ? ctx.teamOfSeat[$0.raw] : $0.raw) != claimerTeam
+                }
+            } else {
+                let value = try ctx.evalCall(
+                    .init(pointer: "/phases/trick-play/claims/acceptedBy", source: ref.source, ruleId: claims.ruleId),
+                    state: state)
+                guard case .list(let names) = value else {
+                    throw RuleViolation.engineFault(
+                        ruleId: claims.ruleId, pointer: "/phases/trick-play/claims/acceptedBy not a seat list")
+                }
+                var voters: [Seat] = []
+                for item in names {
+                    guard let seat = seatValue(of: item, ctx: ctx), seat.raw < params.seatCount else {
+                        throw RuleViolation.engineFault(
+                            ruleId: claims.ruleId,
+                            pointer: "/phases/trick-play/claims/acceptedBy not a seat list")
+                    }
+                    if !voters.contains(seat) { voters.append(seat) }
+                }
+                sub.claimVoters = voters
             }
-            sub.claimVoters = voters
         }
 
         state.setSubstate(sub)
@@ -351,19 +371,34 @@ public enum TrickPlayMechanic: Mechanic {
         _ params: Params, state: GameState, seat: Seat, ctx: EvalContext
     ) -> [ActionIntent] {
         let sub = state.trickSubstate()
-        // Claim acceptance.
+        // Claim acceptance. Mirror applyAccept's gates exactly: a seat that
+        // has already voted gets no further acceptClaim offers (ADR-0031).
         if sub.pendingClaim != nil {
-            return sub.claimVoters.contains(seat) ? [.acceptClaim(true), .acceptClaim(false)] : []
+            return sub.claimVoters.contains(seat) && !sub.claimVotes.contains(seat)
+                ? [.acceptClaim(true), .acceptClaim(false)] : []
         }
-        // Claim proposal.
-        if let claims = params.claims, sub.claimedBy == nil, sub.currentPlays.isEmpty,
+        // Claim proposal. Mirror applyClaim's gates exactly (ADR-0031) so
+        // legality never advertises a claim apply would reject: no pending
+        // claim, no trick in progress, claims enabled, the claimant is the
+        // seat to act (pendingSeats consults nextToAct at trick rest), and a
+        // non-empty remainder.
+        if let claims = params.claims, sub.pendingClaim == nil, sub.claimedBy == nil,
+            sub.currentPlays.isEmpty, !sub.claimVoters.contains(seat),
+            let enabled = claims.enabled,
+            (try? ctx.evalCall(
+                .init(
+                    pointer: "/phases/trick-play/claims/enabled", source: enabled.source,
+                    ruleId: claims.ruleId), state: state)) == .bool(true),
             let claimant = try? claimantSeat(params, claims: claims, state: state, ctx: ctx),
-            seat == claimant, remainingTricks(params, state: state) > 0
+            seat == claimant, pendingSeats(params, state: state, ctx: ctx).contains(seat),
+            remainingTricks(params, state: state) > 0
         {
             return [.claim(remainingTricks(params, state: state))]
         }
         // Normal play.
-        guard let turn = nextToAct(params, state: state, ctx: ctx) else { return [] }
+        guard let turn = nextToAct(params, state: state, ctx: ctx) else {
+            return []
+        }
         guard actor(for: turn, sub: sub) == seat else { return [] }
         let hand = state.zones.cards(in: handKey(turn))
         let led = sub.ledSuit
@@ -414,10 +449,16 @@ public enum TrickPlayMechanic: Mechanic {
                 }
             }
         }
-        // Guard predicates narrow further (failures defer to apply).
+        // Guard predicates narrow further. `otherwise: "any"` is the whole-hand
+        // fallback (ARCHITECTURE §6.1): when the guard filters the candidate set
+        // to empty, the unfiltered hand is legal. Guard-evaluation failures
+        // defer to apply (a throwing guard keeps the card).
         if let guardSpec = (sub.currentPlays.isEmpty ? params.leadAllowed : params.playAllowed) {
-            candidates = candidates.filter {
+            let filtered = candidates.filter {
                 (try? playAllowed(params, guardSpec, card: $0, state: state, ctx: ctx)) ?? true
+            }
+            if !filtered.isEmpty || guardSpec.otherwise != "any" {
+                candidates = filtered
             }
         }
         return candidates.map { .play($0.id) }
@@ -529,15 +570,24 @@ public enum TrickPlayMechanic: Mechanic {
             }
         }
 
-        // Lead / play guards.
+        // Lead / play guards. `otherwise: "any"` whole-hand fallback (§6.1):
+        // the guard is enforced only when it keeps at least one card legal,
+        // mirroring legalIntents so legality never advertises an illegal card.
         if let guardSpec = sub.currentPlays.isEmpty ? params.leadAllowed : params.playAllowed {
-            if try !playAllowed(params, guardSpec, card: card, state: state, ctx: ctx) {
+            let anyLegal = handCards.contains {
+                (try? playAllowed(params, guardSpec, card: $0, state: state, ctx: ctx)) ?? true
+            }
+            if try !playAllowed(params, guardSpec, card: card, state: state, ctx: ctx),
+                anyLegal || guardSpec.otherwise != "any"
+            {
                 throw RuleViolation.illegal(
                     ruleId: guardSpec.ruleId ?? params.follow.ruleId, detail: .custom(guardSpec.otherwise))
             }
         }
 
-        let trickKey = ZoneKey(scope: .shared, id: "trick\(sub.trickIndex)")
+        // Cards are played into the ruleset's declared shared `trick`
+        // zone (§6.1/§6.2: `move from 'trick'` reads it at trick end).
+        let trickKey = ZoneKey(scope: .shared, id: "trick")
         state.zones.ensureDeclared(trickKey)
         do {
             try state.zones.move(cardID, from: hand, to: trickKey)
@@ -564,7 +614,7 @@ public enum TrickPlayMechanic: Mechanic {
             var effectEvents: [GameEvent] = []
             try ctx.effects?.run(
                 params.onCardPlayed, in: &state,
-                bindings: ["seat": .string(spelling(turn, ctx)), "card": cardValue(card)],
+                bindings: ["seat": .string(spelling(turn, ctx)), "c": cardValue(card)],
                 events: &effectEvents,
                 pointer: "/phases/trick-play/onCardPlayed")
             events.append(contentsOf: effectEvents)
@@ -576,14 +626,16 @@ public enum TrickPlayMechanic: Mechanic {
 
     /// If every active seat has played, decide the trick: publish the faces,
     /// record the winner, advance the leader/index, and run the trick-end
-    /// effects with `trick` (a record with `winner` and `index`) bound.
+    /// effects with the `trick` record (§7.4) bound.
     private static func completeTrickIfFull(
         _ params: Params, state: inout GameState, ctx: EvalContext
     ) throws(RuleViolation) -> [GameEvent] {
         var events: [GameEvent] = []
         var sub2 = state.trickSubstate()
         guard sub2.currentPlays.count == sub2.activeSeats.count else { return events }
-        let trickKey = ZoneKey(scope: .shared, id: "trick\(sub2.trickIndex)")
+        // The played cards sit in the declared shared `trick` zone; the
+        // ruleset's trick-end effects move them where the rules say.
+        let trickKey = ZoneKey(scope: .shared, id: "trick")
         // Trick complete: the played faces are public knowledge.
         let trickCards = state.zones.cards(in: trickKey)
         for instance in trickCards { state.knowledge.makePublic(instance.id) }
@@ -595,7 +647,11 @@ public enum TrickPlayMechanic: Mechanic {
             let value = try ctx.evalCall(
                 .init(
                     pointer: "/phases/trick-play/nextLeader", source: spec.source, ruleId: nil,
-                    contextual: ["winner": .string(spelling(winner, ctx))]),
+                    contextual: [
+                        "winner": .string(spelling(winner, ctx)),
+                        "trick": trickRecord(
+                            sub2, cards: trickCards, ledSuit: sub2.ledSuit, winner: winner, ctx: ctx),
+                    ]),
                 state: state)
             guard let seat = seatValue(of: value, ctx: ctx), sub2.activeSeats.contains(seat) else {
                 throw RuleViolation.engineFault(
@@ -614,18 +670,14 @@ public enum TrickPlayMechanic: Mechanic {
         }
         events.append(.trickWon(seat: winner, cards: trickCards))
         events.append(.scored(seat: winner, points: 1, reason: "trick", ruleId: "trick.award"))
-        // Trick-end effects, with `trick.winner` bound.
+        // Trick-end effects, with the full `trick` record bound (§7.4).
         if !params.onTrickEnd.isEmpty {
             var effectEvents: [GameEvent] = []
             try ctx.effects?.run(
                 params.onTrickEnd, in: &state,
                 bindings: [
-                    "trick": .record(
-                        name: "trick",
-                        fields: [
-                            "winner": .string(spelling(winner, ctx)),
-                            "index": .int(Int64(sub2.trickIndex)),
-                        ])
+                    "trick": trickRecord(
+                        sub2, cards: trickCards, ledSuit: sub2.ledSuit, winner: winner, ctx: ctx)
                 ],
                 events: &effectEvents,
                 pointer: "/phases/trick-play/onTrickEnd")

@@ -4,9 +4,26 @@
 // pure function of the snapshot and the resolved document (CONVENTIONS §5).
 
 import CardModel
+#if canImport(Foundation)
+import Foundation
+#endif
 @_spi(HostOnly) import RulesEngine
 
 extension ExpressionRuntime {
+
+    /// §5.6: the active-seat set seat expressions see. A mechanic-supplied
+    /// per-call override (trick-play enter evaluates `firstLeader` before
+    /// the substate is attached) wins; otherwise a live trick-play
+    /// substate carries the filtered list; otherwise every seat is active.
+    func activeSeatSpellings(call: EvalCall, state: GameState) -> Set<String> {
+        if let override = call.activeSeats {
+            return Set(override.map(seatSpelling(_:)))
+        }
+        if case .trick(let substate) = state.phase.substate {
+            return Set(substate.activeSeats.map(seatSpelling(_:)))
+        }
+        return Set(seatSpellings)
+    }
 
     /// Builds the per-call environment out of the state snapshot (§7.5).
     func environment(
@@ -19,7 +36,7 @@ extension ExpressionRuntime {
 
         return EvaluationEnvironment(
             seats: seats,
-            activeSeats: Set(seatSpellings),
+            activeSeats: activeSeatSpellings(call: call, state: state),
             teams: teams,
             teamOfSeat: teamOfSeat,
             zoneContents: zoneContents,
@@ -30,7 +47,17 @@ extension ExpressionRuntime {
             tricksWon: { target in self.tricksWon(target, wins: trickState.wins) },
             playedBy: { seat in self.playedBy(seat, state: state) },
             choice: { _, _ in .null },
-            dealtHands: { [] },
+            // §7.5 `dealtHands()`: the cards each seat was dealt this deal,
+            // recorded by the deal mechanic (GameState.dealt), one entry per
+            // seat in seat order so `left(dealtHands(), n)` reads seat n.
+            dealtHands: { [seatCount] in
+                var hands: [Value] = []
+                for raw in 0..<seatCount {
+                    let cards = state.dealt[raw] ?? []
+                    hands.append(.list(cards.map { Self.cardValue($0) }))
+                }
+                return hands
+            },
             optionValues: optionValues,
             contextual: contextualBindings(for: call, state: state, zoneContents: zoneContents),
             trick: trickState.trick,
@@ -72,25 +99,34 @@ extension ExpressionRuntime {
         for call: EvalCall, state: GameState, zoneContents: [String: [Value]]
     ) -> [String: Value] {
         var contextual: [String: Value] = ["dealer": .string(seatSpelling(state.dealer))]
-        for (name, value) in call.contextual {
-            contextual[name] = Self.value(from: value)
-        }
         for (id, values) in zoneContents where context.contextual[id] != nil {
             contextual[id] = .list(values)
+        }
+        // Mechanic bindings come last so a context root bound by a
+        // mechanic (the trick-end `trick` record) wins over the zone
+        // of the same name (§7.3).
+        for (name, value) in call.contextual {
+            contextual[name] = Self.value(from: value)
         }
         return contextual
     }
 
     /// The trick sub-state snapshot, empty when no trick mechanic owns
-    /// the current phase.
+    /// the current phase. After the play phase ends, the deal's completed
+    /// play record (`lastPlaySubstate`, ADR-0033) still supplies the
+    /// cumulative trick counts so score-phase `tricksWon` works (§7.3);
+    /// the live-trick fields are only meaningful during play.
     private func trickSnapshot(
         _ state: GameState
     ) -> (trick: EvaluationEnvironment.TrickSnapshot, wins: [Int]) {
         guard case .trick(let substate) = state.phase.substate else {
+            if let last = state.lastPlayTrick() {
+                return (EvaluationEnvironment.TrickSnapshot(), last.tricksWon)
+            }
             return (EvaluationEnvironment.TrickSnapshot(), [])
         }
         let trick = EvaluationEnvironment.TrickSnapshot(
-            number: .int(Int64(substate.trickIndex)),
+            number: .int(Int64(substate.trickIndex + 1)),
             leader: .string(seatSpelling(substate.leader)),
             cards: .list(substate.currentPlays.map { Self.cardInstanceValue($0.card, state: state) }),
             ledSuit: substate.currentPlays.first.flatMap {
@@ -115,17 +151,17 @@ extension ExpressionRuntime {
             switch ref.scope {
             case .match, .deal:
                 if let value = store.get(VarPath(name)) {
-                    plainVars[ref] = Self.value(from: value)
+                    plainVars[ref] = self.value(from: value)
                 }
             case .seatMatch, .seatDeal:
                 let values = seatSpellings.indices.map { index in
-                    store.get(VarPath(name, index)).map(Self.value(from:)) ?? .null
+                    store.get(VarPath(name, index)).map { value(from: $0) } ?? .null
                 }
                 plainVars[ref] = .list(values)
                 indexedVars[ref] = values
             case .teamMatch, .teamDeal:
                 let values = teamSpellings.indices.map { index in
-                    store.get(VarPath(name, index)).map(Self.value(from:)) ?? .null
+                    store.get(VarPath(name, index)).map { value(from: $0) } ?? .null
                 }
                 plainVars[ref] = .list(values)
                 indexedVars[ref] = values

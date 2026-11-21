@@ -30,6 +30,16 @@ Purpose: every decision made during the build as a numbered ADR (context, decisi
 | 0022 | Gate G0 excludes the macOS UI-test leg; required again from G9 | Accepted |
 | 0025 | Standard native scoring semantics (P2.4) | Accepted |
 | 0026 | Schema shapes are closed; unknown keys fail decode | Accepted |
+| 0027 | JSON Schema export is a structural mirror, freshness-checked | Accepted |
+| 0028 | Score choices pend per seat, in any order | Accepted |
+| 0029 | Show `cards` binds the pile's own cards; `with` zone revealed | Accepted |
+| 0030 | `trick.number` is 1-based; trick record bound at every trick-context eval | Accepted |
+| 0031 | Claim legal branches mirror `applyClaim` gates exactly | Accepted |
+| 0032 | `PhaseOutcome.autoStep` lets a mechanic expose internal automatic steps | Accepted |
+| 0033 | Engine retains the completed trick record for score-phase expressions | Accepted |
+| 0034 | Host-side dealt record backs `dealtHands()`; scalar Int keys | Accepted |
+| 0035 | `otherwise: "any"` fallback when guards empty the candidate set | Accepted |
+| 0036 | Auction param calls bind the value canonically as `param` | Accepted |
 
 ## ADR-0001 — Toolchain: Xcode 27.2, Swift 6.4.2, language mode 6
 
@@ -238,3 +248,60 @@ Purpose: every decision made during the build as a numbered ADR (context, decisi
 - **Context:** `ScoreMechanic` supports several `choices[]` gating one scoring run (hearts' moon shooter is the reference). The first implementation resolved "the" pending choice by scanning `phaseOptions` for any non-empty `pending:<id>` — with two choices active, which seat was asked first depended on Swift's per-process String hashing, so the same seed and action list could be legal in one process and `notYourTurn` in another (§10 replay hazard). The same scan also silently skipped choices whose `when` gate evaluated to a non-bool, inconsistent with every other mechanic faulting loudly on mistyped expressions.
 - **Decision:** Choices pend per seat: `pendingSeats` returns every seat that owes a choice, `legalIntents`/`apply` resolve the asking seat's own choice deterministically (iterating `params.choices` in declared order), and the effects run once when no seat owes anything. A non-bool `when` result is an engine fault naming the choice. One-at-a-time sequencing remains available to rulesets by construction (each choice names one seat); parallel answering is now also legal.
 - **Consequences:** Replay determinism no longer depends on dictionary iteration order; multi-choice scoring (e.g. a moon shot plus a confession) works with seats answering concurrently in the host UI. Pinned by the `ShowScoreTests` suite (gate/settle/multi-choice/fault cases).
+
+## ADR-0029 — Show `cards` binds the pile's own cards; the `with` zone is revealed, not merged (P3.3)
+
+- **Status:** Accepted (2026-11-21, P3.3 ruleset wave)
+- **Context:** The `show` mechanic's `points` expression receives contextual bindings. `ShowMechanic` initially merged the `with` zone's cards into the `cards` binding (pile + starter for cribbage), but ARCHITECTURE's normative cribbage example calls `cribbage.handScore(cards, zone('starter')[0], isCrib)` — passing `cards` as the 4-card hand and pulling the starter as a single card. With a merged `cards` (5 entries) that call can never satisfy `handScore`'s 4-card signature, and the starter could not be isolated as one card from a merged list at all. The plan example is authoritative; the engine conforms to it.
+- **Decision:** `cards` binds only the entry pile's own cards. `with` names a shared zone that is revealed alongside each pile (its cards become public with the first pile and stay public) and remains reachable from expressions through `zone('<id>')[…]`. This matches `cribbage.handScore(hand:starter:isCrib:)`'s signature and keeps nobs/heels logic expressible in rulesets.
+- **Consequences:** Rulesets that need the with-zone cards in scoring reference the zone directly (`zone('starter')[0]`), as the plan example already does. Pinned by the cribbage six-card/five-card ruleset simulations (`show.points` faults if the merge returns).
+
+## ADR-0030 — `trick.number` is 1-based, and the trick record is bound at every trick-context eval (P3.3)
+
+- **Status:** Accepted (2026-11-21, P3.3 ruleset battery)
+- **Context:** ARCHITECTURE §7.4's binding table lists `trick.number` without a base (it marks `deal.index` 0-based explicitly), and hearts' `leadAllowed` (`trick.number == 1 ? c.id == '2C'`, with `firstLeader: holderOf('2C')`) pins the semantics: the first trick's number is 1. Two engine gaps surfaced in the 500-seed battery: the simulator's env trick snapshot bound `number` from the 0-based `trickIndex`, and the trick mechanic bound no `trick` record at all during legality evaluation or at trick end (only `winner`/`index` at end), so `trick.*` in guard expressions silently evaluated against the stale/absent snapshot.
+- **Decision:** `trick.number` is 1-based everywhere (`trickIndex + 1`). `TrickPlayMechanic` binds the full contextual record — `number`, `leader`, `cards`, `ledSuit`, `winner` — wherever trick-context expressions evaluate: lead and follow legality (`playAllowed`), `nextLeader`, and trick-end effects (winner filled, cards/ledSuit captured before the trick is archived). The env snapshot remains the phase-level fallback and now agrees with the record.
+- **Consequences:** Guard expressions keyed on the first trick (hearts' 2C lead and no-points-first-trick, and any future game using `trick.number`) behave as written; the hearts 500-seed stall (seeds 495–499) is gone. Pinned by the RulesEngine trick tests and the ruleset battery.
+
+
+## ADR-0031 — Claim legal branches mirror `applyClaim` gates exactly (P3.3)
+
+- **Status:** Accepted (2026-11-21, P3.3 ruleset battery)
+- **Context:** `TrickPlayMechanic` supports pending card-claims (`claimVotes`). Random-legal simulation faulted with `notYourTurn` at the claim step: the `legalIntents` branches offered `acceptClaim` to seats that had already voted, and the proposal branch did not reproduce every gate `applyClaim` checks, so an intent that passed `legalIntents` could still fail in `apply`.
+- **Decision:** Every legal branch mirrors the `applyClaim` gates exactly: the proposal branch applies the same gates as `applyClaim`'s proposal path, and both proposal and accept branches exclude seats already present in `claimVotes` (`!claimVotes.contains(seat)`). A seat that has voted is never offered a claim intent again.
+- **Consequences:** `legalIntents` is exactly the inverse of `apply`'s fault conditions for claims; bridge (all three variants) no longer faults during claims. Pinned by the ruleset battery (500 seeds × bridge rubber/chicago/duplicate).
+
+## ADR-0032 — `PhaseOutcome.autoStep` lets a mechanic expose internal automatic steps (P3.3)
+
+- **Status:** Accepted (2026-11-21, P3.3 ruleset battery)
+- **Context:** Cribbage's show phase scores multiple entries (hand, crib, starter) as one `show` intent, and per-ARCHITECTURE the entries' results are announced stepwise, with the deal possibly terminating between steps (one player reaching the game hole ends the deal before the remaining entries). Scoring all entries atomically inside `apply` skipped the mid-show termination check, producing ties in 500-seed play.
+- **Decision:** `Mechanic.step` + `PhaseOutcome.autoStep` allow a mechanic to return additional automatic steps that the engine runs like user-driven actions: `ScoreMechanic` scores one entry per `step`, and the engine re-enters the same legality/termination checks between steps (each step can end the deal, which stops further steps). No new intent kind is exposed to rulesets or UI.
+- **Consequences:** Mid-show termination now behaves per the plan; the cribbage "tied at" faults are gone (both cribbage rulesets pass 500 seeds). Future mechanics with internal sequences (e.g. staged scoring) reuse the same channel.
+
+## ADR-0033 — Engine retains the completed trick record for score-phase expressions (P3.3)
+
+- **Status:** Accepted (2026-11-21, P3.3 ruleset battery)
+- **Context:** `tricksWon(...)` and the §7.3 builtins read the trick substate's cumulative counts, but at score time the phase is no longer `.trick`, so the snapshot was empty and every declarer scored 0 tricks — bridge's rubber never reached two games and a random-legal sim could not finish within the action cap even at 60,000.
+- **Decision:** The engine retains the completed trick-play substate in `GameState.lastPlaySubstate: TrickSubstate?`, saved when the play phase hands off to scoring and in `finishDeal`, cleared on per-deal reset, and included in hash/equality. The environment's `trickSnapshot` falls back to `state.lastPlayTrick()` when the live phase is not `.trick`. The field is host-side only: the redactor never copies it into `Observation`.
+- **Consequences:** Score-phase expressions see the deal's cumulative trick counts as the play phase left them; bridge rubber completes (`deals=4`, `games@0=2`, `above@0=4200`, `below=0` on the probe seed). Golden-replay fixtures were regenerated because the field participates in the state hash. Hidden-information discipline is unaffected (never leaves the host).
+
+## ADR-0034 — Host-side dealt record backs `dealtHands()`; scalar Int keys (P3.3)
+
+- **Status:** Accepted (2026-11-21, P3.3 ruleset battery)
+- **Context:** ARCHITECTURE L1308 defines `dealtHands()` as host-side full state: the dealt hand = current hand ∪ played cards. Bridge scoring expressions consume it, but nothing retained the dealt cards once a zone shrank, so `dealtHands()` returned empty lists.
+- **Decision:** `DealMechanic.enter` records every dealt card in `GameState.dealt: [Int: [CardInstance]]` (keyed by `Seat.raw`, the scalar key type required for canonically sorted JSON encoding — §10.4), cleared on per-deal reset. The `dealtHands` environment closure derives each seat's hand as the recorded dealt cards that are still in the seat's hand zone (hand ∪ played = recorded set; membership filtered by the current zone). It returns a flat `[Value]` array of per-seat card lists — one entry per seat — because bridge scoring indexes hands directly. The field is host-side only and never copied into `Observation`.
+- **Consequences:** Bridge scoring sees full hands; an earlier `[Seat: …]` key type broke golden-replay hashing (unordered pair-array encoding) and was rejected in favor of scalar keys. Pinned by the bridge ruleset battery.
+
+## ADR-0035 — `otherwise: "any"` fallback when guards empty the candidate set (P3.3)
+
+- **Status:** Accepted (2026-11-21, P3.3 ruleset battery)
+- **Context:** ARCHITECTURE §6.1 requires a deterministic fallback when an auto-guard (`auto`/`legal` guards on candidates) filters the candidate set to empty and the ruleset declares one. Hearts' 500-seed battery stalled on seeds 495–499: a position existed where every candidate card was filtered out and no fallback was implemented, so the simulator capped out.
+- **Decision:** When guard filtering empties the candidate set and the guard declares `otherwise: "any"`, the engine falls back to the whole unfiltered candidate list (deterministic first element under the seeded RNG). Without the declaration the empty set remains a fault.
+- **Consequences:** Hearts completes under random play on all seeds; rulesets opt into the fallback explicitly, so silently illegal plays cannot creep in.
+
+## ADR-0036 — Auction param calls bind the value canonically as `param` (P3.3)
+
+- **Status:** Accepted (2026-11-21, P3.3 ruleset battery)
+- **Context:** ARCHITECTURE L816's euchre example declares a named param (`"param": "suit"`) but reads the value through the canonical binding `param` (`"allowed": "param != zone('discard')[0].suit"`), and L1310 lists `param` as a canonical contextual binding "bound by the mechanic evaluating the expression". `AuctionRoundsMechanic` bound only the declared name, so euchre's second-round naming faulted with `param not bound` on every seed that reached round 2 (~5% of games).
+- **Decision:** For every auction param call, `AuctionRoundsMechanic` binds the candidate/applied value both under the declared param name and canonically as `param`, in the menu evaluation (`legalParams`) and in `apply` (allowed re-check and effects).
+- **Consequences:** Expressions may use either the declared name or `param`; euchre standard and canadian-loner pass 500 seeds. Rulesets that declare a param literally named `param` are unaffected (both keys coincide).

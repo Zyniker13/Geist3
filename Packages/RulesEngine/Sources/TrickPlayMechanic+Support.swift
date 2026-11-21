@@ -265,7 +265,25 @@ extension TrickPlayMechanic {
     }
 
     static func pileOf(_ state: GameState, _ sub: TrickSubstate) -> [CardInstance] {
-        state.zones.cards(in: ZoneKey(scope: .shared, id: "trick\(sub.trickIndex)"))
+        state.zones.cards(in: ZoneKey(scope: .shared, id: "trick"))
+    }
+
+    /// The contextual `trick` record (§7.4 binding table): `number` is
+    /// 1-based, `leader`/`cards`/`ledSuit` reflect the trick under
+    /// construction, and `winner` is null until the trick is decided
+    /// (trick-end bindings pass the resolved winner).
+    static func trickRecord(
+        _ sub: TrickSubstate, cards: [CardInstance], ledSuit: String?, winner: Seat?, ctx: EvalContext
+    ) -> EvalValue {
+        .record(
+            name: "trick",
+            fields: [
+                "number": .int(Int64(sub.trickIndex + 1)),
+                "leader": .string(spelling(sub.leader, ctx)),
+                "cards": .list(cards.map(cardValue)),
+                "ledSuit": ledSuit.map { .string($0) } ?? .null,
+                "winner": winner.map { .string(spelling($0, ctx)) } ?? .null,
+            ])
     }
 
     /// Evaluates a guard predicate over the candidate card.
@@ -273,11 +291,16 @@ extension TrickPlayMechanic {
         _ params: Params, _ guardSpec: TrickPlayParams.PlayGuard, card: CardInstance,
         state: GameState, ctx: EvalContext
     ) throws(RuleViolation) -> Bool {
+        var contextual: [String: EvalValue] = ["c": cardValue(card)]
+        if case .trick(let sub) = state.phase.substate {
+            contextual["trick"] = trickRecord(
+                sub, cards: pileOf(state, sub), ledSuit: sub.ledSuit, winner: nil, ctx: ctx)
+        }
         let value = try ctx.evalCall(
             .init(
                 pointer: "/phases/trick-play/playAllowed", source: guardSpec.expr.source,
                 ruleId: guardSpec.ruleId,
-                contextual: ["card": cardValue(card)]),
+                contextual: contextual),
             state: state)
         guard case .bool(let allowed) = value else {
             throw RuleViolation.engineFault(
@@ -328,14 +351,18 @@ extension TrickPlayMechanic {
     }
 
     /// Resolves a seat spec: a literal seat, or an evaluated expression.
+    /// `activeSeats` scopes seat expressions (§5.6) for enter-time calls
+    /// that run before the substate is attached.
     static func seatOf(
-        _ spec: SeatOrExpr, pointer: String, state: GameState, ctx: EvalContext
+        _ spec: SeatOrExpr, pointer: String, state: GameState, ctx: EvalContext,
+        activeSeats: [Seat]? = nil
     ) throws(RuleViolation) -> Seat {
         switch spec {
         case .seat(let seat): return seat
         case .expr(let ref):
             let value = try ctx.evalCall(
-                .init(pointer: pointer, source: ref.source, ruleId: nil), state: state)
+                .init(pointer: pointer, source: ref.source, ruleId: nil,
+                      activeSeats: activeSeats), state: state)
             guard let seat = seatValue(of: value, ctx: ctx) else {
                 throw RuleViolation.engineFault(ruleId: nil, pointer: "\(pointer) not a seat")
             }

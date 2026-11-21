@@ -5,6 +5,7 @@
 
 import CardExpr
 import CardModel
+import Foundation
 @_spi(HostOnly) import RulesEngine
 
 @_spi(HostOnly)
@@ -19,18 +20,25 @@ extension EngineBuilder {
         var enginePhases: [PhaseConfig] = []
         var dealPhaseID: String? = nil
         for phase in phases {
-            guard phase.before == nil, phase.after == nil, phase.next == nil else {
+            // Phase-level flow control (`before`/`next`) is not simulated
+            // yet; a phase-level `after` is a post-effect list and runs
+            // when the phase completes (§8.1).
+            guard phase.before == nil, phase.next == nil else {
                 throw SimulationError.unsupported("phase-level flow control on '\(phase.id)'")
             }
+            let post: (@Sendable (inout GameState, EvalContext) throws -> [GameEvent])? =
+                (phase.after?.isEmpty ?? true) ? nil : try postEffects(phase.after ?? [], phaseId: phase.id)
             let gate = try whenGate(phase.when, phaseId: phase.id, runtime: runtime)
             let config: PhaseConfig
             switch (phase.mechanic, phase.params) {
             case ("deal", .deal(let params)):
-                guard let sourceId = params.source else {
+                // The deal source defaults to the deck zone, which every
+                // shipped ruleset names `deck`.
+                guard let sourceId = params.source ?? "deck" as String? else {
                     throw SimulationError.config("deal phase '\(phase.id)' has no source")
                 }
-                guard params.thenEffects == nil else {
-                    throw SimulationError.unsupported("deal.then effects")
+                let thenPost = try params.thenEffects.map {
+                    try postEffects($0, phaseId: phase.id)
                 }
                 if dealPhaseID != nil {
                     throw SimulationError.unsupported("more than one deal phase")
@@ -43,49 +51,60 @@ extension EngineBuilder {
                     phase.id, gate, DealMechanic.self,
                     RulesEngine.DealParams(
                         source: sourceId, packets: packets, shuffleFirst: true,
-                        deckFaces: deckFaces))
+                        deckFaces: deckFaces),
+                    post: thenPost ?? post)
             case ("trick-play", .trickPlay(let params)):
                 config = mechanicConfig(
                     phase.id, gate, TrickPlayMechanic.self,
-                    try trickPlayParams(params, phaseId: phase.id, seatCount: seatCount))
+                    try trickPlayParams(params, phaseId: phase.id, seatCount: seatCount),
+                    post: post)
             case ("auction.ladder", .auctionLadder(let params)):
                 config = mechanicConfig(
                     phase.id, gate, AuctionLadderMechanic.self,
-                    try auctionLadderParams(params, phaseId: phase.id, orders: orders, vars: vars))
+                    try auctionLadderParams(params, phaseId: phase.id, orders: orders, vars: vars),
+                    post: post)
             case ("auction.rounds", .auctionRounds(let params)):
                 config = mechanicConfig(
                     phase.id, gate, AuctionRoundsMechanic.self,
-                    try auctionRoundsParams(params, phaseId: phase.id, deckFaces: deckFaces))
+                    try auctionRoundsParams(params, phaseId: phase.id, deckFaces: deckFaces),
+                    post: post)
             case ("reveal.starter", .revealStarter(let params)):
                 config = mechanicConfig(
                     phase.id, gate, RevealStarterMechanic.self,
-                    try revealStarterParams(params, phaseId: phase.id, sharedZones: sharedZoneIds))
+                    try revealStarterParams(params, phaseId: phase.id, sharedZones: sharedZoneIds),
+                    post: post)
             case ("exchange.pass", .exchangePass(let params)):
                 config = mechanicConfig(
                     phase.id, gate, ExchangePassMechanic.self,
                     try exchangePassParams(
-                        params, phaseId: phase.id, seatCount: seatCount, seatZones: seatZoneIds))
+                        params, phaseId: phase.id, seatCount: seatCount, seatZones: seatZoneIds),
+                    post: post)
             case ("exchange.kitty", .exchangeKitty(let params)):
                 config = mechanicConfig(
                     phase.id, gate, ExchangeKittyMechanic.self,
-                    try exchangeKittyParams(params, phaseId: phase.id))
+                    try exchangeKittyParams(params, phaseId: phase.id),
+                    post: post)
             case ("exchange.discardTo", .exchangeDiscardTo(let params)):
                 config = mechanicConfig(
                     phase.id, gate, ExchangeDiscardToMechanic.self,
                     try exchangeDiscardToParams(
-                        params, phaseId: phase.id, seatZones: seatZoneIds, sharedZones: sharedZoneIds))
+                        params, phaseId: phase.id, seatZones: seatZoneIds, sharedZones: sharedZoneIds),
+                    post: post)
             case ("count-play", .countPlay(let params)):
                 config = mechanicConfig(
                     phase.id, gate, CountPlayMechanic.self,
-                    try countPlayParams(params, phaseId: phase.id, seatZones: seatZoneIds))
+                    try countPlayParams(params, phaseId: phase.id, seatZones: seatZoneIds),
+                    post: post)
             case ("show", .show(let params)):
                 config = mechanicConfig(
                     phase.id, gate, ShowMechanic.self,
-                    try showParams(params, phaseId: phase.id))
+                    try showParams(params, phaseId: phase.id, sharedZones: sharedZoneIds),
+                    post: post)
             case ("score", .score(let params)):
                 config = mechanicConfig(
                     phase.id, gate, ScoreMechanic.self,
-                    try scoreParams(params, phaseId: phase.id))
+                    try scoreParams(params, phaseId: phase.id),
+                    post: post)
             case (let mechanic, _):
                 throw SimulationError.unsupported("mechanic '\(mechanic)'")
             }
@@ -94,13 +113,37 @@ extension EngineBuilder {
         return (enginePhases, dealPhaseID)
     }
 
-    /// Builds a `PhaseConfig` for a mechanic whose params are already
-    /// mapped — the scaffolding shared by every case in `phaseConfigs`.
+    /// Compiles a phase-level post-effect list (§8.1 `after` / deal
+    /// `then`) into the closure `PhaseConfig.post` runs at phase end.
+    /// Effects run through the `EffectsRunner` the engine puts on every
+    /// `EvalContext` (engine-managed expression evaluation, §7.5).
+    static func postEffects(
+        _ effects: [Effect], phaseId: String
+    ) throws(SimulationError) -> (@Sendable (inout GameState, EvalContext) throws -> [GameEvent]) {
+        let mapped = try mapEffects(effects)
+        guard !mapped.isEmpty else {
+            throw SimulationError.config("phase '\(phaseId)' has an empty post-effect list")
+        }
+        return { state, ctx in
+            guard let runner = ctx.effects else {
+                throw RuleViolation.engineFault(
+                    ruleId: nil, pointer: "/phases/\(phaseId)/after: no effect runner")
+            }
+            var events: [GameEvent] = []
+            try runner.run(
+                mapped, in: &state, events: &events, pointer: "/phases/\(phaseId)/after")
+            return events
+        }
+    }
+
     private static func mechanicConfig<M: Mechanic>(
         _ phaseId: String, _ gate: (@Sendable (GameState) throws -> Bool)?,
-        _ mechanic: M.Type, _ params: M.Params
+        _ mechanic: M.Type, _ params: M.Params,
+        post: (@Sendable (inout GameState, EvalContext) throws -> [GameEvent])? = nil
     ) -> PhaseConfig {
-        PhaseConfig(id: phaseId, mechanic: AnyMechanic(mechanic, params: params), gate: gate)
+        PhaseConfig(
+            id: phaseId, mechanic: AnyMechanic(mechanic, params: params), gate: gate,
+            post: post)
     }
 
     // MARK: - when gates
@@ -360,7 +403,9 @@ extension EngineBuilder {
 
     // MARK: - show
 
-    static func showParams(_ params: ShowParams, phaseId: String) throws -> RulesEngine.ShowParams {
+    static func showParams(
+        _ params: ShowParams, phaseId: String, sharedZones: Set<String>
+    ) throws -> RulesEngine.ShowParams {
         let order = params.order.map { entry in
             RulesEngine.ShowEntryParams(
                 zone: entry.zone,
@@ -376,8 +421,8 @@ extension EngineBuilder {
             params.award?.source ?? "match.score[awardee]", param: "\(phaseId).award")
         return RulesEngine.ShowParams(
             order: order,
-            with: params.with.map {
-                ExprRef(pointer: "/phases/\(phaseId)/with", source: $0.source)
+            with: try params.with.map {
+                try zoneName($0, param: "\(phaseId).with", declared: sharedZones, kind: "shared")
             },
             points: params.points.map {
                 ExprRef(pointer: "/phases/\(phaseId)/points", source: $0.source)

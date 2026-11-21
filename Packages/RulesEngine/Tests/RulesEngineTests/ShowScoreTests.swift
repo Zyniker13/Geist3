@@ -9,13 +9,13 @@ import Testing
 struct ShowScoreTests {
     static func showEngine(
         hands: [[(String, String)]], crib: [(String, String)], starter: [(String, String)],
-        entries: [ShowEntryParams], with: ExprRef?? = nil,
+        entries: [ShowEntryParams], with: String?? = nil,
         points: ExprRef? = ExprRef(pointer: "/phases/show/points", source: "handPoints"),
         manual: ExprRef? = nil, muggins: ExprRef? = nil, pointsRule: String? = "CRB-5.2"
     ) -> Engine {
         let params = ShowParams(
             order: entries,
-            with: with ?? ExprRef(pointer: "/phases/show/with", source: "zoneStarter"),
+            with: with ?? "starter",
             points: points, pointsRule: pointsRule, manual: manual, muggins: muggins,
             awardName: "match.score", awardIndex: "awardee")
         return MechanicsFixtures.makeEngine(
@@ -88,15 +88,15 @@ struct ShowScoreTests {
             entries: Self.cribbageEntries())
         let started = try engine.start(seed: 25)
         let state = started.state
-        // The show is automatic: with the starter counted in, the pone's
-        // hand is 8, the dealer's 16, and the crib 21.
+        // The show is automatic: `cards` binds the pile only (ADR-0029), so
+        // the pone's hand is 7, the dealer's 15, and the crib 20.
         #expect(state.phase.phaseID == "done")
-        #expect(MechanicsFixtures.scoreOf(state, 0) == .int(37))
-        #expect(MechanicsFixtures.scoreOf(state, 1) == .int(8))
+        #expect(MechanicsFixtures.scoreOf(state, 0) == .int(35))
+        #expect(MechanicsFixtures.scoreOf(state, 1) == .int(7))
         #expect(
             started.events.contains(
                 .revealed(zone: "crib", cards: state.zones.cards(in: ZoneKey(scope: .shared, id: "crib")))))
-        #expect(started.events.contains(.scored(seat: Seat(1), points: 8, reason: "show", ruleId: "CRB-5.2")))
+        #expect(started.events.contains(.scored(seat: Seat(1), points: 7, reason: "show", ruleId: "CRB-5.2")))
         // Every shown card is public knowledge.
         #expect(state.knowledge.isPublic(CardID(0)))
         #expect(state.knowledge.isPublic(CardID(50)))
@@ -112,7 +112,7 @@ struct ShowScoreTests {
                     zone: "hand", seat: ExprRef(pointer: "/phases/show/order0/seat", source: "pone"))
             ])
         let shown = try fallback.start(seed: 26)
-        #expect(MechanicsFixtures.scoreOf(shown.state, 1) == .int(8))
+        #expect(MechanicsFixtures.scoreOf(shown.state, 1) == .int(7))
         #expect(MechanicsFixtures.scoreOf(shown.state, 0) == .int(0))
         // An entry with neither seat nor award has no awardee (the pile
         // must score something for the fault to surface).
@@ -125,11 +125,11 @@ struct ShowScoreTests {
             hands: [[], []], crib: [], starter: [], entries: Self.cribbageEntries(),
             points: ExprRef(pointer: "/p/x", source: "skipAlways"))
         #expect(throws: RuleViolation.self) { try boolPoints.start(seed: 1) }
-        // A `with` that is not a zone name faults.
-        let intWith = Self.showEngine(
+        // An empty `with` zone name faults.
+        let emptyWith = Self.showEngine(
             hands: [[("S", "5")], []], crib: [], starter: [], entries: Self.cribbageEntries(),
-            with: .some(ExprRef(pointer: "/p/x", source: "2")))
-        #expect(throws: RuleViolation.self) { try intWith.start(seed: 1) }
+            with: .some(""))
+        #expect(throws: RuleViolation.self) { try emptyWith.start(seed: 1) }
     }
 
     @Test func showWithoutStarterZoneScoresPilesAlone() throws {

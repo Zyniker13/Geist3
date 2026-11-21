@@ -133,7 +133,11 @@ struct ExpressionChecker {
         case .countPlay(let c):
             checkCountParams(c, pointer: p)
         case .show(let s):
-            checkShowParams(s, pointer: p)
+            for (j, entry) in s.order.enumerated() {
+                expr(entry.seat, "\(pointer)/order/\(j)/seat", .seat)
+                expr(entry.award, "\(pointer)/order/\(j)/award", nil)
+            }
+            expr(s.points, "\(pointer)/points", .int)
         default: break
         }
         checkParamEffects(phase, pointer: pointer)
@@ -201,12 +205,6 @@ struct ExpressionChecker {
     }
 
     private mutating func checkShowParams(_ s: ShowParams, pointer: String) {
-        for (j, entry) in s.order.enumerated() {
-            expr(entry.seat, "\(pointer)/order/\(j)/seat", .seat)
-            expr(entry.award, "\(pointer)/order/\(j)/award", nil)
-        }
-        expr(s.with, "\(pointer)/with", nil)
-        expr(s.points, "\(pointer)/points", .int)
         bool(s.manual, "\(pointer)/manual")
         bool(s.muggins, "\(pointer)/muggins")
         expr(s.award, "\(pointer)/award", .int)

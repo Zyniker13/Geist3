@@ -636,3 +636,26 @@ schema round-trip, validation, and simulation suites.
   the euchre pass-out and kitty-visibility defaults are recorded in the
   documents' "Defaults chosen" sections (both were already pinned by the
   ruleset JSON and its options).
+
+## P3.3 — Rulesets and variants — IN PROGRESS (2026-11-21)
+
+All eight JSON rulesets are written and decode/validate; the 500-seed simulation battery (P3.3 gate check) surfaced engine gaps. Progress:
+
+- Battery round 1 (release build, `Tools/rules-cli sim --seeds 500` per ruleset): 2/8 clean — euchre, euchre.canadian-loner. Failures: hearts (stall seed 495), bridge (trick phase), cribbage (show points), spades, pinochle, whist (per-ruleset faults).
+- Fixed during round 1: Canadian Loner's `firstLeader` picked sitting-out seats → `activeSeats` override in eval calls (ADR not needed; §7.4 active-seats rule); euchre seed 2 → `phaseOptions` now cleared on per-deal resets.
+- Hearts root cause (seed 495 stall dump): `trick.number` evaluated against a 0-based env snapshot (`trickIndex`), so trick 1's lead demanded the already-played 2C → zero legal moves → simulator.stall; trick 0 led freely. Root fix (ADR-0030): `trick.number` is 1-based everywhere, and `TrickPlayMechanic` now binds the full §7.4 contextual record (`number`, `leader`, `cards`, `ledSuit`, `winner`) at lead/follow legality, `nextLeader`, and trick-end effects (cards/ledSuit captured before archiving).
+- RulesEngine tests: 132/132 pass after the fix. SIM_POST_DEBUG probes removed.
+- Battery round 2 (after the ADR-0030 fix, fresh release build): hearts, euchre ×2, cribbage ×2 clean; bridge rubber failed at claims (`notYourTurn` on an already-voted seat) and chicago/duplicate faulted in scoring (`index must be int, got team` — `vulnerable` indexed a list with a `team` value; the type checker only unifies literals across `.string`/`.team`).
+- Fixed: ADR-0031 — claim proposal/accept legal branches mirror `applyClaim` gates exactly and exclude seats already in `claimVotes`. Fixed: ADR-0032 — `PhaseOutcome.autoStep` + `Mechanic.step` let a mechanic run internal automatic steps; cribbage's show scores entries stepwise so mid-show termination is honored between steps (the "tied at" faults are gone).
+- Fixed: ADR-0033 — the engine now retains the completed trick substate (`GameState.lastPlaySubstate`, host-side only, in hash/equality) so score-phase expressions read cumulative trick counts; bridge rubber completes (`deals=4`, `games@0=2`, `above@0=4200`, `below=0` on the probe seed; before the fix no random-legal rubber finished even at 60,000 actions).
+- Fixed: ADR-0034 — `GameState.dealt: [Int: [CardInstance]]` (scalar keys for canonical JSON encoding, §10.4) records dealt cards at deal time; `dealtHands()` (host-side only, never in `Observation`) returns the flat per-seat array bridge scoring consumes. Chicago/duplicate `vulnerable` indexing fixed ruleset-side with a seat-parity literal ternary (`t == 'NS' ? 0 : 1`) because `.string`/`.team` unification is literal-only.
+- Fixed: ADR-0036 — auction param calls now bind the value canonically as `param` (in addition to the declared name) in both `legalParams` and `apply`; euchre's round-2 naming (`allowed: "param != zone('discard')[0].suit"`) faulted `param not bound` on ~5% of games before.
+- `GameState.dealt` and `lastPlaySubstate` are redactor-excluded by construction (field-by-field copy) — hidden-information discipline unaffected.
+- ADR-0035 recorded for the `otherwise: "any"` fallback (implemented earlier in the wave; hearts 500-seed stall is gone).
+
+## P3.3 — Rulesets and variants — gate evidence (2026-11-21)
+
+- `for f in Resources/Rulesets/*.json; do rules-cli validate $f; done` → 8/8 valid.
+- `for f in Resources/Rulesets/*.json; do rules-cli sim $f --seeds 500; done` (release build) → **8/8 clean, 0 faults**: contract-bridge rubber/chicago/duplicate, cribbage six-card/five-card, euchre standard/canadian-loner, hearts. (Earlier scans of the same battery printed a few "unexercised declared rules" notes — rules that random-legal play cannot reach, e.g. claims in seeds where no claim was proposed; they are informational, not faults. Revisit with targeted conformance tests in P3.4.)
+- `swift test` (RulesEngine): **132/132 pass** after regenerating the 20 golden-replay fixtures (4th regeneration; ADR-0033's `lastPlaySubstate` participates in the state hash). RulesetKit builds clean against the updated RulesEngine.
+

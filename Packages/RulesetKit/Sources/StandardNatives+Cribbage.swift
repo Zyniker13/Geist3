@@ -13,8 +13,8 @@ extension StandardNatives {
         let hand = try cardListArg(args[0], "hand", call)
         let starter = try cardArg(args[1], call)
         let isCrib = try boolArg(args[2], "isCrib", call)
-        guard hand.count == 4 else {
-            try fault(call, "hand must hold exactly 4 cards, got \(hand.count)")
+        guard (2...5).contains(hand.count) else {
+            try fault(call, "hand must hold 2 to 5 cards, got \(hand.count)")
         }
         var seen: Set<String> = []
         for card in hand {
@@ -72,14 +72,18 @@ extension StandardNatives {
 
         // Flushes: four hand cards of one suit score 4 (plus 1 with a
         // matching starter); in the crib only a five-card flush scores.
-        let suits = Set(hand.map { $0.cardSuit ?? "" })
-        if suits.count == 1 {
-            let handSuit = hand[0].cardSuit ?? ""
-            if isCrib {
-                if starter.cardSuit == handSuit { score += 5 }
-            } else {
-                score += 4
-                if starter.cardSuit == handSuit { score += 1 }
+        // Short piles (e.g. the two-card crib of five-card cribbage,
+        // 2–3 cards here) cannot flush.
+        if hand.count >= 4 {
+            let suits = Set(hand.map { $0.cardSuit ?? "" })
+            if suits.count == 1 {
+                let handSuit = hand[0].cardSuit ?? ""
+                if isCrib {
+                    if starter.cardSuit == handSuit { score += 5 }
+                } else {
+                    score += 4
+                    if starter.cardSuit == handSuit { score += 1 }
+                }
             }
         }
 

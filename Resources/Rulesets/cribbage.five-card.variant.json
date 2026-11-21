@@ -1,0 +1,34 @@
+{
+  "format": "parlor.overlay/1",
+  "id": "cribbage.five-card",
+  "kind": "variant",
+  "extends": "cribbage.six-card@^1.0",
+  "version": "1.0.0",
+  "name": { "key": "game.cribbage.fiveCard.name", "default": "Cribbage (five-card)" },
+  "sources": [ { "id": "pagat-crib5", "title": "Pagat: Cribbage — five card cribbage", "url": "https://www.pagat.com/adders/crib5.html", "role": "primary" } ],
+  "patch": [
+    {
+      "op": "replace",
+      "path": "/phases/byId/deal/params/packets",
+      "value": [ { "to": "hand", "each": 5 } ],
+      "note": "Five-card cribbage deals five cards to each player instead of six."
+    },
+    {
+      "op": "replace",
+      "path": "/phases/byId/layAway/params/count",
+      "value": "1",
+      "note": "Each player lays away one card, so the crib stays two cards."
+    },
+    {
+      "op": "replace",
+      "path": "/options/byId/target/default",
+      "value": "61",
+      "note": "The shorter five-card game is conventionally played to 61."
+    },
+    {
+      "op": "append",
+      "path": "/rules",
+      "value": { "id": "CRB-V.1", "text": { "key": "rule.crb.v.1", "default": "Each player receives five cards and lays away one, so the crib is two cards; the game is played to 61." } }
+    }
+  ]
+}

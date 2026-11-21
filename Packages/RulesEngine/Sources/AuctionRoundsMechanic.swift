@@ -226,6 +226,10 @@ public enum AuctionRoundsMechanic: Mechanic {
         var bindings: [String: EvalValue] = ["seat": .string(spelling(seat, ctx))]
         if let paramName = call.param, let param {
             bindings[paramName] = .string(param)
+            // §7.3: the applied param value is also bound canonically as
+            // `param`, so rule expressions can read it without naming the
+            // declared site (`allowed: "param != ..."` in the euchre plan).
+            bindings["param"] = .string(param)
         }
         if let allowed = call.allowed {
             let value = try ctx.evalCall(
@@ -399,6 +403,7 @@ public enum AuctionRoundsMechanic: Mechanic {
         for candidate in call.paramValues {
             let bindings = [
                 "seat": .string(spelling(seat, ctx)),
+                "param": EvalValue.string(candidate),
                 param: EvalValue.string(candidate),
             ]
             let value = try? ctx.evalCall(

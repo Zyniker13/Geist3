@@ -1,11 +1,14 @@
 // The show mechanic (§5.6): the counted reveal at the end of a deal.
-// Piles are scored in `order`; each pile is revealed (its cards become
-// public knowledge), its points are evaluated from the `points` expression
-// with the pile's cards (plus the `with` zone's cards) and the entry's
-// `isCrib` flag, and the points are added to the `award` lvalue with the
-// entry's awardee bound. Manual counting and muggins are declared by the
-// schema but not supported in Engine 1.0; a ruleset that enables them
-// faults with a clear pointer rather than scoring silently.
+// Piles are scored in `order`. The `with` zone, when set, is revealed
+// first and stays public. Each pile is then revealed (its cards become
+// public knowledge) and its points are evaluated from the `points`
+// expression with the pile's own cards (bound as `cards`) and the
+// entry's `isCrib` flag; the expression reaches the `with` zone's cards
+// itself via `zone('<id>')[…]` (ADR-0029). The points are added to the
+// `award` lvalue with the entry's awardee bound. Manual counting and
+// muggins are declared by the schema but not supported in Engine 1.0;
+// a ruleset that enables them faults with a clear pointer rather than
+// scoring silently.
 
 import CardModel
 
@@ -33,8 +36,9 @@ public struct ShowEntryParams: Codable, Hashable, Sendable {
 public struct ShowParams: Codable, Hashable, Sendable {
     /// Piles to show, in counting order.
     public let order: [ShowEntryParams]
-    /// Expression yielding the name of a zone counted with every pile.
-    public let with: ExprRef?
+    /// A shared zone counted with every pile (§5.6), e.g. the cribbage
+    /// starter. Builders validate the id against the declared zones.
+    public let with: String?
     /// Points expression (bindings `cards`, `isCrib`).
     public let points: ExprRef?
     /// Rule id attached to the points expression (provenance only).
@@ -49,7 +53,7 @@ public struct ShowParams: Codable, Hashable, Sendable {
     public let awardIndex: String
 
     public init(
-        order: [ShowEntryParams], with: ExprRef? = nil, points: ExprRef? = nil,
+        order: [ShowEntryParams], with: String? = nil, points: ExprRef? = nil,
         pointsRule: String? = nil, manual: ExprRef? = nil, muggins: ExprRef? = nil,
         awardName: String = "match.score", awardIndex: String = "awardee"
     ) {
@@ -81,37 +85,22 @@ public struct ShowMechanic: Mechanic {
             throw RuleViolation.engineFault(
                 ruleId: id, pointer: "show.muggins is not supported in Engine 1.0")
         }
-        let withZone = try withZoneName(params, state: state, ctx: ctx)
+        let withZone = try withZoneName(params)
         var events: [GameEvent] = []
-        for (position, entry) in params.order.enumerated() {
-            let pileKey = try pileKey(entry, state: state, ctx: ctx)
-            let pile = state.zones.cards(in: pileKey)
-            for card in pile {
+        if let withZone {
+            let shared = state.zones.cards(in: withZone)
+            for card in shared {
                 state.knowledge.makePublic(card.id)
             }
-            events.append(.revealed(zone: entry.zone, cards: pile))
-            guard let points = params.points else { continue }
-            let cards = pile + (withZone.map { state.zones.cards(in: $0) } ?? [])
-            let value = try ctx.evalCall(
-                .init(
-                    pointer: "show.points[\(position)]", source: points.source, ruleId: id,
-                    contextual: [
-                        "cards": .list(cards.map { Self.cardValue($0) }),
-                        "isCrib": .bool(entry.isCrib ?? false),
-                    ]),
-                state: state)
-            guard case .int(let raw) = value, let points = Int(exactly: raw) else {
-                throw RuleViolation.engineFault(
-                    ruleId: id, pointer: "show.points[\(position)] not an int")
+            if !shared.isEmpty {
+                events.append(.revealed(zone: withZone.id, cards: shared))
             }
-            guard points > 0 else { continue }
-            let awardee = try awardeeSeat(entry, position: position, state: state, ctx: ctx)
-            try award(
-                params, awardee: awardee, points: points, state: &state, ctx: ctx,
-                events: &events, position: position)
-            events.append(
-                .scored(seat: awardee, points: points, reason: "show", ruleId: params.pointsRule))
         }
+        // ADR-0032: the show counts one order entry per engine loop pass so
+        // the continuous end check (§5.3) fires between entries — cribbage
+        // ends mid-show the moment a player reaches the target. `step`
+        // reveals and scores entry `position` and advances the sub-state.
+        state.setShowSubstate(.init(position: 0))
         return events
     }
 
@@ -131,13 +120,60 @@ public struct ShowMechanic: Mechanic {
     public static func isComplete(
         _ params: Params, state: GameState, ctx: EvalContext
     ) -> PhaseOutcome {
-        .complete
+        // ADR-0032: entries count one at a time; while any remain the
+        // mechanic is not complete — the engine runs `step` between
+        // continuous end checks so a win mid-show ends the deal at once.
+        guard let sub = state.showSubstate() else { return .autoStep }
+        return sub.position < params.order.count ? .autoStep : .complete
     }
 
     public static func pendingSeats(
         _ params: Params, state: GameState, ctx: EvalContext
     ) -> SeatSet {
         SeatSet()
+    }
+
+    /// ADR-0032: reveal and score ONE `show.order` entry per call, then
+    /// advance the sub-state. The engine runs the continuous end check
+    /// between steps, so the show can end mid-sequence (§5.3).
+    public static func step(
+        _ params: Params, state: inout GameState, ctx: EvalContext
+    ) throws(RuleViolation) -> [GameEvent] {
+        let position = state.showSubstate()?.position ?? 0
+        guard position < params.order.count else { return [] }
+        var events: [GameEvent] = []
+        let entry = params.order[position]
+        let pileKey = try pileKey(entry, state: state, ctx: ctx)
+        let pile = state.zones.cards(in: pileKey)
+        for card in pile {
+            state.knowledge.makePublic(card.id)
+        }
+        events.append(.revealed(zone: entry.zone, cards: pile))
+        if let points = params.points {
+            let cards = pile
+            let value = try ctx.evalCall(
+                .init(
+                    pointer: "show.points[\(position)]", source: points.source, ruleId: id,
+                    contextual: [
+                        "cards": .list(cards.map { Self.cardValue($0) }),
+                        "isCrib": .bool(entry.isCrib ?? false),
+                    ]),
+                state: state)
+            guard case .int(let raw) = value, let points = Int(exactly: raw) else {
+                throw RuleViolation.engineFault(
+                    ruleId: id, pointer: "show.points[\(position)] not an int")
+            }
+            if points > 0 {
+                let awardee = try awardeeSeat(entry, position: position, state: state, ctx: ctx)
+                try award(
+                    params, awardee: awardee, points: points, state: &state, ctx: ctx,
+                    events: &events, position: position)
+                events.append(
+                    .scored(seat: awardee, points: points, reason: "show", ruleId: params.pointsRule))
+            }
+        }
+        state.setShowSubstate(.init(position: position + 1))
+        return events
     }
 
     // MARK: - Helpers
@@ -185,14 +221,12 @@ public struct ShowMechanic: Mechanic {
         return Seat(raw - 1)
     }
 
-    /// The extra zone counted with every pile, from the `with` expression.
-    static func withZoneName(
-        _ params: Params, state: GameState, ctx: EvalContext
-    ) throws(RuleViolation) -> ZoneKey? {
-        guard let with = params.with else { return nil }
-        let value = try ctx.evalCall(
-            .init(pointer: "show.with", source: with.source, ruleId: id), state: state)
-        guard case .string(let name) = value, !name.isEmpty else {
+    /// The extra zone counted with every pile: a shared zone id (§5.6).
+    /// Builders validate the id against the declared zones; an empty name
+    /// is a configuration fault.
+    static func withZoneName(_ params: Params) throws(RuleViolation) -> ZoneKey? {
+        guard let name = params.with else { return nil }
+        guard !name.isEmpty else {
             throw RuleViolation.engineFault(ruleId: id, pointer: "show.with not a zone name")
         }
         return ZoneKey(scope: .shared, owner: 0, id: name)

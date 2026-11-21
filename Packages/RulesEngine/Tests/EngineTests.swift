@@ -139,7 +139,7 @@ struct EngineTests {
         let legal1 = engine.legalIntents(for: Seat(1), in: state)
         state = try engine.apply(Action(seat: Seat(1), intent: legal1[0], expectedVersion: state.version), to: state)
             .state
-        let ledSuit = state.zones.cards(in: ZoneKey(scope: .shared, id: "trick0")).first!.face.suit!.code
+        let ledSuit = state.zones.cards(in: ZoneKey(scope: .shared, id: "trick")).first!.face.suit!.code
         // Seat 0 must follow if it holds that suit.
         let hand0 = state.zones.cards(in: ZoneKey(scope: .seat, owner: 0, id: "hand"))
         let followers = hand0.filter { $0.face.suit?.code == ledSuit }

@@ -28,11 +28,14 @@ public enum EngineBuilder {
         // `when` gates reach the runtime through closures built here.
         let runtime = try ExpressionRuntime(doc: document, seatCount: seatCount)
 
-        // Zone keys: seat-scoped zones fan out per seat; team-scoped zones
-        // need a team layout the P2.8 simulator does not model.
+        // Zone keys: seat-scoped zones fan out per seat, team-scoped zones
+        // per team, shared zones once. The team layout is mapped first so
+        // team-scoped zones can fan out to the declared team count.
         var seatZoneIds: Set<String> = []
         var sharedZoneIds: Set<String> = []
         var capacities: [ZoneKey: Int?] = [:]
+        let teams = try EngineBuilder.mapTeams(players, seatCount: seatCount)
+        let teamCount = Set(teams.teamOfSeat).count
         for decl in document.zones ?? [] {
             switch decl.scope {
             case "seat":
@@ -45,8 +48,13 @@ public enum EngineBuilder {
                 sharedZoneIds.insert(decl.id)
                 let key = ZoneKey(scope: .shared, id: decl.id)
                 capacities[key] = decl.capacity
+            case "team":
+                for team in 0..<max(1, teamCount) {
+                    let key = ZoneKey(scope: .team, owner: team, id: decl.id)
+                    capacities[key] = decl.capacity
+                }
             default:
-                throw SimulationError.unsupported("team-scoped zone '\(decl.id)'")
+                throw SimulationError.unsupported("zone scope '\(decl.scope)' for '\(decl.id)'")
             }
         }
 
@@ -58,9 +66,9 @@ public enum EngineBuilder {
 
         // Variables, teams, and rank orders are substrate data the phase
         // mappers read (auction ladders name an order; result paths name a
-        // var), so they map before the phases.
+        // var), so they map before the phases. Teams are already mapped
+        // above for team-scoped zones.
         let vars = try EngineBuilder.mapVars(document.vars)
-        let teams = try EngineBuilder.mapTeams(players, seatCount: seatCount)
         var orders: [String: [String]] = [:]
         for field in document.orders ?? [] {
             guard let ranks = field.value.arrayValue?.compactMap(\.stringValue) else {
@@ -95,6 +103,16 @@ public enum EngineBuilder {
             // deal-order CardIDs); setup only declares zones here.
         }
 
+        // Per-deal reset (§5.7): finishDeal wipes the zone store between
+        // deals, so the engine calls `rebuild` to re-declare every zone.
+        // The deck is re-stacked by DealMechanic; first-dealer picking is
+        // a setup-only step (the deal phase's rotation moves the dealer).
+        let rebuild: @Sendable (inout GameState) throws -> Void = { state in
+            for (key, capacity) in zoneCaps {
+                state.zones.ensureDeclared(key, capacity: capacity ?? nil)
+            }
+        }
+
         // Host-mediated expression evaluation (§7.5): mechanics reach the
         // runtime through `ctx.eval`.
         let eval: @Sendable (EvalCall, GameState) throws(EvalFailure) -> EvalValue = { call, state in
@@ -104,7 +122,8 @@ public enum EngineBuilder {
             phases: enginePhases, seatCount: seatCount, setup: setup,
             expressionRuntime: eval, vars: vars, seatNames: players?.seatNames ?? [],
             teamNames: teams.names, teamOfSeat: teams.teamOfSeat,
-            dealPhaseID: dealPhaseID, end: endSpec, dealerRotation: rotation)
+            dealPhaseID: dealPhaseID, end: endSpec, rebuild: rebuild,
+            dealerRotation: rotation)
     }
 
     // MARK: - deal

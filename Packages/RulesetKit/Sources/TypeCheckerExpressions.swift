@@ -1,4 +1,5 @@
 import CardExpr
+import Foundation
 
 /// Collection macros and operator typing (TypeChecker extension).
 extension TypeChecker {

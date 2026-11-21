@@ -1,0 +1,534 @@
+{
+  "format": "parlor.ruleset/1",
+  "id": "euchre.standard",
+  "game": "euchre",
+  "kind": "base",
+  "version": "1.0.0",
+  "engine": ">=1.0",
+  "name": {
+    "key": "game.euchre.name",
+    "default": "Euchre"
+  },
+  "summary": {
+    "key": "game.euchre.summary",
+    "default": "Partners name trump from a turned card and try to take three of five tricks."
+  },
+  "classification": {
+    "pagat": "outplay/trick-taking/plain/euchre",
+    "objective": "capture-tricks",
+    "tags": [
+      "trick-taking",
+      "partnership",
+      "trump",
+      "bowers"
+    ]
+  },
+  "sources": [
+    {
+      "id": "pagat",
+      "title": "Pagat: Euchre",
+      "url": "https://www.pagat.com/euchre/euchre.html",
+      "role": "primary"
+    },
+    {
+      "id": "wef",
+      "title": "World Euchre Federation: Official Rules of Euchre",
+      "url": "https://www.worldeuchrefederation.com/official-rules-of-euchre",
+      "role": "official"
+    }
+  ],
+  "players": {
+    "counts": [
+      4
+    ],
+    "default": 4,
+    "teams": "partnershipOpposite"
+  },
+  "deck": {
+    "base": "euchre-24"
+  },
+  "orders": {
+    "natural": [
+      "9",
+      "10",
+      "J",
+      "Q",
+      "K",
+      "A"
+    ]
+  },
+  "options": [
+    {
+      "id": "stickTheDealer",
+      "type": "bool",
+      "default": false,
+      "label": {
+        "key": "opt.euchre.stickTheDealer",
+        "default": "Stick the dealer"
+      },
+      "rules": [
+        "EUC-2.4"
+      ]
+    },
+    {
+      "id": "goingAlone",
+      "type": "bool",
+      "default": true,
+      "label": {
+        "key": "opt.euchre.goingAlone",
+        "default": "Allow going alone"
+      },
+      "rules": [
+        "EUC-2.5"
+      ]
+    },
+    {
+      "id": "alonePoints",
+      "type": "int",
+      "min": 2,
+      "max": 6,
+      "default": 4,
+      "label": {
+        "key": "opt.euchre.alonePoints",
+        "default": "Points for a lone march"
+      },
+      "rules": [
+        "EUC-4.3"
+      ]
+    },
+    {
+      "id": "target",
+      "type": "int",
+      "min": 5,
+      "max": 15,
+      "default": 10,
+      "label": {
+        "key": "opt.euchre.target",
+        "default": "Game ends at"
+      },
+      "rules": [
+        "EUC-5.1"
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "id": "EUC-1.1",
+      "text": {
+        "key": "rule.euc.1.1",
+        "default": "Each player receives five cards; the next card is turned face up."
+      }
+    },
+    {
+      "id": "EUC-2.1",
+      "text": {
+        "key": "rule.euc.2.1",
+        "default": "In the first round, each player in turn may order the dealer to pick up the turned card, making its suit trump, or pass."
+      }
+    },
+    {
+      "id": "EUC-2.2",
+      "text": {
+        "key": "rule.euc.2.2",
+        "default": "If trump is ordered, the dealer adds the turned card to their hand and discards one card face down."
+      }
+    },
+    {
+      "id": "EUC-2.3",
+      "text": {
+        "key": "rule.euc.2.3",
+        "default": "If all pass, the card is turned down and each player in turn may name any other suit as trump, or pass."
+      }
+    },
+    {
+      "id": "EUC-2.4",
+      "text": {
+        "key": "rule.euc.2.4",
+        "default": "If all pass twice, the cards are redealt by the next dealer; with stick the dealer, the dealer must name trump."
+      }
+    },
+    {
+      "id": "EUC-2.5",
+      "text": {
+        "key": "rule.euc.2.5",
+        "default": "The player who makes trump may go alone; their partner sits out the deal."
+      }
+    },
+    {
+      "id": "EUC-3.1",
+      "text": {
+        "key": "rule.euc.3.1",
+        "default": "The jack of trump (right bower) is the highest trump, and the jack of the same color (left bower) is the second highest and counts as a trump."
+      }
+    },
+    {
+      "id": "EUC-3.2",
+      "text": {
+        "key": "rule.euc.3.2",
+        "default": "You must follow the suit led if you can, counting the left bower as trump."
+      }
+    },
+    {
+      "id": "EUC-3.3",
+      "text": {
+        "key": "rule.euc.3.3",
+        "default": "The highest trump wins the trick, or the highest card of the suit led if no trump is played."
+      }
+    },
+    {
+      "id": "EUC-3.4",
+      "text": {
+        "key": "rule.euc.3.4",
+        "default": "The player to the left of the dealer leads first; the winner of each trick leads the next."
+      }
+    },
+    {
+      "id": "EUC-4.1",
+      "text": {
+        "key": "rule.euc.4.1",
+        "default": "Makers who take three or four tricks score 1 point; all five tricks score 2."
+      }
+    },
+    {
+      "id": "EUC-4.2",
+      "text": {
+        "key": "rule.euc.4.2",
+        "default": "If the makers take fewer than three tricks, they are euchred and the defenders score 2."
+      }
+    },
+    {
+      "id": "EUC-4.3",
+      "text": {
+        "key": "rule.euc.4.3",
+        "default": "A lone maker who takes all five tricks scores the lone-march points."
+      }
+    },
+    {
+      "id": "EUC-5.1",
+      "text": {
+        "key": "rule.euc.5.1",
+        "default": "The first partnership to reach the target wins."
+      }
+    }
+  ],
+  "zones": [
+    {
+      "id": "hand",
+      "scope": "seat",
+      "visibility": "owner",
+      "sort": "trumpFirst"
+    },
+    {
+      "id": "kitty",
+      "scope": "shared",
+      "visibility": "none"
+    },
+    {
+      "id": "upcard",
+      "scope": "shared",
+      "visibility": "public"
+    },
+    {
+      "id": "discard",
+      "scope": "shared",
+      "visibility": "none"
+    },
+    {
+      "id": "trick",
+      "scope": "shared",
+      "visibility": "public",
+      "ordered": true
+    },
+    {
+      "id": "taken",
+      "scope": "team",
+      "visibility": "public",
+      "faceDown": true
+    }
+  ],
+  "vars": {
+    "score": {
+      "scope": "teamMatch",
+      "type": "int",
+      "initial": "0"
+    },
+    "trump": {
+      "scope": "deal",
+      "type": "suit?",
+      "initial": "null"
+    },
+    "maker": {
+      "scope": "deal",
+      "type": "seat?",
+      "initial": "null"
+    },
+    "alone": {
+      "scope": "deal",
+      "type": "bool",
+      "initial": "false"
+    }
+  },
+  "defs": {
+    "isRight(c: card) -> bool": "deal.trump != null && c.rank == 'J' && c.suit == deal.trump",
+    "isLeft(c: card) -> bool": "deal.trump != null && c.rank == 'J' && c.suit != deal.trump && colorOf(c.suit) == colorOf(deal.trump)",
+    "suitOf(c: card) -> suit": "isLeft(c) ? deal.trump : c.suit",
+    "strength(c: card) -> int": "isRight(c) ? 100 : (isLeft(c) ? 99 : rankIndex('natural', c.rank))"
+  },
+  "setup": {
+    "firstDealer": "firstJack",
+    "dealerRotation": "left"
+  },
+  "phases": [
+    {
+      "id": "deal",
+      "mechanic": "deal",
+      "rule": "EUC-1.1",
+      "params": {
+        "packets": [
+          {
+            "to": "hand",
+            "each": 3
+          },
+          {
+            "to": "hand",
+            "each": 2
+          },
+          {
+            "to": "kitty",
+            "count": 4
+          }
+        ],
+        "then": [
+          {
+            "move": {
+              "from": "kitty",
+              "to": "upcard",
+              "cards": 1
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "bid",
+      "mechanic": "auction.rounds",
+      "params": {
+        "firstBidder": "left(dealer, 1)",
+        "rounds": [
+          {
+            "id": "orderUp",
+            "rule": "EUC-2.1",
+            "calls": [
+              {
+                "id": "pass"
+              },
+              {
+                "id": "orderUp",
+                "sets": [
+                  {
+                    "set": "deal.trump",
+                    "to": "zone('upcard')[0].suit"
+                  }
+                ]
+              },
+              {
+                "id": "orderUpAlone",
+                "allowed": "options.goingAlone",
+                "sets": [
+                  {
+                    "set": "deal.trump",
+                    "to": "zone('upcard')[0].suit"
+                  }
+                ],
+                "alone": "true"
+              }
+            ]
+          },
+          {
+            "id": "nameTrump",
+            "rule": "EUC-2.3",
+            "before": [
+              {
+                "move": {
+                  "from": "upcard",
+                  "to": "discard",
+                  "cards": "all"
+                }
+              }
+            ],
+            "calls": [
+              {
+                "id": "pass",
+                "allowed": "!(options.stickTheDealer && seat == dealer)"
+              },
+              {
+                "id": "name",
+                "param": "suit",
+                "allowed": "param != zone('discard')[0].suit",
+                "sets": [
+                  {
+                    "set": "deal.trump",
+                    "to": "param"
+                  }
+                ]
+              },
+              {
+                "id": "nameAlone",
+                "param": "suit",
+                "allowed": "options.goingAlone && param != zone('discard')[0].suit",
+                "sets": [
+                  {
+                    "set": "deal.trump",
+                    "to": "param"
+                  }
+                ],
+                "alone": "true"
+              }
+            ]
+          }
+        ],
+        "onCall": [
+          {
+            "if": "call.id != 'pass'",
+            "then": [
+              {
+                "set": "deal.maker",
+                "to": "seat"
+              },
+              {
+                "set": "deal.alone",
+                "to": "call.alone"
+              }
+            ]
+          }
+        ],
+        "endWhen": "deal.trump != null",
+        "allPass": {
+          "action": "redeal",
+          "rule": "EUC-2.4"
+        }
+      }
+    },
+    {
+      "id": "pickup",
+      "mechanic": "exchange.kitty",
+      "rule": "EUC-2.2",
+      "when": "zone('upcard').size() == 1",
+      "params": {
+        "seat": "dealer",
+        "take": "'upcard'",
+        "discard": 1,
+        "discardTo": "'discard'",
+        "skipIf": "deal.alone && dealer == partner(deal.maker)"
+      }
+    },
+    {
+      "id": "play",
+      "mechanic": "trick-play",
+      "params": {
+        "tricks": "untilHandsEmpty",
+        "activeSeats": "deal.alone ? seats().filter(s, s != partner(deal.maker)) : seats()",
+        "trump": "deal.trump",
+        "suitOf": "suitOf",
+        "strength": "strength",
+        "follow": {
+          "mustFollow": true,
+          "rule": "EUC-3.2"
+        },
+        "firstLeader": "nextActive(left(dealer, 1))",
+        "winner": "highestTrumpElseLedSuit",
+        "winnerRule": "EUC-3.3",
+        "nextLeader": "winner",
+        "onTrickEnd": [
+          {
+            "move": {
+              "from": "trick",
+              "to": "taken",
+              "toTeam": "team(trick.winner)",
+              "cards": "all"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "score",
+      "mechanic": "score",
+      "params": {
+        "effects": [
+          {
+            "let": "t",
+            "be": "tricksWon(team(deal.maker))"
+          },
+          {
+            "if": "t == 5 && deal.alone",
+            "then": [
+              {
+                "add": "match.score[team(deal.maker)]",
+                "value": "options.alonePoints"
+              }
+            ],
+            "rule": "EUC-4.3",
+            "else": [
+              {
+                "if": "t == 5",
+                "then": [
+                  {
+                    "add": "match.score[team(deal.maker)]",
+                    "value": "2"
+                  }
+                ],
+                "rule": "EUC-4.1",
+                "else": [
+                  {
+                    "if": "t >= 3",
+                    "then": [
+                      {
+                        "add": "match.score[team(deal.maker)]",
+                        "value": "1"
+                      }
+                    ],
+                    "rule": "EUC-4.1",
+                    "else": [
+                      {
+                        "add": "match.score[opponents(team(deal.maker))]",
+                        "value": "2"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "end": {
+    "check": "afterDeal",
+    "when": "teams().exists(t, match.score[t] >= options.target)",
+    "rank": "descending(match.score)",
+    "ties": "impossible",
+    "rule": "EUC-5.1"
+  },
+  "display": {
+    "layout": "fourAroundPartners",
+    "scoreSheet": [
+      "score"
+    ],
+    "showTrump": true,
+    "showMaker": true,
+    "trickHistory": "lastOnly"
+  },
+  "ai": {
+    "profile": "trick.euchre",
+    "params": {}
+  },
+  "teaching": {
+    "lessons": [
+      "euchre.l1-bowers",
+      "euchre.l2-ordering-up",
+      "euchre.l3-going-alone"
+    ]
+  }
+}

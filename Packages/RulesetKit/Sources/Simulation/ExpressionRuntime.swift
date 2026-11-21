@@ -167,14 +167,23 @@ public final class ExpressionRuntime: @unchecked Sendable {
         for name in names {
             // Stage E pinned each site's real contextual types; the
             // runtime re-checks permissively so a validated expression
-            // always recompiles (§7.5).
-            contextual[name] = .any
+            // always recompiles (§7.5). The binding's own kind supplies
+            // the type: the evaluator resolves these names from this
+            // call's bindings, so the checker must see them too, or a
+            // let-bound name falls through to the canonical spelling
+            // (§7.3) and disagrees with run time.
+            contextual[name] = Self.bindingType(call.contextual[name] ?? .null)
         }
         var callContext = context
         callContext.contextual = contextual
         var checker = TypeChecker(context: callContext)
         do {
-            let typed = try checker.check(try Parser().parse(call.source).ast)
+            // Check in a scope carrying this call's contextual bindings:
+            // the evaluator resolves those names at run time, so the
+            // checker must see them too (a let-bound name shadows the
+            // canonical spelling, §7.3/§7.5).
+            let typed = try checker.check(
+                try Parser().parse(call.source).ast, in: Scope(contextual: contextual))
             lock.lock()
             compiled[key] = typed
             lock.unlock()

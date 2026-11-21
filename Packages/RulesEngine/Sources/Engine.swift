@@ -86,14 +86,20 @@ public struct PhaseConfig: Sendable {
     /// (§5.6). Evaluated each time the phase would be entered. Nil
     /// means unconditional.
     let gate: (@Sendable (GameState) throws -> Bool)?
+    /// Post-effects the host attaches to the phase (§8.1 phase-level
+    /// `after`, deal `then`): run once when the mechanic completes and
+    /// the deal advances. Nil when the ruleset declares none.
+    let post: (@Sendable (inout GameState, EvalContext) throws -> [GameEvent])?
 
     public init(
         id: String, mechanic: AnyMechanic,
-        gate: (@Sendable (GameState) throws -> Bool)? = nil
+        gate: (@Sendable (GameState) throws -> Bool)? = nil,
+        post: (@Sendable (inout GameState, EvalContext) throws -> [GameEvent])? = nil
     ) {
         self.id = id
         self.mechanic = mechanic
         self.gate = gate
+        self.post = post
     }
 }
 
@@ -105,6 +111,7 @@ public struct AnyMechanic: Sendable {
     let act: @Sendable (ActionIntent, Seat, inout GameState, EvalContext) throws -> [GameEvent]
     let complete: @Sendable (GameState, EvalContext) -> PhaseOutcome
     let pending: @Sendable (GameState, EvalContext) -> SeatSet
+    let step: @Sendable (inout GameState, EvalContext) throws -> [GameEvent]
 
     public init<M: Mechanic>(_ mechanic: M.Type, params: M.Params) {
         enter = { state, ctx in try mechanic.enter(params, state: &state, ctx: ctx) }
@@ -114,6 +121,7 @@ public struct AnyMechanic: Sendable {
         }
         complete = { state, ctx in mechanic.isComplete(params, state: state, ctx: ctx) }
         pending = { state, ctx in mechanic.pendingSeats(params, state: state, ctx: ctx) }
+        step = { state, ctx in try mechanic.step(params, state: &state, ctx: ctx) }
     }
 
     /// Normalize any thrown error into a RuleViolation.
@@ -329,6 +337,16 @@ public struct Engine: Sendable {
             let outcome = config.mechanic.complete(state, ctx(state))
             let pending = config.mechanic.pending(state, ctx(state))
             if outcome == .continue || !pending.isEmpty { return }
+            if outcome == .autoStep {
+                // ADR-0032: the mechanic drives its own internal steps with
+                // no seat acting (e.g. the show phase counting one hand at a
+                // time). Run ONE step, then the continuous end check (§5.3),
+                // then loop — the check must fire between steps so a win
+                // mid-sequence ends the deal at once (ARCHITECTURE §6.6).
+                events.append(contentsOf: try config.mechanic.step(&state, ctx(state)))
+                try checkContinuousEnd(&state, &events)
+                continue
+            }
             if outcome == .redeal {
                 // §5.6: a mechanic may throw the deal in and redeal it —
                 // deal-scoped state clears and the deal phase re-enters. No
@@ -343,6 +361,11 @@ public struct Engine: Sendable {
                 // afterDeal effects, rotation, resets, next deal or match end.
                 try finishDeal(&state, &events)
                 continue
+            }
+            // §8.1: phase-level post effects (`after`, deal `then`) run once
+            // when the mechanic completes, before the deal advances.
+            if let post = config.post {
+                events.append(contentsOf: try post(&state, ctx(state)))
             }
             if let next = nextStateIndex(after: config.id) {
                 try enterPhase(phases[next], state: &state, events: &events)
@@ -377,6 +400,11 @@ public struct Engine: Sendable {
                     pointer: "phases when-gates skip every phase in a loop at '\(current.id)'")
             }
             current = phases[next]
+        }
+        // ADR-0033: retain the completed play record before the substate is
+        // dropped, so score phases can still read the deal's trick counts.
+        if case .trick(let sub) = state.phase.substate {
+            state.setLastPlayTrick(sub)
         }
         state.enterPhase(current.id)
         events += try current.mechanic.enter(&state, ctx(state))

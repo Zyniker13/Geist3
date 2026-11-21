@@ -127,7 +127,7 @@ extension TrickPlayV2Tests {
             return .int(Int64(order[rank] ?? -1))
         case "noTrumpLead", "noTrumpFollow":
             // A guard over the candidate card: forbid diamonds/trumps.
-            guard case .card(_, let suit, _)? = call.contextual["card"] else {
+            guard case .card(_, let suit, _)? = call.contextual["c"] else {
                 throw .fault(pointer: call.pointer, detail: "test runtime: no card bound")
             }
             let upper = suit.uppercased()

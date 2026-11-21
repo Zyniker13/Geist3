@@ -9,6 +9,11 @@ extension Engine {
     /// table, reset per-deal vars, then re-enter the deal phase — or close
     /// the match when the end condition (§5.8) holds.
     func finishDeal(_ state: inout GameState, _ events: inout [GameEvent]) throws {
+        // ADR-0033: keep the completed play record for afterDeal effects
+        // (they may read `tricksWon`); the per-deal reset below clears it.
+        if case .trick(let sub) = state.phase.substate {
+            state.setLastPlayTrick(sub)
+        }
         state.dealIndex += 1
 
         if try endHolds(state) {
@@ -36,6 +41,14 @@ extension Engine {
         }
         state.zones = ZoneStore()
         state.knowledge = KnowledgeStore()
+        // Phase options are deal-scoped mechanic scratch: §5.7 clears all
+        // deal-scoped state, and a stale `done`/`taken:N` from the previous
+        // deal would otherwise complete a phase before its action ran.
+        state.phaseOptions = [:]
+        // Deal-scoped dealt-hands record (§7.5) clears with the deal.
+        state.dealt = [:]
+        // Completed play record clears with the deal (ADR-0033).
+        state.lastPlaySubstate = nil
         try resetPerDealVars(&state)
         if let rebuild {
             do {
@@ -61,6 +74,14 @@ extension Engine {
         state.dealIndex += 1
         state.zones = ZoneStore()
         state.knowledge = KnowledgeStore()
+        // Phase options are deal-scoped mechanic scratch: §5.7 clears all
+        // deal-scoped state, and a stale `done`/`taken:N` from the previous
+        // deal would otherwise complete a phase before its action ran.
+        state.phaseOptions = [:]
+        // Deal-scoped dealt-hands record (§7.5) clears with the deal.
+        state.dealt = [:]
+        // Completed play record clears with the deal (ADR-0033).
+        state.lastPlaySubstate = nil
         try resetPerDealVars(&state)
         if let rebuild {
             do {
