@@ -11,7 +11,7 @@ COVERAGE_MIN ?= 90
 # Host-local simulator lock (no-op on CI where the lock does not exist).
 SIM_LOCK := $(shell test -x "$(HOME)/.hermes/bin/sim-lock" && echo "$(HOME)/.hermes/bin/sim-lock")
 
-.PHONY: help bootstrap gen build test test-packages test-packages-ios test-replays-ios test-apps lint format validate schema-check conformance sim fuzz-quick snapshot coverage coverage-check perf gate
+.PHONY: help bootstrap gen build test test-packages test-packages-ios test-replays-ios test-apps lint format validate schema-check rules-check conformance sim fuzz-quick snapshot coverage coverage-check perf gate
 
 help:
 	@echo "Parlor build targets (CONVENTIONS §7):"
@@ -95,6 +95,9 @@ validate:
 # (scripts/validate-schemas.py, run by the CI workflow with a jsonschema venv).
 schema-check:
 	Tools/rules-cli schema --check
+
+rules-check:
+	python3 scripts/check-rule-docs.py
 
 conformance:
 	Tools/rules-cli conformance

@@ -615,3 +615,24 @@ TrickPlayV2ParamsTests: follow/overtrump/head-trick/ruff guards,
 expressions, custom `winner`, per-card and per-trick effects, dummy
 validity). JSON configuration is exercised end-to-end by the RulesetKit
 schema round-trip, validation, and simulation suites.
+
+**P3.2 — Rules documents — COMPLETE.**
+
+- `docs/rules/RULES-hearts.md`, `RULES-euchre.md`,
+  `RULES-contract-bridge.md`, `RULES-cribbage.md`: every rule of each
+  ruleset written out with its rule ID, per-rule source citations (page
+  level, from the rulesets' own `sources` entries — Pagat, WEF, ACBL
+  rubber laws, WBF 2017 laws, ACC 2025 rulebook), and the option table
+  mapping each table option to the rule it selects. Prose is original;
+  nothing is copied from any source.
+- Bidirectional ID coverage is checked mechanically:
+  `scripts/check-rule-docs.py` (also `make rules-check`) extracts the
+  rule IDs from each ruleset JSON (rule/ruleId/*Rule values, option
+  `rules` bindings, and the rules catalog) and the `ABC-n.m` tokens from
+  the document, and fails on any difference in either direction.
+- Evidence: `make rules-check` → 12/14/16/12 rule IDs covered in both
+  directions for hearts/euchre/bridge/cribbage (54 total). The rules
+  documents surfaced no new ambiguities requiring OPEN_QUESTIONS entries;
+  the euchre pass-out and kitty-visibility defaults are recorded in the
+  documents' "Defaults chosen" sections (both were already pinned by the
+  ruleset JSON and its options).
