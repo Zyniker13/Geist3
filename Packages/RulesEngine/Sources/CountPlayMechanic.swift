@@ -145,6 +145,7 @@ public struct CountPlayMechanic: Mechanic {
     public static func isComplete(
         _ params: Params, state: GameState, ctx: EvalContext
     ) -> PhaseOutcome {
+        if state.phaseOptions["done"] == "1" { return .complete }
         for index in 0..<ctx.seatCount {
             if !state.zones.cards(in: zoneKey(params.from, seat: Seat(index))).isEmpty {
                 return .continue
@@ -156,6 +157,7 @@ public struct CountPlayMechanic: Mechanic {
     public static func pendingSeats(
         _ params: Params, state: GameState, ctx: EvalContext
     ) -> SeatSet {
+        if state.phaseOptions["done"] == "1" { return SeatSet() }
         let turnRaw = state.phaseOptions["turn"] ?? "0"
         guard let index = Int(turnRaw), index < ctx.seatCount else { return SeatSet() }
         return SeatSet(Seat(index))
@@ -193,10 +195,12 @@ public struct CountPlayMechanic: Mechanic {
                 params, seat: seat, points: playPoints, state: &state, ctx: ctx,
                 events: &events, reason: "pegging")
         }
+        // The next seat in order acts next; settleTurn skips seats that
+        // are empty or blocked, and a closed run re-leads after the closer.
+        state.setPhaseOption("turn", value: String(nextSeat(seat, ctx: ctx).raw))
         if total >= params.limit {
             let bonus = params.goExactLimitPoints
             events += try closeRun(params, state: &state, ctx: ctx, scorer: seat, points: bonus)
-            state.setPhaseOption("turn", value: String(nextSeat(seat, ctx: ctx).raw))
         }
     }
 
@@ -284,6 +288,10 @@ public struct CountPlayMechanic: Mechanic {
                 return
             }
         }
+        // Mark completion BEFORE returning any cards: with `returnCards`
+        // the hands refill for the show, and an empty-hand completion
+        // check would otherwise never fire again.
+        state.setPhaseOption("done", value: "1")
         returnRunCards(params, state: &state, ctx: ctx, events: &events)
         guard params.returnCards else { return }
         for index in 0..<ctx.seatCount {

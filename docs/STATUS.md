@@ -554,3 +554,48 @@ COMPLETE** (commits `f2341b6` and this commit).
   suites**; `make lint` → exit 0 (swift-format `--strict` clean after a
   27-violation auto-fix pass; SwiftLint warnings only, all pre-existing
   baseline).
+
+**P3.1 — non-auction mechanic test wave (exchange.pass, exchange.kitty,
+exchange.discardTo, reveal.starter, count-play, show, score) — COMPLETE.**
+
+The S5 note had claimed these mechanics were covered by "end-to-end tests
+added in the S6 wave"; the audit found they had **no unit tests at all**.
+This wave adds four test files (`MechanicsSupport` fixtures + one shared
+canned expression runtime, `ExchangePassTests`, `KittyDiscardTests`,
+`RevealAndCountTests`, `ShowScoreTests`) covering every parameter of all
+seven mechanics, including invalid-parameter validation at phase entry
+(negative/zero counts, bad `revealTo`/`toScope`/`sequence`, missing
+`seat`, wrong expression result types, undeclared or thin cut zones,
+choice configs with no values or non-bool gates) and illegal-intent
+rejection (wrong intent kind, foreign cards, over-discard beyond the
+count, acting out of turn, unknown answers).
+
+Four real defects found by the tests and fixed (not papered over):
+
+- `ExchangeDiscardToMechanic` never set its `done:<seat>` phase option,
+  so a seat that reached the discard count while still holding cards
+  stayed pending forever and the phase could never complete (cribbage
+  lay-away would hang every deal). Now marked done at the target or when
+  the holding runs out (`min(count, held)`).
+- `ExchangePassMechanic`'s sequential (non-simultaneous) via-path
+  delivered each passer's staged cards but never set `delivered`, so the
+  phase stalled after the last passer. Now marked when all passers have
+  delivered.
+- `CountPlayMechanic` could never complete with `returnCards: true` —
+  `finalizeIfHandsEmpty` returned the played cards to hands before the
+  empty-hands completion check ran again. Completion is now marked
+  before the return, and `isComplete`/`pendingSeats` honor it. Also, a
+  normal play never advanced the turn (the leader kept the turn
+  forever); the turn now passes to the next seat after every play, with
+  `settleTurn` skipping empty or blocked seats.
+- `ScoreMechanic` silently skipped a choice whose `when` gate evaluated
+  non-bool (every other bad param faults loudly) and resolved "the"
+  pending choice by scanning an unordered dictionary, making multi-choice
+  legality process-nondeterministic (a replay hazard). Gates now fault
+  on non-bool, and choices pend per seat (`pendingSeats` returns every
+  seat that owes a choice; each seat answers its own choice in any
+  order) — ADR-0028.
+
+Evidence: `swift test` (RulesEngine) → **131/131 in 16 suites** (was
+93/93; +38 mechanic tests); `swift test` (RulesetKit) → **154/154 in 18
+suites** (unchanged); `make format` + `make lint` → exit 0.

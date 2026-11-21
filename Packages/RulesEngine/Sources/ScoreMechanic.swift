@@ -54,7 +54,12 @@ public struct ScoreMechanic: Mechanic {
             let gate = try ctx.evalCall(
                 .init(pointer: "score.choices[\(choice.id)].when", source: choice.when.source, ruleId: id),
                 state: state)
-            guard case .bool(let active) = gate, active else { continue }
+            guard case .bool(let active) = gate else {
+                throw RuleViolation.engineFault(
+                    ruleId: id,
+                    pointer: "score.choices[\(choice.id)].when not a boolean")
+            }
+            guard active else { continue }
             let seatValue = try ctx.evalCall(
                 .init(pointer: "score.choices[\(choice.id)].seat", source: choice.seat.source, ruleId: id),
                 state: state)
@@ -66,7 +71,7 @@ public struct ScoreMechanic: Mechanic {
             }
             state.setPhaseOption("pending:\(choice.id)", value: seat.raw.description)
         }
-        if try pendingChoice(state) == nil {
+        if pendingSeats(params, state: state, ctx: ctx).isEmpty {
             return try runEffects(params, state: &state, ctx: ctx, bindings: [:])
         }
         return events
@@ -75,11 +80,7 @@ public struct ScoreMechanic: Mechanic {
     public static func legalIntents(
         _ params: Params, state: GameState, seat: Seat, ctx: EvalContext
     ) -> [ActionIntent] {
-        guard let pending = pendingChoice(state), pending.raw == seat.raw,
-            let choice = params.choices?.first(where: { choice in
-                state.phaseOptions["pending:\(choice.id)"] == pending.raw.description
-            })
-        else { return [] }
+        guard let choice = pendingChoice(params, state: state, seat: seat) else { return [] }
         return choice.values.map { .choose($0) }
     }
 
@@ -90,12 +91,9 @@ public struct ScoreMechanic: Mechanic {
         guard case .choose(let answer) = intent else {
             throw RuleViolation.engineFault(ruleId: id, pointer: "score expects a choose")
         }
-        guard let pending = pendingChoice(state), pending.raw == seat.raw,
-            let choice = params.choices?.first(where: { choice in
-                state.phaseOptions["pending:\(choice.id)"] == pending.raw.description
-            })
-        else {
-            throw RuleViolation.engineFault(ruleId: id, pointer: "score: no pending choice")
+        guard let choice = pendingChoice(params, state: state, seat: seat) else {
+            throw RuleViolation.engineFault(
+                ruleId: id, pointer: "score: no pending choice for seat \(seat.raw)")
         }
         guard choice.values.contains(answer) else {
             throw RuleViolation.engineFault(
@@ -104,7 +102,7 @@ public struct ScoreMechanic: Mechanic {
         state.setPhaseOption("choice:\(choice.id):\(seat.raw)", value: answer)
         state.setPhaseOption("pending:\(choice.id)", value: "")
         var events: [GameEvent] = []
-        if try pendingChoice(state) == nil {
+        if pendingSeats(params, state: state, ctx: ctx).isEmpty {
             events += try runEffects(params, state: &state, ctx: ctx, bindings: [:])
         }
         return events
@@ -119,16 +117,25 @@ public struct ScoreMechanic: Mechanic {
     public static func pendingSeats(
         _ params: Params, state: GameState, ctx: EvalContext
     ) -> SeatSet {
-        if let pending = pendingChoice(state) { return SeatSet(pending) }
-        return SeatSet()
+        var seats = SeatSet()
+        for (key, raw) in state.phaseOptions where key.hasPrefix("pending:") && !raw.isEmpty {
+            if let index = Int(raw) { seats.insert(Seat(index)) }
+        }
+        return seats
     }
 
     // MARK: - Helpers
 
-    /// The seat that still owes a choice, if any.
-    static func pendingChoice(_ state: GameState) -> Seat? {
-        for (key, raw) in state.phaseOptions where key.hasPrefix("pending:") && !raw.isEmpty {
-            if let index = Int(raw) { return Seat(index) }
+    /// The choice a seat still owes, if any. Choices pend per seat, so
+    /// several seats may answer in any order and legality never depends
+    /// on dictionary iteration order (§10 determinism).
+    static func pendingChoice(
+        _ params: Params, state: GameState, seat: Seat
+    ) -> ScoreChoiceRef? {
+        guard let choices = params.choices else { return nil }
+        for choice in choices
+        where state.phaseOptions["pending:\(choice.id)"] == seat.raw.description {
+            return choice
         }
         return nil
     }

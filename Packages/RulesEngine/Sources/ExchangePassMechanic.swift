@@ -131,6 +131,11 @@ public enum ExchangePassMechanic: Mechanic {
                     try deliverOne(
                         params, passer: seat, ids: ids, state: &state, ctx: ctx,
                         events: &events)
+                    // Sequential delivery finishes passer by passer; the
+                    // phase ends once the last passer has delivered.
+                    if allPicked(state, count, ctx.seatCount) {
+                        state.setPhaseOption("delivered", value: "1")
+                    }
                 }
             }
         } else {

@@ -116,7 +116,15 @@ public struct ExchangeDiscardToMechanic: Mechanic {
             }
             events.append(.cardPlayed(seat: seat, card: card))
         }
-        state.setPhaseOption("discarded:\(seat.raw)", value: String(discarded + ids.count))
+        let finished = discarded + ids.count
+        state.setPhaseOption("discarded:\(seat.raw)", value: String(finished))
+        // A seat is done at the target, or early when its holding ran out
+        // (`min(count, held)`). Without this mark a seat that still held
+        // cards after reaching the count stayed pending forever and the
+        // phase could never complete.
+        if finished >= target || state.zones.cards(in: fromKey).isEmpty {
+            state.setPhaseOption("done:\(seat.raw)", value: "1")
+        }
         events.append(.cardsMoved(from: params.from, to: params.to, count: ids.count))
         return events
     }
