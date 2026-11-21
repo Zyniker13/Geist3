@@ -56,17 +56,11 @@ public enum EngineBuilder {
             deckFaces = try DeckCatalog.resolve(cardModelDeck(deck))
         }
 
-        let (enginePhases, dealPhaseID) = try phaseConfigs(
-            phases, runtime: runtime, seatCount: seatCount,
-            seatZoneIds: seatZoneIds, sharedZoneIds: sharedZoneIds, deckFaces: deckFaces)
-
-        // Match substrate (§5.2–5.3, §5.6–5.8): variables, teams, the end
-        // declaration, and the first-dealer procedure. A ruleset without a
-        // `setup` block (the P2-era fixtures) deals from seat 0, rotating
-        // left.
+        // Variables, teams, and rank orders are substrate data the phase
+        // mappers read (auction ladders name an order; result paths name a
+        // var), so they map before the phases.
         let vars = try EngineBuilder.mapVars(document.vars)
         let teams = try EngineBuilder.mapTeams(players, seatCount: seatCount)
-        let endSpec = try EngineBuilder.mapEnd(document.end, vars: vars)
         var orders: [String: [String]] = [:]
         for field in document.orders ?? [] {
             guard let ranks = field.value.arrayValue?.compactMap(\.stringValue) else {
@@ -74,6 +68,16 @@ public enum EngineBuilder {
             }
             orders[field.key] = ranks
         }
+
+        let (enginePhases, dealPhaseID) = try phaseConfigs(
+            phases, runtime: runtime, seatCount: seatCount,
+            seatZoneIds: seatZoneIds, sharedZoneIds: sharedZoneIds, deckFaces: deckFaces,
+            orders: orders, vars: vars)
+
+        // Match substrate (§5.2–5.3, §5.6–5.8): the end declaration and the
+        // first-dealer procedure. A ruleset without a `setup` block (the
+        // P2-era fixtures) deals from seat 0, rotating left.
+        let endSpec = try EngineBuilder.mapEnd(document.end, vars: vars)
         let (firstDealer, rotation) = try EngineBuilder.firstDealerSetup(
             document.setup, seatCount: seatCount, deckFaces: deckFaces ?? [], orders: orders)
 

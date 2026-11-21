@@ -52,6 +52,31 @@ extension Engine {
         events += try dealConfig.mechanic.enter(&state, ctx(state))
     }
 
+    /// A mechanic redealt the deal (§5.6 `allPass: redeal`): deal-scoped
+    /// state clears, the table re-stacks, and the deal phase re-enters. No
+    /// afterDeal effects and no match-end check: a thrown-in deal scores
+    /// nothing. Dealer rotation is the mechanic's choice, made before it
+    /// reports the redeal (§5.7 redealNextDealer / redealSameDealer).
+    func redealDeal(_ state: inout GameState, _ events: inout [GameEvent]) throws {
+        state.dealIndex += 1
+        state.zones = ZoneStore()
+        state.knowledge = KnowledgeStore()
+        try resetPerDealVars(&state)
+        if let rebuild {
+            do {
+                try rebuild(&state)
+            } catch {
+                throw AnyMechanic.violation(error)
+            }
+        }
+        let dealID = dealPhaseID ?? phases[0].id
+        guard let dealConfig = phases.first(where: { $0.id == dealID }) else {
+            throw RuleViolation.engineFault(ruleId: nil, pointer: "unknown deal phase \(dealID)")
+        }
+        state.enterPhase(dealConfig.id)
+        events += try dealConfig.mechanic.enter(&state, ctx(state))
+    }
+
     /// Close the match (§5.8): mark it over, rank the winners, run the
     /// end block's match effects, and enter the done phase.
     func closeMatch(_ state: inout GameState, _ events: inout [GameEvent]) throws {

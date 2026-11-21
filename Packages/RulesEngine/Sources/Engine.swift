@@ -329,6 +329,21 @@ public struct Engine: Sendable {
             let outcome = config.mechanic.complete(state, ctx(state))
             let pending = config.mechanic.pending(state, ctx(state))
             if outcome == .continue || !pending.isEmpty { return }
+            if outcome == .redeal {
+                // §5.6: a mechanic may throw the deal in and redeal it —
+                // deal-scoped state clears and the deal phase re-enters. No
+                // afterDeal effects and no match-end check: a thrown-in deal
+                // scores nothing. Dealer rotation is the mechanic's choice
+                // (e.g. bridge's redealNextDealer option), not the engine's.
+                try redealDeal(&state, &events)
+                continue
+            }
+            if outcome == .endDeal {
+                // §5.6: end the deal early and run the normal deal end —
+                // afterDeal effects, rotation, resets, next deal or match end.
+                try finishDeal(&state, &events)
+                continue
+            }
             if let next = nextStateIndex(after: config.id) {
                 try enterPhase(phases[next], state: &state, events: &events)
             } else {

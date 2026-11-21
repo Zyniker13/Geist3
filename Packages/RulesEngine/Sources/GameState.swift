@@ -91,6 +91,20 @@ public struct GameState: Codable, Hashable, Sendable {
         setSubstate(sub)
     }
 
+    /// Auction sub-state (`auction.rounds` / `auction.ladder` share one
+    /// record shape; each mechanic owns its case).
+    func auctionSubstate() -> AuctionSubstate {
+        switch phase.substate {
+        case .auctionRounds(let sub), .auctionLadder(let sub): return sub
+        default: return AuctionSubstate()
+        }
+    }
+
+    mutating func setAuctionSubstate(_ sub: AuctionSubstate, ladder: Bool) {
+        let state: MechanicSubstate = ladder ? .auctionLadder(sub) : .auctionRounds(sub)
+        phase = PhaseCursor(phaseID: phase.phaseID, substate: state)
+    }
+
     /// Advance to a phase and reset its mechanic sub-state.
     mutating func enterPhase(_ id: String, substate: MechanicSubstate? = nil) {
         phase = PhaseCursor(phaseID: id, substate: substate)

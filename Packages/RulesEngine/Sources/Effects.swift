@@ -238,10 +238,25 @@ public final class EffectsRunner: Sendable {
     }
 
     private func decl(_ name: String, pointer: String) throws(RuleViolation) -> EngineVarDecl {
-        guard let decl = varDecls[name] else {
+        if let direct = varDecls[name] { return direct }
+        // Effects spell variables as scope-qualified paths ("deal.trump",
+        // "match.score[t]"): the prefix is the read/write surface, the
+        // declared name is bare (§5.3). Resolve the bare name and check the
+        // prefix agrees with the declared scope so authoring errors surface.
+        let parts = name.split(separator: ".", omittingEmptySubsequences: true)
+        guard parts.count == 2, let bare = parts.last.map(String.init) else {
             throw fault(pointer, "unknown variable '\(name)'")
         }
-        return decl
+        guard let decl = varDecls[bare] else {
+            throw fault(pointer, "unknown variable '\(name)'")
+        }
+        switch (parts.first.map(String.init), decl.scope) {
+        case ("match", .match), ("match", .seatMatch), ("match", .teamMatch),
+            ("deal", .deal), ("deal", .seatDeal), ("deal", .teamDeal):
+            return decl
+        default:
+            throw fault(pointer, "variable '\(name)' does not match its declared scope")
+        }
     }
 
     private func varPath(
@@ -338,7 +353,10 @@ public final class EffectsRunner: Sendable {
     }
 
     private func coerce(_ value: EvalValue, to type: String, pointer: String) throws(RuleViolation) -> VarValue {
-        switch (type, value) {
+        // Declared types are plain strings; a trailing `?` marks an optional
+        // variable, which accepts the same values as its base type.
+        let base = type.hasSuffix("?") ? String(type.dropLast()) : type
+        switch (base, value) {
         case ("int", .int(let v)):
             guard let v = Int(exactly: v) else { throw fault(pointer, "int overflow") }
             return .int(v)
@@ -349,6 +367,12 @@ public final class EffectsRunner: Sendable {
                 throw fault(pointer, "'\(spelling)' is not a seat")
             }
             return .seat(Seat(position))
+        case (_, .record(let name, let fields)):
+            var stored: [String: VarValue] = [:]
+            for (key, field) in fields.sorted(by: { $0.key < $1.key }) {
+                stored[key] = try coerceRecordField(field, pointer: pointer)
+            }
+            return .record(name: name, fields: stored)
         case (_, .string(let s)):
             return .string(s)
         case (_, .null):
@@ -444,5 +468,37 @@ public final class EffectsRunner: Sendable {
             moved = ids
         }
         events.append(.cardsMoved(from: from, to: to, count: moved.count))
+    }
+}
+
+// MARK: - Record coercion
+
+extension EffectsRunner {
+    /// Records declared with plain string types (e.g. `contract?`) carry no
+    /// per-field schema in the engine, so record fields convert structurally:
+    /// each value keeps its own kind, nested records recurse, and only an
+    /// out-of-range integer or an un-storable card/list faults.
+    private func coerceRecordField(
+        _ field: EvalValue, pointer: String
+    ) throws(RuleViolation) -> VarValue {
+        switch field {
+        case .int(let v):
+            guard let v = Int(exactly: v) else { throw fault(pointer, "int overflow") }
+            return .int(v)
+        case .bool(let b):
+            return .bool(b)
+        case .string(let s):
+            return .string(s)
+        case .record(let name, let fields):
+            var nested: [String: VarValue] = [:]
+            for (key, field) in fields.sorted(by: { $0.key < $1.key }) {
+                nested[key] = try coerceRecordField(field, pointer: pointer)
+            }
+            return .record(name: name, fields: nested)
+        case .null:
+            return .null
+        case .card, .list:
+            throw fault(pointer, "cannot store \(field) in a record field")
+        }
     }
 }

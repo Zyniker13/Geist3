@@ -517,3 +517,40 @@ added in the S6 wave below; S5's own mechanics all exercised).
 - Evidence: `swift test` → **60/60**; `make lint` → 0 errors.
 - Remaining in S6: euchre/bridge/cribbage wiring onto the extended
   params, then the S6 evidence pass.
+
+**P3.1 S6 — auction mechanics (`auction.rounds`, `auction.ladder`) —
+COMPLETE** (commits `f2341b6` and this commit).
+
+- `RulesEngine`: new `AuctionRoundsMechanic` (fixed round scripts:
+  euchre order-up/name-trump, per-call `allowed`/`sets`/`alone`,
+  stick-the-dealer) and `AuctionLadderMechanic` (bridge bidding:
+  level×strain ladder, pass/double/redouble with BRG-2.3 flag rules,
+  contract+declarer records, three-passes end, configurable all-pass
+  action). Shared `AuctionSubstate` stored in `MechanicSubstate`.
+- Engine plumbing: `PhaseOutcome.redeal`/`.endDeal` handled by the
+  auto-advance loop (`redealDeal` increments `dealIndex`, clears
+  deal-scoped state, rebuilds, re-enters the deal phase); `VarValue.record`
+  with per-field structural coercion (optional-suffix stripping, seat
+  matching, nested records); `pendingSeats` returns empty once an
+  auction has ended or passed out so the loop can advance.
+- `RulesetKit`: `auction.rounds`/`auction.ladder` schema params
+  (`MechanicsParams.swift`), mappers (`EngineBuilder+Auctions.swift`),
+  phase dispatch refactored through a shared `mechanicConfig` helper
+  after the switch grew past the 100-line function-body limit.
+- Test suite `AuctionTests` (8 tests, euchre- and bridge-shaped
+  fixtures): order-up sets trump + maker + completes; name-trump round;
+  pass rotation and stick-the-dealer; all-pass triggers redeal
+  (same-dealer and next-dealer, fresh substate, `dealIndex` bump,
+  cleared per-deal vars); ladder bids advance; three consecutive passes
+  end the auction; all-pass action; illegal calls rejected. Menu
+  (`legalIntents`) and apply both consult each call's `allowed`.
+- Two real defects found by the tests and fixed (not papered over):
+  the mechanic menus offered calls without evaluating `allowed`
+  (euchre stick-the-dealer would have offered illegal passes), and
+  `coerce` stored seats as strings and faulted on `bool` record fields
+  (contract records).
+- Evidence (post-`make format`, final trees): `swift test` (RulesEngine)
+  → **93/93 in 12 suites**; `swift test` (RulesetKit) → **154/154 in 18
+  suites**; `make lint` → exit 0 (swift-format `--strict` clean after a
+  27-violation auto-fix pass; SwiftLint warnings only, all pre-existing
+  baseline).

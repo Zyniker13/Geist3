@@ -62,6 +62,9 @@ public enum VarValue: Codable, Hashable, Sendable {
     case bool(Bool)
     case string(String)
     case seat(Seat)
+    /// A named record (e.g. bridge's `contract` with `level`, `strain`,
+    /// `doubled`, `redoubled`); fields are JSON-ish values.
+    case record(name: String, fields: [String: VarValue])
     case null
 }
 
@@ -154,4 +157,6 @@ public struct PhaseCursor: Codable, Hashable, Sendable {
 /// Typed sub-states for the built-in mechanics; each mechanic owns its case.
 public enum MechanicSubstate: Codable, Hashable, Sendable {
     case trick(TrickSubstate)
+    case auctionRounds(AuctionSubstate)
+    case auctionLadder(AuctionSubstate)
 }

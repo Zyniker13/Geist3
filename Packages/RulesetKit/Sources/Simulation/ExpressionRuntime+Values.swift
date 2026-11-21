@@ -37,6 +37,10 @@ extension ExpressionRuntime {
         case .bool(let b): return .bool(b)
         case .string(let s): return .string(s)
         case .seat(let seat): return .string("S\(seat.raw + 1)")
+        case .record(let name, let fields):
+            return .record(
+                name: name,
+                fields: fields.mapValues(value(from:)))
         case .null: return .null
         }
     }
