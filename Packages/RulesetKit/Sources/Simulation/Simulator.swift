@@ -27,7 +27,18 @@ public struct Simulator: Sendable {
     /// `maxActions` overrides the runaway guard for tests that must exercise
     /// the cap; production runs use the default.
     public init(ruleset: ResolvedRuleset, maxActions: Int) throws {
-        engine = try EngineBuilder.build(from: ruleset)
+        try self.init(ruleset: ruleset, maxActions: maxActions, dealOverride: nil)
+    }
+
+    /// P3.4 conformance hook: `dealOverride` forces the deal phase's stacked
+    /// deck — the list is the exact dealing order (the builder reverses it
+    /// for the zone) and the deal's shuffle is suppressed. Every other setup
+    /// step (zones, vars, first-dealer picking) is unchanged; nil keeps the
+    /// production seeded shuffle. Host-only tooling: this never crosses the
+    /// network boundary (§9).
+    @_spi(HostDealOverride)
+    public init(ruleset: ResolvedRuleset, maxActions: Int, dealOverride: [CardFace]?) throws {
+        engine = try EngineBuilder.build(from: ruleset, dealOverride: dealOverride)
         seatCount = engine.seatCount
         declaredRules = Set((ruleset.document.rules ?? []).map(\.id))
         actionLimit = max(0, maxActions)
@@ -50,7 +61,7 @@ public struct Simulator: Sendable {
             if actions >= actionLimit {
                 faults.append(
                     "simulator.action-cap at phase \(state.phase.phaseID) last: "
-                    + trace.joined(separator: " → "))
+                        + trace.joined(separator: " → "))
                 break
             }
             guard let pick = pickAction(state: state, actions: actions, bot: bot) else {
@@ -84,9 +95,12 @@ public struct Simulator: Sendable {
         for byte in Engine.finalStateHash(state) {
             hashHex += String(format: "%02x", byte)
         }
-        let context = faults.isEmpty ? "" : "phase=\(state.phase.phaseID) deal=\(state.dealIndex)"
-            + " match[\(state.matchVars.describe())]"
-            + " deal[\(state.dealVars.describe())]"
+        let context =
+            faults.isEmpty
+            ? ""
+            : "phase=\(state.phase.phaseID) deal=\(state.dealIndex)"
+                + " match[\(state.matchVars.describe())]"
+                + " deal[\(state.dealVars.describe())]"
         let unexercised = declaredRules.subtracting(exercised).sorted()
         return SimulationRun(
             seed: seed, actions: actions, done: state.phase.phaseID == "done",

@@ -23,8 +23,10 @@ public protocol Mechanic: Sendable {
     static func step(_ params: Params, state: inout GameState, ctx: EvalContext) throws(RuleViolation) -> [GameEvent]
 }
 
-public extension Mechanic {
-    static func step(_ params: Params, state: inout GameState, ctx: EvalContext) throws(RuleViolation) -> [GameEvent] {
+extension Mechanic {
+    public static func step(_ params: Params, state: inout GameState, ctx: EvalContext) throws(RuleViolation)
+        -> [GameEvent]
+    {
         []
     }
 }

@@ -13,8 +13,8 @@
 // broken ruleset and surfaces as `RuleViolation.engineFault` (§7.4): an
 // effect never fails silently.
 
-import Foundation
 import CardModel
+import Foundation
 
 /// Storage scopes for a ruleset variable, mirroring `VarScope` values.
 public enum EngineVarScope: String, Sendable {

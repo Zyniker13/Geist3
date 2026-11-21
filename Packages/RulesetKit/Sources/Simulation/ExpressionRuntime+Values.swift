@@ -40,7 +40,8 @@ extension ExpressionRuntime {
         case .bool(let b): return .bool(b)
         case .string(let s): return .string(s)
         case .seat(let seat):
-            let spelling = seatSpellings.indices.contains(seat.raw)
+            let spelling =
+                seatSpellings.indices.contains(seat.raw)
                 ? seatSpellings[seat.raw] : "S\(seat.raw + 1)"
             return .string(spelling)
         case .record(let name, let fields):
@@ -112,7 +113,10 @@ extension ExpressionRuntime {
             for item in items {
                 let kind = bindingType(item)
                 if let known = element {
-                    if known != kind { mixed = true; break }
+                    if known != kind {
+                        mixed = true
+                        break
+                    }
                 } else {
                     element = kind
                 }

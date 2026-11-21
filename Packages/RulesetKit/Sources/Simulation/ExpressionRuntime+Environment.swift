@@ -4,10 +4,11 @@
 // pure function of the snapshot and the resolved document (CONVENTIONS §5).
 
 import CardModel
-#if canImport(Foundation)
-import Foundation
-#endif
 @_spi(HostOnly) import RulesEngine
+
+#if canImport(Foundation)
+    import Foundation
+#endif
 
 extension ExpressionRuntime {
 

@@ -1,5 +1,5 @@
-import Foundation
 import CardExpr
+import Foundation
 
 /// Member access, indexing, calls, builtins, macros, and defs
 /// (Evaluator extension).
@@ -211,7 +211,8 @@ extension Evaluator {
     /// has not been awarded at snapshot time.
     private func trickValue(_ field: TrickField) -> Value {
         if case .record(_, let fields)? = env.contextual["trick"],
-           let bound = fields[field.rawValue] {
+            let bound = fields[field.rawValue]
+        {
             return bound
         }
         switch field {

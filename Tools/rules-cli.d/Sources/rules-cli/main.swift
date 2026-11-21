@@ -15,8 +15,8 @@
 // Exit status: 0 clean, 1 any error/mismatch, 2 usage error.
 
 import Foundation
-@_spi(HostOnly) @_spi(Tools) import RulesetKit
 @_spi(HostOnly) import RulesEngine
+@_spi(HostOnly) @_spi(Tools) import RulesetKit
 
 func repoRoot() -> URL? {
     var dir = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
@@ -213,7 +213,8 @@ func simulate(_ urls: [URL], seeds: Int, firstSeed: UInt64, quiet: Bool) -> Int 
             }
             let envCap = ProcessInfo.processInfo.environment["RULES_SIM_MAX_ACTIONS"]
                 .flatMap(Int.init)
-            let simulator = try envCap.map { try Simulator(ruleset: resolved, maxActions: $0) }
+            let simulator =
+                try envCap.map { try Simulator(ruleset: resolved, maxActions: $0) }
                 ?? Simulator(ruleset: resolved)
 
             let started = Date()
@@ -250,7 +251,8 @@ func simulate(_ urls: [URL], seeds: Int, firstSeed: UInt64, quiet: Bool) -> Int 
             }
             if !reproducible { ok = false }
             if ProcessInfo.processInfo.environment["RULES_CLI_DUMP"] != nil,
-               let run = firstFinal {
+                let run = firstFinal
+            {
                 // Final-state summary of the first seed (host tooling only;
                 // the state never leaves the host). §10.4 SPI.
                 let state = run.finalState
@@ -264,7 +266,8 @@ func simulate(_ urls: [URL], seeds: Int, firstSeed: UInt64, quiet: Bool) -> Int 
             for (seed, fault) in faultSeeds.sorted(by: { $0.key < $1.key }) {
                 print("\(name): FAULT seed \(seed): \(fault)")
                 if ProcessInfo.processInfo.environment["RULES_CLI_DUMP"] != nil,
-                   let state = faultStates[seed] {
+                    let state = faultStates[seed]
+                {
                     print("  fault-state: \(state)")
                 }
                 ok = false

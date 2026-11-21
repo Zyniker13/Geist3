@@ -8,15 +8,35 @@ import CardModel
 import Foundation
 @_spi(HostOnly) import RulesEngine
 
+/// Bundled inputs for `phaseConfigs`: the mapping reads these values
+/// read-only, so one struct keeps the function under the pure-config
+/// parameter-count limit.
+struct PhaseInputs {
+    let runtime: ExpressionRuntime
+    let seatCount: Int
+    let seatZoneIds: Set<String>
+    let sharedZoneIds: Set<String>
+    let deckFaces: [CardFace]?
+    let dealOverride: [CardFace]?
+    let orders: [String: [String]]
+    let vars: [String: EngineVarDecl]
+}
+
 @_spi(HostOnly)
 extension EngineBuilder {
     /// Maps the document's phase list to engine phase configs, returning the
     /// configs and the id of the single deal phase.
     static func phaseConfigs(
-        _ phases: [Phase], runtime: ExpressionRuntime, seatCount: Int,
-        seatZoneIds: Set<String>, sharedZoneIds: Set<String>, deckFaces: [CardFace]?,
-        orders: [String: [String]], vars: [String: EngineVarDecl]
+        _ phases: [Phase], _ inputs: PhaseInputs
     ) throws -> (configs: [PhaseConfig], dealPhaseID: String?) {
+        let runtime = inputs.runtime
+        let seatCount = inputs.seatCount
+        let seatZoneIds = inputs.seatZoneIds
+        let sharedZoneIds = inputs.sharedZoneIds
+        let deckFaces = inputs.deckFaces
+        let dealOverride = inputs.dealOverride
+        let orders = inputs.orders
+        let vars = inputs.vars
         var enginePhases: [PhaseConfig] = []
         var dealPhaseID: String? = nil
         for phase in phases {
@@ -50,8 +70,14 @@ extension EngineBuilder {
                 config = mechanicConfig(
                     phase.id, gate, DealMechanic.self,
                     RulesEngine.DealParams(
-                        source: sourceId, packets: packets, shuffleFirst: true,
-                        deckFaces: deckFaces),
+                        source: sourceId, packets: packets,
+                        // P3.4 conformance hook: an override stacks the source
+                        // zone with the exact given faces in dealing order
+                        // (reversed here because the deal pops from the zone
+                        // end) and suppresses the shuffle; production keeps
+                        // the seeded shuffle (§5.6).
+                        shuffleFirst: dealOverride == nil,
+                        deckFaces: dealOverride.map({ Array($0.reversed()) }) ?? deckFaces),
                     post: thenPost ?? post)
             case ("trick-play", .trickPlay(let params)):
                 config = mechanicConfig(

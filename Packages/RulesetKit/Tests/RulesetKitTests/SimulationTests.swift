@@ -40,16 +40,15 @@ struct SimulationTests {
         // (ZoneStore guarantees one-zone-per-card; totalCardCount walks them).
         #expect(run.finalState.zones.totalCardCount == 13)
 
-        // Both hands emptied into five trick piles of two cards.
+        // Both hands emptied into the shared trick zone (§6.1: play goes
+        // into the declared shared zone; the toy has no onTrickEnd move,
+        // so all ten cards remain there at deal end).
         let hand0 = ZoneKey(scope: .seat, owner: 0, id: "hand")
         let hand1 = ZoneKey(scope: .seat, owner: 1, id: "hand")
         #expect(run.finalState.zones.cards(in: hand0).isEmpty)
         #expect(run.finalState.zones.cards(in: hand1).isEmpty)
-        for trick in 0..<5 {
-            let pile = run.finalState.zones.cards(
-                in: ZoneKey(scope: .shared, id: "trick\(trick)"))
-            #expect(pile.count == 2, Comment(stringLiteral: "trick " + String(trick) + " holds " + String(pile.count)))
-        }
+        let pile = run.finalState.zones.cards(in: ZoneKey(scope: .shared, id: "trick"))
+        #expect(pile.count == 10, Comment(stringLiteral: "trick holds " + String(pile.count)))
     }
 
     @Test func sameSeedSameHashDifferentSeedDifferentHash() throws {
@@ -85,7 +84,7 @@ struct SimulationTests {
         #expect(run.actions == 1)
         #expect(!run.done)
         #expect(
-            run.faults.contains("simulator.action-cap"),
+            run.faults.contains { $0.contains("simulator.action-cap") },
             Comment(stringLiteral: "faults: " + run.faults.joined(separator: "; ")))
     }
 

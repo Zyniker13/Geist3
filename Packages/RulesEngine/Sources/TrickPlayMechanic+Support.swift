@@ -361,8 +361,9 @@ extension TrickPlayMechanic {
         case .seat(let seat): return seat
         case .expr(let ref):
             let value = try ctx.evalCall(
-                .init(pointer: pointer, source: ref.source, ruleId: nil,
-                      activeSeats: activeSeats), state: state)
+                .init(
+                    pointer: pointer, source: ref.source, ruleId: nil,
+                    activeSeats: activeSeats), state: state)
             guard let seat = seatValue(of: value, ctx: ctx) else {
                 throw RuleViolation.engineFault(ruleId: nil, pointer: "\(pointer) not a seat")
             }
@@ -404,5 +405,108 @@ extension TrickPlayMechanic {
             raw <= ctx.seatCount
         else { return nil }
         return Seat(raw - 1)
+    }
+
+    // MARK: - Enter-time resolvers
+
+    /// Active seats (§5.6): the default is every seat; `activeSeats`
+    /// replaces it. Every seat index must be in range and distinct.
+    static func resolveActiveSeats(
+        _ params: Params, state: GameState, ctx: EvalContext
+    ) throws(RuleViolation) -> [Seat] {
+        var active = (0..<params.seatCount).map(Seat.init)
+        if let spec = params.activeSeats {
+            active = try seatList(spec, pointer: "/phases/trick-play/activeSeats", state: state, ctx: ctx)
+        }
+        guard !active.isEmpty, active.allSatisfy({ $0.raw < params.seatCount }),
+            Set(active.map(\.raw)).count == active.count
+        else {
+            throw RuleViolation.engineFault(
+                ruleId: nil, pointer: "/phases/trick-play/activeSeats out of range or repeated")
+        }
+        return active
+    }
+
+    /// Trump is resolved once per deal (§5.6). A suit literal, or an
+    /// expression returning a suit string, the empty string, or null.
+    static func resolveTrump(
+        _ params: Params, state: GameState, ctx: EvalContext
+    ) throws(RuleViolation) -> String? {
+        guard let spec = params.trump else { return nil }
+        switch spec {
+        case .suit(let suit):
+            return suit.isEmpty ? nil : suit
+        case .expr(let ref):
+            let value = try ctx.evalCall(
+                .init(pointer: "/phases/trick-play/trump", source: ref.source, ruleId: nil),
+                state: state)
+            if case .string(let suit) = value, !suit.isEmpty {
+                return suit
+            } else if case .null = value {
+                return nil
+            } else {
+                throw RuleViolation.engineFault(
+                    ruleId: nil, pointer: "/phases/trick-play/trump not a suit")
+            }
+        }
+    }
+
+    /// Dummy seat and controller (§5.6): both must be active seats and
+    /// distinct.
+    static func resolveDummy(
+        _ params: Params, dummy: TrickPlayParams.DummySpec, activeSeats: [Seat],
+        state: GameState, ctx: EvalContext
+    ) throws(RuleViolation) -> (Seat, Seat) {
+        let seat = try dummySeat(params, dummy: dummy, state: state, ctx: ctx)
+        let controller = try controlledSeat(params, dummy: dummy, state: state, ctx: ctx)
+        guard activeSeats.contains(seat) else {
+            throw RuleViolation.engineFault(
+                ruleId: dummy.ruleId, pointer: "/phases/trick-play/dummy/seat not an active seat")
+        }
+        guard activeSeats.contains(controller), controller != seat else {
+            throw RuleViolation.engineFault(
+                ruleId: dummy.ruleId,
+                pointer: "/phases/trick-play/dummy/controlledBy not a distinct active seat")
+        }
+        return (seat, controller)
+    }
+
+    /// Claim voters (§5.6). The bare name `defenders` means the seats
+    /// opposing the claimer's team; anything else is a seat-list
+    /// expression. `activeSeats` must be the list resolved this enter.
+    static func resolveClaimVoters(
+        _ params: Params, claims: TrickPlayParams.ClaimsSpec, acceptedBy: ExprRef,
+        activeSeats: [Seat], state: GameState, ctx: EvalContext
+    ) throws(RuleViolation) -> [Seat] {
+        if acceptedBy.source.trimmingCharacters(in: .whitespaces) == "defenders" {
+            guard let claimer = try claimantSeat(params, claims: claims, state: state, ctx: ctx) else {
+                throw RuleViolation.engineFault(
+                    ruleId: claims.ruleId,
+                    pointer: "/phases/trick-play/claims/acceptedBy requires claims/by")
+            }
+            let claimerTeam =
+                ctx.teamOfSeat.indices.contains(claimer.raw)
+                ? ctx.teamOfSeat[claimer.raw] : claimer.raw
+            return activeSeats.filter {
+                (ctx.teamOfSeat.indices.contains($0.raw) ? ctx.teamOfSeat[$0.raw] : $0.raw) != claimerTeam
+            }
+        }
+        let value = try ctx.evalCall(
+            .init(pointer: "/phases/trick-play/claims/acceptedBy", source: acceptedBy.source, ruleId: claims.ruleId),
+            state: state)
+        guard case .list(let names) = value else {
+            throw RuleViolation.engineFault(
+                ruleId: claims.ruleId, pointer: "/phases/trick-play/claims/acceptedBy not a seat list")
+        }
+        var voters: [Seat] = []
+        for item in names {
+            guard let seat = seatValue(of: item, ctx: ctx), seat.raw < params.seatCount else {
+                throw RuleViolation.engineFault(
+                    ruleId: claims.ruleId,
+                    pointer: "/phases/trick-play/claims/acceptedBy not a seat list")
+            }
+            if !voters.contains(seat) { voters.append(seat) }
+        }
+        return voters
     }
 }

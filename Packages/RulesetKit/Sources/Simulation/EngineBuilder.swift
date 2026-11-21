@@ -15,6 +15,15 @@ public enum EngineBuilder {
     /// Builds an engine for `ruleset`. Throws `SimulationError` when the
     /// document uses something the simulator does not model yet.
     public static func build(from ruleset: ResolvedRuleset) throws -> Engine {
+        try build(from: ruleset, dealOverride: nil)
+    }
+
+    /// Builds with an optional stacked-deck override (P3.4 conformance
+    /// suites): when non-nil, the deal phase injects exactly these faces in
+    /// dealing order and suppresses its shuffle; zones, vars, and
+    /// first-dealer picking stay as the ruleset declares them.
+    @_spi(HostDealOverride)
+    public static func build(from ruleset: ResolvedRuleset, dealOverride: [CardFace]?) throws -> Engine {
         let document = ruleset.document
         guard let phases = document.phases, !phases.isEmpty else {
             throw SimulationError.config("document has no phases")
@@ -77,17 +86,22 @@ public enum EngineBuilder {
             orders[field.key] = ranks
         }
 
-        let (enginePhases, dealPhaseID) = try phaseConfigs(
-            phases, runtime: runtime, seatCount: seatCount,
-            seatZoneIds: seatZoneIds, sharedZoneIds: sharedZoneIds, deckFaces: deckFaces,
+        // P3.4 conformance hook: the override replaces the catalog faces for
+        // both the deal's stacked deck and the first-dealer pick (§5.2
+        // procedures draw from the face list).
+        let effectiveFaces = dealOverride ?? deckFaces
+        let phaseInputs = PhaseInputs(
+            runtime: runtime, seatCount: seatCount, seatZoneIds: seatZoneIds,
+            sharedZoneIds: sharedZoneIds, deckFaces: deckFaces, dealOverride: dealOverride,
             orders: orders, vars: vars)
+        let (enginePhases, dealPhaseID) = try phaseConfigs(phases, phaseInputs)
 
         // Match substrate (§5.2–5.3, §5.6–5.8): the end declaration and the
         // first-dealer procedure. A ruleset without a `setup` block (the
         // P2-era fixtures) deals from seat 0, rotating left.
         let endSpec = try EngineBuilder.mapEnd(document.end, vars: vars)
         let (firstDealer, rotation) = try EngineBuilder.firstDealerSetup(
-            document.setup, seatCount: seatCount, deckFaces: deckFaces ?? [], orders: orders)
+            document.setup, seatCount: seatCount, deckFaces: effectiveFaces ?? [], orders: orders)
 
         let zoneCaps = capacities
         let dealerPick = firstDealer
