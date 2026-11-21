@@ -217,21 +217,29 @@ enum ConformanceRunner {
                         outcome.failures.append(
                             "step \(index): expected violation \(expect) but the action was accepted")
                     }
-                } catch let violation as RuleViolation {
-                    let ruleId = Self.ruleId(of: violation)
-                    if let expect = step.expectViolation {
-                        if ruleId == expect {
-                            outcome.fired.insert(expect)
-                            window.insert(expect)
+                } catch {
+                    // Downcast in the body instead of `catch let v as RuleViolation`:
+                    // Swift 6.3.3 (Xcode 26.6, the CI runner default) crashes in
+                    // SILGenCleanup on the typed-catch binding (ownership verifier
+                    // fatal error), so keep the catch untyped and bind here.
+                    if let violation = error as? RuleViolation {
+                        let ruleId = Self.ruleId(of: violation)
+                        if let expect = step.expectViolation {
+                            if ruleId == expect {
+                                outcome.fired.insert(expect)
+                                window.insert(expect)
+                            } else {
+                                outcome.failures.append(
+                                    "step \(index): expected violation \(expect), got "
+                                        + (ruleId ?? String(describing: violation)))
+                            }
                         } else {
                             outcome.failures.append(
-                                "step \(index): expected violation \(expect), got "
+                                "step \(index): unexpected violation: "
                                     + (ruleId ?? String(describing: violation)))
                         }
                     } else {
-                        outcome.failures.append(
-                            "step \(index): unexpected violation: "
-                                + (ruleId ?? String(describing: violation)))
+                        outcome.failures.append("step \(index): unexpected error: \(error)")
                     }
                 }
             } else if step.expectViolation != nil {

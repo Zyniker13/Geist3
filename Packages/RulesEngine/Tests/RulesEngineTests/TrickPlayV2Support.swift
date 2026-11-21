@@ -210,10 +210,13 @@ extension TrickPlayV2Tests {
         do {
             try body()
             return nil
-        } catch let error as RuleViolation {
-            return describe(error)
         } catch {
-            return "unexpected error type: \(error)"
+            // Untyped catch + body downcast: Swift 6.3.3 crashes in SILGenCleanup
+            // on `catch let e as RuleViolation` (see ConformanceHarness.swift).
+            guard let violation = error as? RuleViolation else {
+                return "unexpected error type: \(error)"
+            }
+            return describe(violation)
         }
     }
 
