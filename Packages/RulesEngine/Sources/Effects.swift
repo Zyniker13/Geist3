@@ -447,7 +447,18 @@ public final class EffectsRunner: Sendable {
             }
             moved = popped.map(\.id)
         case .expr(let selector):
-            let value = try evaluate(selector, bindings, state, pointer)
+            // §5.4: a move selector evaluates with `cards` bound to the
+            // source zone's contents, top card first — `top(n)` reads the
+            // zone the move is inspecting. The zone list runs bottom→top,
+            // so the binding reverses it.
+            let sourceCards = state.zones.cards(in: source).reversed().map { instance in
+                EvalValue.card(
+                    id: instance.face.id,
+                    suit: instance.face.suit?.code ?? "",
+                    rank: instance.face.rank.code)
+            }
+            let scopedBindings = bindings.merging(["cards": .list(sourceCards)]) { _, new in new }
+            let value = try evaluate(selector, scopedBindings, state, pointer)
             guard case .list(let items) = value else {
                 throw fault(pointer, "card selector must be a list, got \(value)")
             }

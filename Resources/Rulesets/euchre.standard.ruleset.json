@@ -435,7 +435,7 @@
           "mustFollow": true,
           "rule": "EUC-3.2"
         },
-        "firstLeader": "nextActive(left(dealer, 1))",
+        "firstLeader": "nextActive(dealer)",
         "winner": "highestTrumpElseLedSuit",
         "winnerRule": "EUC-3.3",
         "nextLeader": "winner",

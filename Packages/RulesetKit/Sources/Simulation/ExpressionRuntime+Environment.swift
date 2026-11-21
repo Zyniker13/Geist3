@@ -47,7 +47,18 @@ extension ExpressionRuntime {
             holderOf: { faceId in self.holder(of: faceId, state: state) },
             tricksWon: { target in self.tricksWon(target, wins: trickState.wins) },
             playedBy: { seat in self.playedBy(seat, state: state) },
-            choice: { _, _ in .null },
+            choice: { id, seatSpelling in
+                // §7.5 host-mediated selection: the score mechanic records a
+                // settled answer under `choice:<id>:<raw seat>`; the runtime
+                // reads it back. Unsettled (or unknown-seat) reads stay null,
+                // matching the "no value yet" semantics the rulesets guard
+                // against themselves.
+                guard let raw = self.seatIndex[seatSpelling] else { return .null }
+                if let answer = state.phaseOptions["choice:\(id):\(raw)"], !answer.isEmpty {
+                    return .string(answer)
+                }
+                return .null
+            },
             // §7.5 `dealtHands()`: the cards each seat was dealt this deal,
             // recorded by the deal mechanic (GameState.dealt), one entry per
             // seat in seat order so `left(dealtHands(), n)` reads seat n.
@@ -94,12 +105,19 @@ extension ExpressionRuntime {
         }
     }
 
-    /// Canonical roots (`dealer`), the call's contextual bindings, then
-    /// every declared zone id exposed as a list value.
+    /// Canonical roots (`dealer`), the ambient words (`none`, the all-pass
+    /// action words), then every declared zone id exposed as a list value.
     private func contextualBindings(
         for call: EvalCall, state: GameState, zoneContents: [String: [Value]]
     ) -> [String: Value] {
         var contextual: [String: Value] = ["dealer": .string(seatSpelling(state.dealer))]
+        // Ambient words the type context grants every ruleset (§7.3): the
+        // "no value yet" literal and the all-pass action words. The
+        // evaluator resolves identifiers through this map, so a validated
+        // reference must resolve at run time too.
+        for (name, kind) in context.contextual where Self.isAmbientLiteral(name, kind) {
+            contextual[name] = name == "none" ? .null : .string(name)
+        }
         for (id, values) in zoneContents where context.contextual[id] != nil {
             contextual[id] = .list(values)
         }
@@ -260,5 +278,13 @@ extension ExpressionRuntime {
             table[spelling] = index
         }
         return table
+    }
+
+    /// Whether a type-context contextual entry is an ambient literal word
+    /// (`none`, `redeal`, …) rather than a zone or mechanic binding: those
+    /// entries carry one of the literal kinds and must resolve to
+    /// themselves at run time.
+    static func isAmbientLiteral(_ name: String, _ kind: ExprType) -> Bool {
+        kind == .literalNull || kind == .literalString
     }
 }

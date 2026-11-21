@@ -72,16 +72,16 @@ func faces(_ specs: [String]) -> [CardFace] { specs.map(face(_:)) }
 // MARK: - Ruleset loading
 
 enum ConformanceRulesets {
-    /// Walks up from this file until it finds `docs/plan/rulesets` (the
-    /// plan's ruleset copies; same layout ResolverTests reads).
+    /// Walks up from this file until it finds `Resources/Rulesets` (the live
+    /// validated corpus: the four base rulesets and the P3.3 variants).
     static let dir: URL = {
         var dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
         while dir.pathComponents.count > 1 {
-            let candidate = dir.appendingPathComponent("docs/plan/rulesets")
+            let candidate = dir.appendingPathComponent("Resources/Rulesets")
             if FileManager.default.fileExists(atPath: candidate.path) { return candidate }
             dir.deleteLastPathComponent()
         }
-        fatalError("docs/plan/rulesets not found above \(#filePath)")
+        fatalError("Resources/Rulesets not found above \(#filePath)")
     }()
 
     /// Loads a base ruleset (file stem, e.g. "hearts.standard"), optionally
@@ -256,7 +256,7 @@ enum ConformanceRunner {
         return outcome
     }
 
-    private static func absorb(
+    static func absorb(
         _ events: [GameEvent], into fired: inout Set<String>, and window: inout Set<String>
     ) {
         for event in events {

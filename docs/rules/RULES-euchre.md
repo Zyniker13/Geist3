@@ -31,7 +31,7 @@ the kitty. The turned card is visible to every player.
 **EUC-2.1 — First round: order up or pass.** Beginning with the player to
 the dealer's left, each player in turn either passes or orders the dealer
 to pick up the turned card. Ordering up makes the turned card's suit trump
-at once, and the deal proceeds to EUC-2.2.
+at once, and the deal proceeds to the dealer take-in (EUC-2.2).
 (Implemented by the `auction.rounds` phase, round `orderUp`; source: Pagat
 — Euchre, "Determining trump".)
 
@@ -94,7 +94,7 @@ definition; source: Pagat — Euchre, "Play".)
 **EUC-3.4 — The lead.** The player to the dealer's left leads to the first
 trick (skipping a partner who is sitting out a lone hand), and the winner
 of each trick leads the next.
-(Implemented by `firstLeader: nextActive(left(dealer, 1))` and
+(Implemented by `firstLeader: nextActive(dealer)` and
 `nextLeader: winner`; source: Pagat — Euchre, "Play".)
 
 ## 4. Scoring

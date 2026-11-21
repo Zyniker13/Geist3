@@ -108,7 +108,7 @@ extension EngineBuilder {
             case ("exchange.kitty", .exchangeKitty(let params)):
                 config = mechanicConfig(
                     phase.id, gate, ExchangeKittyMechanic.self,
-                    try exchangeKittyParams(params, phaseId: phase.id),
+                    try exchangeKittyParams(params, phaseId: phase.id, sharedZones: sharedZoneIds),
                     post: post)
             case ("exchange.discardTo", .exchangeDiscardTo(let params)):
                 config = mechanicConfig(
@@ -314,7 +314,7 @@ extension EngineBuilder {
     // MARK: - exchange.kitty / exchange.discardTo
 
     static func exchangeKittyParams(
-        _ params: ExchangeKittyParams, phaseId: String
+        _ params: ExchangeKittyParams, phaseId: String, sharedZones: Set<String>
     ) throws -> RulesEngine.ExchangeKittyParams {
         func ref(_ expr: Expr?, _ key: String) throws -> ExprRef? {
             guard let expr else { return nil }
@@ -330,11 +330,33 @@ extension EngineBuilder {
             guard let source else { return nil }
             return ExprRef(pointer: "/phases/\(phaseId)/\(key)", source: source)
         }
+        // `take` is a zone id (euchre's "upcard") or a count. Zone names
+        // resolve at build time, like `from`/`to` everywhere else (§9.4);
+        // the resolved id is re-emitted as a quoted literal so the entry
+        // evaluation yields the string the mechanic expects — a bare zone
+        // identifier would evaluate to the zone's card list (§7.5). A
+        // string that names no shared zone stays an expression and faults
+        // at phase entry with the take pointer.
+        var takeRef = try numRef(params.take, "take")
+        if case .expr(let expr) = params.take,
+            let name = try? zoneName(expr.source, param: "\(phaseId).take", declared: sharedZones, kind: "shared")
+        {
+            takeRef = ExprRef(pointer: "/phases/\(phaseId)/take", source: "'\(name)'")
+        }
+        // `discardTo` has the same shape: resolve a bare shared-zone id to
+        // a quoted literal (§9.4 zone params are static).
+        var discardToRef = try ref(params.discardTo, "discardTo")
+        if let expr = params.discardTo,
+            let name = try? zoneName(
+                expr.source, param: "\(phaseId).discardTo", declared: sharedZones, kind: "shared")
+        {
+            discardToRef = ExprRef(pointer: "/phases/\(phaseId)/discardTo", source: "'\(name)'")
+        }
         return RulesEngine.ExchangeKittyParams(
             seat: try ref(params.seat, "seat"),
-            take: try numRef(params.take, "take"),
+            take: takeRef,
             discard: try numRef(params.discard, "discard"),
-            discardTo: try ref(params.discardTo, "discardTo"),
+            discardTo: discardToRef,
             skipIf: try ref(params.skipIf, "skipIf"))
     }
 
