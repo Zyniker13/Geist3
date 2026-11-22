@@ -150,7 +150,7 @@ struct ConformanceBridge {
         state = open.finalState!
         let dbl = try ConformanceRunner.play(
             [
-                ConformanceStep(action: Seat(3), .call("double"), .turn([0])),
+                ConformanceStep(action: Seat(3), .call("double"), .turn([0]))
             ],
             engine: engine, from: state)
         #expect(dbl.failures.isEmpty)
@@ -188,8 +188,9 @@ struct ConformanceBridge {
         #expect(steps.failures.isEmpty)
         state = steps.finalState!
         // The contract was written into the deal vars as a record.
-        guard case .record("contract", let fields)? = state.dealVars.get(
-            VarPath("contract"))
+        guard
+            case .record("contract", let fields)? = state.dealVars.get(
+                VarPath("contract"))
         else {
             Issue.record("no contract record")
             return
@@ -221,8 +222,9 @@ struct ConformanceBridge {
         // spelled as the seat name in the seat? var.
         #expect(state.dealVars.get(VarPath("declarer")) == VarValue.seat(Seat(2)))
         // The contract level matches the final bid.
-        guard case .record("contract", let contractFields)? = state.dealVars.get(
-            VarPath("contract"))
+        guard
+            case .record("contract", let contractFields)? = state.dealVars.get(
+                VarPath("contract"))
         else {
             Issue.record("no contract record")
             return
@@ -243,8 +245,9 @@ struct ConformanceBridge {
         state = steps.finalState!
         #expect(state.dealIndex == 1)
         #expect(state.dealer.raw == 3)
-        #expect(state.matchVars.get(VarPath("below", 0)) == nil
-            || state.matchVars.get(VarPath("below", 0)) == VarValue.int(0))
+        #expect(
+            state.matchVars.get(VarPath("below", 0)) == nil
+                || state.matchVars.get(VarPath("below", 0)) == VarValue.int(0))
         // The re-deal repeats: pass out again from the new auction.
         let again = try ConformanceRunner.play(
             [
@@ -458,11 +461,12 @@ struct ConformanceBridge {
             // declarer plays for the dummy, the legal list is the dummy's
             // hand, not the declarer's own.
             let legal = engine.legalIntents(for: Seat(seat), in: current)
-            let intent = legal.first { candidate in
-                guard case .play(let id) = candidate else { return false }
-                let face0 = current.zones.allInstances.first { $0.id == id }?.face
-                return face0?.id == face
-            } ?? legal.first
+            let intent =
+                legal.first { candidate in
+                    guard case .play(let id) = candidate else { return false }
+                    let face0 = current.zones.allInstances.first { $0.id == id }?.face
+                    return face0?.id == face
+                } ?? legal.first
             guard case .play(let cardID)? = intent else {
                 Issue.record("no legal play for \(face)")
                 return
@@ -591,14 +595,16 @@ struct ConformanceBridge {
             let legal = engine.legalIntents(for: actor, in: state)
             // Prefer a diamond (declarer's trump) so the scripted tricks go
             // to the declarer's side; otherwise the first legal play.
-            let chosen: ActionIntent? = legal.first { intent in
-                guard case .play(let id) = intent else { return false }
-                let face = state.zones.allInstances.first { $0.id == id }?.face
-                return face?.suit?.code == "D"
-            } ?? legal.first { intent in
-                if case .play = intent { return true }
-                return false
-            }
+            let chosen: ActionIntent? =
+                legal.first { intent in
+                    guard case .play(let id) = intent else { return false }
+                    let face = state.zones.allInstances.first { $0.id == id }?.face
+                    return face?.suit?.code == "D"
+                }
+                ?? legal.first { intent in
+                    if case .play = intent { return true }
+                    return false
+                }
             guard case .play(let cardID)? = chosen else { break }
             let t = try engine.apply(
                 Action(seat: actor, intent: .play(cardID), expectedVersion: state.version), to: state)
@@ -663,10 +669,12 @@ struct ConformanceBridge {
             let actor = ConformanceHelpers.firstPending(engine, current)
             // The actor is declarer seat 2 for both his hand and the dummy.
             let legal = engine.legalIntents(for: actor, in: current)
-            guard case .play(let cardID)? = legal.first(where: {
-                if case .play = $0 { return true }
-                return false
-            }) else { break }
+            guard
+                case .play(let cardID)? = legal.first(where: {
+                    if case .play = $0 { return true }
+                    return false
+                })
+            else { break }
             current = try engine.apply(
                 Action(seat: actor, intent: .play(cardID), expectedVersion: current.version),
                 to: current
@@ -713,10 +721,12 @@ struct ConformanceBridge {
             guard current.phase.phaseID == "play" else { break }
             let actor = ConformanceHelpers.firstPending(engine, current)
             let legal = engine.legalIntents(for: actor, in: current)
-            guard case .play(let cardID)? = legal.first(where: {
-                if case .play = $0 { return true }
-                return false
-            }) else { break }
+            guard
+                case .play(let cardID)? = legal.first(where: {
+                    if case .play = $0 { return true }
+                    return false
+                })
+            else { break }
             current = try engine.apply(
                 Action(seat: actor, intent: .play(cardID), expectedVersion: current.version),
                 to: current
@@ -760,10 +770,12 @@ struct ConformanceBridge {
             guard current.phase.phaseID == "play" else { break }
             let actor = ConformanceHelpers.firstPending(engine, current)
             let legal = engine.legalIntents(for: actor, in: current)
-            guard case .play(let cardID)? = legal.first(where: {
-                if case .play = $0 { return true }
-                return false
-            }) else { break }
+            guard
+                case .play(let cardID)? = legal.first(where: {
+                    if case .play = $0 { return true }
+                    return false
+                })
+            else { break }
             current = try engine.apply(
                 Action(seat: actor, intent: .play(cardID), expectedVersion: current.version),
                 to: current
@@ -806,10 +818,12 @@ struct ConformanceBridge {
             guard current.phase.phaseID == "play" else { break }
             let actor = ConformanceHelpers.firstPending(engine, current)
             let legal = engine.legalIntents(for: actor, in: current)
-            guard case .play(let cardID)? = legal.first(where: {
-                if case .play = $0 { return true }
-                return false
-            }) else { break }
+            guard
+                case .play(let cardID)? = legal.first(where: {
+                    if case .play = $0 { return true }
+                    return false
+                })
+            else { break }
             current = try engine.apply(
                 Action(seat: actor, intent: .play(cardID), expectedVersion: current.version),
                 to: current
