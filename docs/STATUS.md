@@ -758,3 +758,33 @@ All eight JSON rulesets are written and decode/validate; the 500-seed simulation
   same Xcode 26.6 typed-catch crash the harness documents); fixed by the harness's
   untyped-catch + body-downcast pattern (commit 8003645). Re-run 44982527490 **success**
   on 8003645 (build-test-lint incl. `make coverage`).
+
+## P3.4 — Cribbage conformance suite green (2026-11-22, commit 59625f5, branch phase/P3-first-four-games)
+
+- **ConformanceCribbage: 9/9 pass** (CRB-1.1…CRB-6.1): 6-card deal + dealer by
+  low-cut (seat 0 at seed 1), simultaneous lay-away to the crib (third discard
+  rejected), the starter cut + reveal (KH at cut index 27 of the suit stack),
+  his-heels (JC starter → dealer +2, CRB-3.2), the pegging wave (running total
+  with alternation, over-31 `.play` rejected with `count-play`/`exceedsLimit(31)`,
+  the exact-31 close +2, a fifteen mid-wave +2), the two-go close crediting the
+  **last-card owner** (+1, CRB-4.2), the show in pone → dealer → dealer's-crib
+  order (12 / 9 / 4 on the probe script), and the post-show roll to deal 1 with
+  hands refilled (winners empty, CRB-6.1's continuous check below 121).
+- All scripts are probe-verified stacked-deal sequences (seed 1, suit-block
+  stack, dealer + cut index pinned per checkpoint). Probe-pinned engine facts:
+  a run at 30 closes only when **both** seats say go; the close pays +1 to the
+  last-card player; after a close the pone leads; the exact-31 close auto-fires
+  with no go (event reason "go" through rule `count-play`); after the show the
+  match deals again with fresh 6-card hands (no returnCards-then-frozen state).
+- Show math hand-derived and engine-matched: pone 6C 5C 4C 3C + KH = 12
+  (15s 4 + run 4 + flush 4); dealer QC JC 10C 9C + KH = 9 (run 9-10-J-Q-K 5 +
+  flush 4); crib AC KC 8C 7C + KH = 4 (15s {7,8} 2 + pair K/K 2; crib flush
+  needs all five). 4-card hand flushes count; crib flush needs 5.
+- `make lint` exit 0 (after swift-format reflow); RulesetKit suite **211/211**
+  (Hearts 14, Euchre 13, Bridge 18, Cribbage 9 + harness/others).
+- Note: the probe initially mis-derived two show totals (a missed 10-J-Q run
+  and a missed 4-card flush) — the engine was right both times; suite comments
+  record the full component breakdown.
+- Next: `docs/CONFORMANCE.md` rule-ID coverage table (all four games, target
+  ≥ 90% of declared rules exercised), then the P3 gate battery (`make gate
+  PHASE=P3`), which needs P3.5–P3.7 first.
