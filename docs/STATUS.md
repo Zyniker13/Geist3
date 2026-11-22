@@ -789,6 +789,14 @@ All eight JSON rulesets are written and decode/validate; the 500-seed simulation
   ≥ 90% of declared rules exercised), then the P3 gate battery (`make gate
   PHASE=P3`), which needs P3.5–P3.7 first.
 
+## P3.4 — rules-cli conformance generates docs/CONFORMANCE.md (2026-11-22, commit fce6c88, branch phase/P3-first-four-games)
+
+- `Tools/rules-cli conformance` implemented (`ConformanceDoc.swift` + the `main.swift` case): cross-checks each game's `docs/rules/RULES-<game>.md` ids against its conformance suite source and writes the `docs/CONFORMANCE.md` table. Coverage evidence is the suite sources, not sim runs — the Simulator's `exercised` set collects rule ids only from `.scored` events and `.illegal` violations (TrickPlay/CountPlay/Show emit those; score-phase effects drop their `rule` key at `EngineBuilder+Substrate.swift:224`, and deal/auction mechanics never emit `.scored`), so structural rules never register in random play. Verified empirically: a hearts 200-seed sim reports all 12 HRT ids unexercised while the suite covers 12/12.
+- Generated table (first run, commit fce6c88): Hearts 12/12 (suite commit e58984f), Euchre 14/14 (e58984f), Bridge 16/16 (8003645), Cribbage 12/12 (37b5040) — 54 declared rule ids, 54 covered, result `pass` on all four rows. Golden-replay column reads `0 (pending P3.5)` until the replay manifest exists (P3.5 deliverable).
+- `--check` verifies freshness byte-for-byte (like `rules-cli schema --check`); output is deterministic (suite commit SHAs from git log, no timestamps). Missing/uncovered ids fail with exit 1; variant-only ids in suites (none currently) would be reported as extras, not failures.
+- `make conformance` exit 0; `make lint` exit 0 (SwiftLint warnings remain advisory per the P0 lint policy; swift-format strict and check-imports OK). Usage line updated to `validate ... | fmt ... | conformance [--check]`.
+- CI: pushed b84f5bf..fce6c88; run on fce6c88 pending at write time — CI runs `make conformance` (ci.yml step `make conformance`), which now exercises the generator end to end on a clean checkout.
+
 ## P3.4 — Cribbage 100% rule coverage (2026-11-22, commit 37b5040)
 
 - **Coverage audit, all four games, against `docs/rules/RULES-*.md`:**
