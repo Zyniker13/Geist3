@@ -724,3 +724,32 @@ All eight JSON rulesets are written and decode/validate; the 500-seed simulation
   there).
 - Next: Bridge and Cribbage conformance suites (P3.4 acceptance: 100% rule IDs across
   all four games), then P3.5.
+
+## P3.4 — Bridge conformance suite green (2026-11-22, branch phase/P3-first-four-games)
+
+- **ConformanceBridge: 18/18 pass** (BRG-1.1…BRG-5.6: the 13×4 deal, auction ladder
+  legality + rotation, double/redouble side gates (BRG-2.3), three-pass end (BRG-2.4),
+  declarer = first of the winning side to name the strain (BRG-2.5), pass-out redeal
+  rotation (BRG-2.6), opening lead (BRG-3.1), dummy reveal/control (BRG-3.2), follow
+  suit both ways (BRG-4.1), trump beats led suit (BRG-4.2), claim offer/vote/rejection
+  (BRG-4.6), made-contract below/above + honors (BRG-5.1/5.2/5.6), game bonus with the
+  below→above move, set contract penalties, no match end on one game (BRG-5.5 negative).
+- Geometry pinned by probes (stacked deals, dealer by checkpoint, never by seed guess):
+  auctionStack seed 1 → dealer seat 2; suitStack seed 1 → dealer seat 1. Contract is a
+  **record var** (`VarPath("contract")` → `.record` with level/strain/doubled/
+  redoubled); declarer stored as the seat spelling coerced through `seatNames`.
+- Engine semantics confirmed, no code changes needed: redouble belongs to the side
+  whose bid was doubled (BRG-2.3 text: "you may redouble only your side's doubled bid") —
+  the engine gates `teamOf(seat) == teamOf(winningSeat)`, probe-verified legal for the
+  doubled side and a `BRG-2.3` rejection for the doubler's side. Claims are trick-rest
+  only (`applyClaim` requires `currentPlays.isEmpty`); a defender's `acceptClaim(false)`
+  kills the claim and play resumes with the claimant still to act.
+- Scoring ledgers hand-built and probe-matched to the integer exactly (no seed
+  dependence, `options.claims=false` table choice for the play-out loops recorded as a
+  rule-neutral §8.4 choice — BRG-4.6 has its own test): 1D×13 by EW = below 20 + above
+  270 (120 overtricks + 150 honors); 4H×13 by NS = game (below→above), above 360, games
+  1; 1C by EW set 7 = 350 penalty + 150 honors to NS = 500; 1D redoubled = below 80 +
+  above 1450 (6×200 redoubled overtricks + 100 insult + 150 honors).
+- `make lint` exit 0; RulesetKit suite **202/202** (incl. Hearts 14, Euchre 13, Bridge
+  18); RulesEngine suite green.
+- Next: Cribbage conformance suite, then coverage re-check toward the 90% line.
