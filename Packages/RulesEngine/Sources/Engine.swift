@@ -183,6 +183,10 @@ public struct Engine: Sendable {
     public let options: [String: String]
     /// How the dealer moves between deals (§5.7).
     public let dealerRotation: EngineDealerRotation
+    /// Zone visibility from the ruleset (ADR-0038): per zone key, the seats
+    /// that gain knowledge when a card sits in the zone. Keys absent from the
+    /// table get no entry grant (deal-time grants still apply).
+    public let zoneVisibility: [ZoneKey: SeatSet]
 
     public init(
         phases: [PhaseConfig], seatCount: Int,
@@ -197,7 +201,8 @@ public struct Engine: Sendable {
         afterDeal: [EngineEffect] = [],
         rebuild: (@Sendable (inout GameState) throws -> Void)? = nil,
         options: [String: String] = [:],
-        dealerRotation: EngineDealerRotation = .left
+        dealerRotation: EngineDealerRotation = .left,
+        zoneVisibility: [ZoneKey: SeatSet] = [:]
     ) {
         self.phases = phases
         self.seatCount = seatCount
@@ -213,11 +218,12 @@ public struct Engine: Sendable {
         self.rebuild = rebuild
         self.options = options
         self.dealerRotation = dealerRotation
+        self.zoneVisibility = zoneVisibility
         self.rulesetHash = Engine.hash(
             of: phases, expressionRuntime: expressionRuntime, vars: vars,
             seatNames: self.seatNames, teamNames: teamNames, teamOfSeat: teamOfSeat,
             dealPhaseID: dealPhaseID, end: end, afterDeal: afterDeal, options: options,
-            dealerRotation: dealerRotation)
+            dealerRotation: dealerRotation, zoneVisibility: zoneVisibility)
     }
 
     /// Configuration hash: phase ids plus the identity of the installed
@@ -235,7 +241,8 @@ public struct Engine: Sendable {
         end: EngineEndSpec? = nil,
         afterDeal: [EngineEffect] = [],
         options: [String: String] = [:],
-        dealerRotation: EngineDealerRotation = .left
+        dealerRotation: EngineDealerRotation = .left,
+        zoneVisibility: [ZoneKey: SeatSet] = [:]
     ) -> Data {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
@@ -253,6 +260,15 @@ public struct Engine: Sendable {
             "options:\(options.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: ","))")
         lines.append("afterDeal:\(afterDeal.count)")
         lines.append("dealerRotation:\(dealerRotation.rawValue)")
+        // Zone visibility joins the hash (ADR-0038): it changes what viewers
+        // can learn, so it is part of the configuration's identity. Hashed
+        // as "vis:<storageKey>:<seats>" per key, sorted by storageKey.
+        for zone in zoneVisibility.sorted(by: { $0.key.storageKey < $1.key.storageKey }) {
+            let bits = zone.value.bits
+            lines.append(
+                "vis:\(zone.key.storageKey):\(bits != 0 ? String(bits, radix: 16) : "0")"
+            )
+        }
         if let end {
             let rank = end.rank
             let deals = end.deals.map(String.init) ?? "-"
@@ -310,6 +326,7 @@ public struct Engine: Sendable {
         }
         try enterPhase(first, state: &state, events: &events)
         try advanceIfAutomatic(&state, &events)
+        applyZoneEntryGrants(&state)  // ADR-0038: deal-time visibility
         state.recentEvents = events.suffix(GameState.recentEventLimit).map { $0 }
         return Transition(state: state, events: events)
     }
@@ -447,6 +464,7 @@ public struct Engine: Sendable {
         state.version += 1
         try checkContinuousEnd(&state, &events)
         try advanceIfAutomatic(&state, &events)
+        applyZoneEntryGrants(&state)  // ADR-0038: any transition that moved cards
         state.recentEvents = (state.recentEvents + events).suffix(GameState.recentEventLimit).map { $0 }
         return Transition(state: state, events: events)
     }
@@ -501,6 +519,31 @@ public struct Engine: Sendable {
         return config.mechanic.pending(state, ctx(state))
     }
 
+    // MARK: - Zone entry grants (ADR-0038)
+
+    /// Monotone knowledge sweep (ADR-0038): any card currently in a zone whose
+    /// ruleset visibility grants seats gains those viewers' knowledge. Additive
+    /// only (`reveal` ORs bits), so re-running it never removes knowledge —
+    /// calling it at the tails of `startUnchecked`/`applyUnchecked` realizes
+    /// grant-at-entry for every path that puts cards in zones: the initial
+    /// deal, per-deal rebuild after the wipe, mechanic moves, and setup
+    /// effects.
+    func applyZoneEntryGrants(_ state: inout GameState) {
+        guard !zoneVisibility.isEmpty else { return }
+        let everyone = SeatSet((0..<seatCount).map { Seat($0) })
+        for (key, cards) in state.zones.zones {
+            guard let viewers = zoneVisibility[key], !viewers.isEmpty else { continue }
+            // All-seat visibility makes the card public (table and spectator
+            // viewers included), matching mechanic `makePublic` grants; a
+            // partial set is seat-scoped knowledge.
+            if viewers.bits == everyone.bits {
+                for card in cards { state.knowledge.makePublic(card.id) }
+            } else {
+                for card in cards { state.knowledge.reveal(card.id, to: viewers) }
+            }
+        }
+    }
+
     /// Final-state hash for replay verification (§10.4).
     public static func finalStateHash(_ state: GameState) -> Data {
         let encoder = JSONEncoder()
@@ -535,11 +578,12 @@ extension ZoneKey {
 extension ObservedZone {
     /// Redact a zone's cards for a viewer (§9.6 rule 1): a face is included
     /// only if the viewer knows it (knowledge contains the viewer's seat) or
-    /// the card is public; `.replayAll` sees everything.
+    /// the card is public; `.replayAll` sees everything. Zone visibility is
+    /// realized as knowledge grants at card entry (ADR-0038), so the knowledge
+    /// store alone is the redaction authority — `key` needs no separate check.
     @_spi(HostOnly) public static func redactCards(
         _ cards: [CardInstance], key: ZoneKey, viewer: Viewer, knowledge: KnowledgeStore
     ) -> ObservedZone {
-        _ = key  // zone-level visibility defaults arrive with ruleset-driven zones in P2
         let known = cards.filter { Redactor.maySee($0.id, viewer: viewer, knowledge: knowledge, publicCard: false) }
         if known.count == cards.count { return .visible(cards) }
         return .hidden(count: cards.count, known: known)

@@ -103,6 +103,61 @@ public enum EngineBuilder {
         let (firstDealer, rotation) = try EngineBuilder.firstDealerSetup(
             document.setup, seatCount: seatCount, deckFaces: effectiveFaces ?? [], orders: orders)
 
+        // ADR-0038: zone visibility resolves at build time to a static seat
+        // set per zone key. `named` entries come from the reserved vocabulary
+        // (owner → the seat-scoped zone's owner; public → all seats; none →
+        // nobody); `seats` entries are a fixed `Expr` list evaluated with a
+        // bare environment (deterministic; no state reads — the type checker
+        // restricts visibility expressions to those).
+        var zoneVisibility: [ZoneKey: SeatSet] = [:]
+        for decl in document.zones ?? [] {
+            let resolved: SeatSet?
+            switch decl.visibility {
+            case .named(let name):
+                switch name {
+                case "public": resolved = SeatSet((0..<seatCount).map { Seat($0) })
+                case "none": resolved = nil
+                case "owner":
+                    switch decl.scope {
+                    case "seat":
+                        for seat in 0..<seatCount {
+                            zoneVisibility[ZoneKey(scope: .seat, owner: seat, id: decl.id)] = SeatSet(Seat(seat))
+                        }
+                        resolved = nil
+                    case "team":
+                        for team in 0..<max(1, teamCount) {
+                            zoneVisibility[ZoneKey(scope: .team, owner: team, id: decl.id)] = SeatSet(
+                                Seat(team))
+                        }
+                        resolved = nil
+                    default:
+                        resolved = nil
+                    }
+                default:
+                    throw SimulationError.config(
+                        "unknown visibility vocabulary '\(name)' for zone '\(decl.id)'")
+                }
+            case .seats:
+                throw SimulationError.unsupported(
+                    "seats visibility expression for zone '\(decl.id)' arrives in a later phase")
+            }
+            if let resolved, resolved.bits != 0 {
+                switch decl.scope {
+                case "seat":
+                    for seat in 0..<seatCount {
+                        zoneVisibility[ZoneKey(scope: .seat, owner: seat, id: decl.id)] = resolved
+                    }
+                case "shared":
+                    zoneVisibility[ZoneKey(scope: .shared, id: decl.id)] = resolved
+                case "team":
+                    for team in 0..<max(1, teamCount) {
+                        zoneVisibility[ZoneKey(scope: .team, owner: team, id: decl.id)] = resolved
+                    }
+                default: break
+                }
+            }
+        }
+
         let zoneCaps = capacities
         let dealerPick = firstDealer
         let setup: @Sendable (inout GameState) throws -> Void = { state in
@@ -137,7 +192,7 @@ public enum EngineBuilder {
             expressionRuntime: eval, vars: vars, seatNames: players?.seatNames ?? [],
             teamNames: teams.names, teamOfSeat: teams.teamOfSeat,
             dealPhaseID: dealPhaseID, end: endSpec, rebuild: rebuild,
-            dealerRotation: rotation)
+            dealerRotation: rotation, zoneVisibility: zoneVisibility)
     }
 
     // MARK: - deal
