@@ -15,7 +15,9 @@ import Foundation
 /// §9 redaction is unchanged.
 @_spi(HostOnly)
 public struct Simulator: Sendable {
-    let engine: Engine
+    /// The built engine; host tooling (the golden-replay generator) replays
+    /// recorded action lists against it for self-verification.
+    @_spi(HostOnly) public let engine: Engine
     public let seatCount: Int
     /// Rule ids declared in the document, for the unexercised report.
     let declaredRules: Set<String>

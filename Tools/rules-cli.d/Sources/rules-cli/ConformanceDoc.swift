@@ -27,22 +27,47 @@ private struct ConformanceGame {
     let label: String
     let docPath: String
     let suitePath: String
+    /// Directory holding this game's committed golden replay files
+    /// (parlor.replay/1); empty until that game's replays land (P3.5).
+    let replayDir: String?
 }
 
 private let games: [ConformanceGame] = [
     ConformanceGame(
         label: "Hearts", docPath: "docs/rules/RULES-hearts.md",
-        suitePath: "Packages/RulesetKit/Tests/RulesetKitTests/ConformanceHearts.swift"),
+        suitePath: "Packages/RulesetKit/Tests/RulesetKitTests/ConformanceHearts.swift",
+        replayDir: "Packages/RulesetKit/Tests/Fixtures/Replays"),
     ConformanceGame(
         label: "Euchre", docPath: "docs/rules/RULES-euchre.md",
-        suitePath: "Packages/RulesetKit/Tests/RulesetKitTests/ConformanceEuchre.swift"),
+        suitePath: "Packages/RulesetKit/Tests/RulesetKitTests/ConformanceEuchre.swift",
+        replayDir: "Packages/RulesetKit/Tests/Fixtures/Replays"),
     ConformanceGame(
         label: "Bridge", docPath: "docs/rules/RULES-contract-bridge.md",
-        suitePath: "Packages/RulesetKit/Tests/RulesetKitTests/ConformanceBridge.swift"),
+        suitePath: "Packages/RulesetKit/Tests/RulesetKitTests/ConformanceBridge.swift",
+        replayDir: "Packages/RulesetKit/Tests/Fixtures/Replays"),
     ConformanceGame(
         label: "Cribbage", docPath: "docs/rules/RULES-cribbage.md",
-        suitePath: "Packages/RulesetKit/Tests/RulesetKitTests/ConformanceCribbage.swift"),
+        suitePath: "Packages/RulesetKit/Tests/RulesetKitTests/ConformanceCribbage.swift",
+        replayDir: "Packages/RulesetKit/Tests/Fixtures/Replays"),
 ]
+
+/// Number of committed golden replay files for one game. The fixture
+/// directory is shared by the four base games; each file is named
+/// `<game-slug>-NN.json`, so count by prefix.
+private func goldenCount(root: URL, game: ConformanceGame) -> String {
+    guard let replayDir = game.replayDir else { return "0 (pending P3.5)" }
+    let dir = root.appendingPathComponent(replayDir, isDirectory: true)
+    guard let names = try? FileManager.default.contentsOfDirectory(atPath: dir.path) else {
+        return "0 (missing \(replayDir))"
+    }
+    let prefixes: [String: String] = [
+        "hearts": "hearts-standard-", "euchre": "euchre-standard-",
+        "bridge": "contract-bridge-rubber-", "cribbage": "cribbage-six-card-",
+    ]
+    guard let prefix = prefixes[game.label.lowercased()] else { return "0" }
+    let count = names.filter { $0.hasPrefix(prefix) && $0.hasSuffix(".json") }.count
+    return count >= 20 ? "\(count) ok" : "\(count) (need 20; pending P3.5)"
+}
 
 private func ruleIDs(in text: String) -> Set<String> {
     guard let regex = try? NSRegularExpression(pattern: idPattern) else { return [] }
@@ -110,8 +135,9 @@ private func document(root: URL) -> (text: String, failures: [String]) {
                     + missing.joined(separator: ", "))
         }
         let sha = lastCommit(root: root, relPath: game.suitePath)
+        let goldens = goldenCount(root: root, game: game)
         rows.append(
-            "| \(game.label) | \(declared.count) | \(covered.count) | 0 (pending P3.5) | \(result) | \(sha) |")
+            "| \(game.label) | \(declared.count) | \(covered.count) | \(goldens) | \(result) | \(sha) |")
     }
 
     var text = ""
@@ -129,8 +155,9 @@ private func document(root: URL) -> (text: String, failures: [String]) {
     text += "\n"
     text += "Coverage counts rule ids in the suite sources (the tagged tests"
     text += " are the evidence; random-legal simulation cannot exercise"
-    text += " structural rules). Golden replays (20 per game) land with P3.5;"
-    text += " the column stays at 0 until the replay manifest exists.\n"
+    text += " structural rules). Golden replays are committed fixture files"
+    text += " replayed by GameReplayTests on macOS and, in CI, on the iOS"
+    text += " simulator; `20 ok` means the full per-game set is present.\n"
     return (text, failures)
 }
 

@@ -20,7 +20,7 @@ help:
 	@echo "  build       - build Parlor-iOS (iOS Simulator) and Parlor-macOS (macOS)"
 	@echo "  test        - swift test in every package + xcodebuild test (iOS + macOS)"
 	@echo "  test-packages-ios - swift package tests on the iOS simulator (all packages)"
-	@echo "  test-replays-ios  - RulesEngine suite (golden replays) on the iOS simulator"
+	@echo "  test-replays-ios  - RulesEngine + RulesetKit golden replays on the iOS simulator"
 	@echo "  lint        - SwiftLint (main + pure), swift-format, check-imports.sh (zero warnings)"
 	@echo "  format      - swift-format --in-place"
 	@echo "  validate    - rules-cli validate (no-ops until P3 rulesets land)"
@@ -68,10 +68,13 @@ test-packages-ios:
 		(cd "Packages/$$p" && $(SIM_LOCK) xcodebuild test -scheme "$$p" -destination 'platform=iOS Simulator,name=$(IOS_SIM)' -derivedDataPath ../../.build/xcode/$$p-ios) || exit 1; \
 	done
 
-# Cross-platform golden replay leg (G1): the RulesEngine suite (replays, RNG
-# vectors, redaction) must pass on the iOS simulator, matching the macOS run.
+# Cross-platform golden replay leg (G1 + P3.5): the RulesEngine suite (toy
+# replays, RNG vectors, redaction) AND the RulesetKit suite (the four base
+# games' 20-golden-replay fixtures) must pass on the iOS simulator, matching
+# the macOS runs.
 test-replays-ios:
 	cd Packages/RulesEngine && $(SIM_LOCK) xcodebuild test -scheme RulesEngine-Package -destination 'platform=iOS Simulator,name=$(IOS_SIM)' -derivedDataPath ../../.build/xcode/RulesEngine-ios
+	cd Packages/RulesetKit && $(SIM_LOCK) xcodebuild test -scheme RulesetKit-Package -destination 'platform=iOS Simulator,name=$(IOS_SIM)' -derivedDataPath ../../.build/xcode/RulesetKit-ios
 
 # macOS UI-test leg (ADR-0022): excluded from gate until the runner's TCC
 # automation prompt is approved once on this host; required again from G9.

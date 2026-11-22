@@ -1,0 +1,934 @@
+{
+  "actions" : [
+    {
+      "intent" : "discard:3",
+      "seat" : 0,
+      "version" : 0
+    },
+    {
+      "intent" : "discard:4",
+      "seat" : 0,
+      "version" : 1
+    },
+    {
+      "intent" : "discard:8",
+      "seat" : 1,
+      "version" : 2
+    },
+    {
+      "intent" : "discard:7",
+      "seat" : 1,
+      "version" : 3
+    },
+    {
+      "intent" : "play:6",
+      "seat" : 1,
+      "version" : 4
+    },
+    {
+      "intent" : "play:0",
+      "seat" : 0,
+      "version" : 5
+    },
+    {
+      "intent" : "play:9",
+      "seat" : 1,
+      "version" : 6
+    },
+    {
+      "intent" : "play:2",
+      "seat" : 0,
+      "version" : 7
+    },
+    {
+      "intent" : "play:11",
+      "seat" : 1,
+      "version" : 8
+    },
+    {
+      "intent" : "choose:go",
+      "seat" : 0,
+      "version" : 9
+    },
+    {
+      "intent" : "choose:go",
+      "seat" : 1,
+      "version" : 10
+    },
+    {
+      "intent" : "play:5",
+      "seat" : 0,
+      "version" : 11
+    },
+    {
+      "intent" : "play:10",
+      "seat" : 1,
+      "version" : 12
+    },
+    {
+      "intent" : "play:1",
+      "seat" : 0,
+      "version" : 13
+    },
+    {
+      "intent" : "discard:5",
+      "seat" : 0,
+      "version" : 14
+    },
+    {
+      "intent" : "discard:3",
+      "seat" : 0,
+      "version" : 15
+    },
+    {
+      "intent" : "discard:8",
+      "seat" : 1,
+      "version" : 16
+    },
+    {
+      "intent" : "discard:10",
+      "seat" : 1,
+      "version" : 17
+    },
+    {
+      "intent" : "play:2",
+      "seat" : 0,
+      "version" : 18
+    },
+    {
+      "intent" : "play:7",
+      "seat" : 1,
+      "version" : 19
+    },
+    {
+      "intent" : "play:0",
+      "seat" : 0,
+      "version" : 20
+    },
+    {
+      "intent" : "play:9",
+      "seat" : 1,
+      "version" : 21
+    },
+    {
+      "intent" : "play:4",
+      "seat" : 0,
+      "version" : 22
+    },
+    {
+      "intent" : "choose:go",
+      "seat" : 1,
+      "version" : 23
+    },
+    {
+      "intent" : "choose:go",
+      "seat" : 0,
+      "version" : 24
+    },
+    {
+      "intent" : "play:11",
+      "seat" : 1,
+      "version" : 25
+    },
+    {
+      "intent" : "play:1",
+      "seat" : 0,
+      "version" : 26
+    },
+    {
+      "intent" : "play:6",
+      "seat" : 1,
+      "version" : 27
+    },
+    {
+      "intent" : "discard:2",
+      "seat" : 0,
+      "version" : 28
+    },
+    {
+      "intent" : "discard:1",
+      "seat" : 0,
+      "version" : 29
+    },
+    {
+      "intent" : "discard:11",
+      "seat" : 1,
+      "version" : 30
+    },
+    {
+      "intent" : "discard:9",
+      "seat" : 1,
+      "version" : 31
+    },
+    {
+      "intent" : "play:7",
+      "seat" : 1,
+      "version" : 32
+    },
+    {
+      "intent" : "play:3",
+      "seat" : 0,
+      "version" : 33
+    },
+    {
+      "intent" : "play:6",
+      "seat" : 1,
+      "version" : 34
+    },
+    {
+      "intent" : "play:0",
+      "seat" : 0,
+      "version" : 35
+    },
+    {
+      "intent" : "choose:go",
+      "seat" : 1,
+      "version" : 36
+    },
+    {
+      "intent" : "play:4",
+      "seat" : 0,
+      "version" : 37
+    },
+    {
+      "intent" : "play:8",
+      "seat" : 1,
+      "version" : 38
+    },
+    {
+      "intent" : "play:5",
+      "seat" : 0,
+      "version" : 39
+    },
+    {
+      "intent" : "play:10",
+      "seat" : 1,
+      "version" : 40
+    },
+    {
+      "intent" : "discard:3",
+      "seat" : 0,
+      "version" : 41
+    },
+    {
+      "intent" : "discard:5",
+      "seat" : 0,
+      "version" : 42
+    },
+    {
+      "intent" : "discard:11",
+      "seat" : 1,
+      "version" : 43
+    },
+    {
+      "intent" : "discard:8",
+      "seat" : 1,
+      "version" : 44
+    },
+    {
+      "intent" : "play:1",
+      "seat" : 0,
+      "version" : 45
+    },
+    {
+      "intent" : "play:6",
+      "seat" : 1,
+      "version" : 46
+    },
+    {
+      "intent" : "play:0",
+      "seat" : 0,
+      "version" : 47
+    },
+    {
+      "intent" : "play:9",
+      "seat" : 1,
+      "version" : 48
+    },
+    {
+      "intent" : "choose:go",
+      "seat" : 0,
+      "version" : 49
+    },
+    {
+      "intent" : "play:7",
+      "seat" : 1,
+      "version" : 50
+    },
+    {
+      "intent" : "play:10",
+      "seat" : 1,
+      "version" : 51
+    },
+    {
+      "intent" : "choose:go",
+      "seat" : 0,
+      "version" : 52
+    },
+    {
+      "intent" : "play:2",
+      "seat" : 0,
+      "version" : 53
+    },
+    {
+      "intent" : "play:4",
+      "seat" : 0,
+      "version" : 54
+    },
+    {
+      "intent" : "discard:5",
+      "seat" : 0,
+      "version" : 55
+    },
+    {
+      "intent" : "discard:4",
+      "seat" : 0,
+      "version" : 56
+    },
+    {
+      "intent" : "discard:10",
+      "seat" : 1,
+      "version" : 57
+    },
+    {
+      "intent" : "discard:7",
+      "seat" : 1,
+      "version" : 58
+    },
+    {
+      "intent" : "play:9",
+      "seat" : 1,
+      "version" : 59
+    },
+    {
+      "intent" : "play:2",
+      "seat" : 0,
+      "version" : 60
+    },
+    {
+      "intent" : "play:11",
+      "seat" : 1,
+      "version" : 61
+    },
+    {
+      "intent" : "play:3",
+      "seat" : 0,
+      "version" : 62
+    },
+    {
+      "intent" : "play:6",
+      "seat" : 1,
+      "version" : 63
+    },
+    {
+      "intent" : "choose:go",
+      "seat" : 0,
+      "version" : 64
+    },
+    {
+      "intent" : "choose:go",
+      "seat" : 1,
+      "version" : 65
+    },
+    {
+      "intent" : "play:0",
+      "seat" : 0,
+      "version" : 66
+    },
+    {
+      "intent" : "play:8",
+      "seat" : 1,
+      "version" : 67
+    },
+    {
+      "intent" : "play:1",
+      "seat" : 0,
+      "version" : 68
+    },
+    {
+      "intent" : "discard:0",
+      "seat" : 0,
+      "version" : 69
+    },
+    {
+      "intent" : "discard:1",
+      "seat" : 0,
+      "version" : 70
+    },
+    {
+      "intent" : "discard:9",
+      "seat" : 1,
+      "version" : 71
+    },
+    {
+      "intent" : "discard:6",
+      "seat" : 1,
+      "version" : 72
+    },
+    {
+      "intent" : "play:3",
+      "seat" : 0,
+      "version" : 73
+    },
+    {
+      "intent" : "play:8",
+      "seat" : 1,
+      "version" : 74
+    },
+    {
+      "intent" : "play:5",
+      "seat" : 0,
+      "version" : 75
+    },
+    {
+      "intent" : "choose:go",
+      "seat" : 1,
+      "version" : 76
+    },
+    {
+      "intent" : "choose:go",
+      "seat" : 0,
+      "version" : 77
+    },
+    {
+      "intent" : "play:10",
+      "seat" : 1,
+      "version" : 78
+    },
+    {
+      "intent" : "play:2",
+      "seat" : 0,
+      "version" : 79
+    },
+    {
+      "intent" : "play:11",
+      "seat" : 1,
+      "version" : 80
+    },
+    {
+      "intent" : "choose:go",
+      "seat" : 0,
+      "version" : 81
+    },
+    {
+      "intent" : "choose:go",
+      "seat" : 1,
+      "version" : 82
+    },
+    {
+      "intent" : "play:4",
+      "seat" : 0,
+      "version" : 83
+    },
+    {
+      "intent" : "play:7",
+      "seat" : 1,
+      "version" : 84
+    },
+    {
+      "intent" : "discard:2",
+      "seat" : 0,
+      "version" : 85
+    },
+    {
+      "intent" : "discard:5",
+      "seat" : 0,
+      "version" : 86
+    },
+    {
+      "intent" : "discard:11",
+      "seat" : 1,
+      "version" : 87
+    },
+    {
+      "intent" : "discard:8",
+      "seat" : 1,
+      "version" : 88
+    },
+    {
+      "intent" : "play:7",
+      "seat" : 1,
+      "version" : 89
+    },
+    {
+      "intent" : "play:4",
+      "seat" : 0,
+      "version" : 90
+    },
+    {
+      "intent" : "play:9",
+      "seat" : 1,
+      "version" : 91
+    },
+    {
+      "intent" : "play:0",
+      "seat" : 0,
+      "version" : 92
+    },
+    {
+      "intent" : "choose:go",
+      "seat" : 1,
+      "version" : 93
+    },
+    {
+      "intent" : "choose:go",
+      "seat" : 0,
+      "version" : 94
+    },
+    {
+      "intent" : "play:6",
+      "seat" : 1,
+      "version" : 95
+    },
+    {
+      "intent" : "play:1",
+      "seat" : 0,
+      "version" : 96
+    },
+    {
+      "intent" : "play:10",
+      "seat" : 1,
+      "version" : 97
+    },
+    {
+      "intent" : "play:3",
+      "seat" : 0,
+      "version" : 98
+    },
+    {
+      "intent" : "discard:1",
+      "seat" : 0,
+      "version" : 99
+    },
+    {
+      "intent" : "discard:0",
+      "seat" : 0,
+      "version" : 100
+    },
+    {
+      "intent" : "discard:6",
+      "seat" : 1,
+      "version" : 101
+    },
+    {
+      "intent" : "discard:9",
+      "seat" : 1,
+      "version" : 102
+    },
+    {
+      "intent" : "play:3",
+      "seat" : 0,
+      "version" : 103
+    },
+    {
+      "intent" : "play:11",
+      "seat" : 1,
+      "version" : 104
+    },
+    {
+      "intent" : "play:2",
+      "seat" : 0,
+      "version" : 105
+    },
+    {
+      "intent" : "play:8",
+      "seat" : 1,
+      "version" : 106
+    },
+    {
+      "intent" : "play:4",
+      "seat" : 0,
+      "version" : 107
+    },
+    {
+      "intent" : "play:10",
+      "seat" : 1,
+      "version" : 108
+    },
+    {
+      "intent" : "play:5",
+      "seat" : 0,
+      "version" : 109
+    },
+    {
+      "intent" : "play:7",
+      "seat" : 1,
+      "version" : 110
+    },
+    {
+      "intent" : "discard:1",
+      "seat" : 0,
+      "version" : 111
+    },
+    {
+      "intent" : "discard:4",
+      "seat" : 0,
+      "version" : 112
+    },
+    {
+      "intent" : "discard:6",
+      "seat" : 1,
+      "version" : 113
+    },
+    {
+      "intent" : "discard:8",
+      "seat" : 1,
+      "version" : 114
+    },
+    {
+      "intent" : "play:10",
+      "seat" : 1,
+      "version" : 115
+    },
+    {
+      "intent" : "play:0",
+      "seat" : 0,
+      "version" : 116
+    },
+    {
+      "intent" : "play:9",
+      "seat" : 1,
+      "version" : 117
+    },
+    {
+      "intent" : "choose:go",
+      "seat" : 0,
+      "version" : 118
+    },
+    {
+      "intent" : "play:11",
+      "seat" : 1,
+      "version" : 119
+    },
+    {
+      "intent" : "play:7",
+      "seat" : 1,
+      "version" : 120
+    },
+    {
+      "intent" : "choose:go",
+      "seat" : 0,
+      "version" : 121
+    },
+    {
+      "intent" : "play:5",
+      "seat" : 0,
+      "version" : 122
+    },
+    {
+      "intent" : "play:3",
+      "seat" : 0,
+      "version" : 123
+    },
+    {
+      "intent" : "play:2",
+      "seat" : 0,
+      "version" : 124
+    },
+    {
+      "intent" : "discard:0",
+      "seat" : 0,
+      "version" : 125
+    },
+    {
+      "intent" : "discard:4",
+      "seat" : 0,
+      "version" : 126
+    },
+    {
+      "intent" : "discard:10",
+      "seat" : 1,
+      "version" : 127
+    },
+    {
+      "intent" : "discard:11",
+      "seat" : 1,
+      "version" : 128
+    },
+    {
+      "intent" : "play:3",
+      "seat" : 0,
+      "version" : 129
+    },
+    {
+      "intent" : "play:9",
+      "seat" : 1,
+      "version" : 130
+    },
+    {
+      "intent" : "play:5",
+      "seat" : 0,
+      "version" : 131
+    },
+    {
+      "intent" : "play:8",
+      "seat" : 1,
+      "version" : 132
+    },
+    {
+      "intent" : "play:2",
+      "seat" : 0,
+      "version" : 133
+    },
+    {
+      "intent" : "choose:go",
+      "seat" : 1,
+      "version" : 134
+    },
+    {
+      "intent" : "choose:go",
+      "seat" : 0,
+      "version" : 135
+    },
+    {
+      "intent" : "play:7",
+      "seat" : 1,
+      "version" : 136
+    },
+    {
+      "intent" : "play:1",
+      "seat" : 0,
+      "version" : 137
+    },
+    {
+      "intent" : "play:6",
+      "seat" : 1,
+      "version" : 138
+    },
+    {
+      "intent" : "discard:0",
+      "seat" : 0,
+      "version" : 139
+    },
+    {
+      "intent" : "discard:4",
+      "seat" : 0,
+      "version" : 140
+    },
+    {
+      "intent" : "discard:6",
+      "seat" : 1,
+      "version" : 141
+    },
+    {
+      "intent" : "discard:7",
+      "seat" : 1,
+      "version" : 142
+    },
+    {
+      "intent" : "play:9",
+      "seat" : 1,
+      "version" : 143
+    },
+    {
+      "intent" : "play:2",
+      "seat" : 0,
+      "version" : 144
+    },
+    {
+      "intent" : "play:11",
+      "seat" : 1,
+      "version" : 145
+    },
+    {
+      "intent" : "play:5",
+      "seat" : 0,
+      "version" : 146
+    },
+    {
+      "intent" : "play:8",
+      "seat" : 1,
+      "version" : 147
+    },
+    {
+      "intent" : "choose:go",
+      "seat" : 0,
+      "version" : 148
+    },
+    {
+      "intent" : "play:10",
+      "seat" : 1,
+      "version" : 149
+    },
+    {
+      "intent" : "play:1",
+      "seat" : 0,
+      "version" : 150
+    },
+    {
+      "intent" : "play:3",
+      "seat" : 0,
+      "version" : 151
+    },
+    {
+      "intent" : "discard:5",
+      "seat" : 0,
+      "version" : 152
+    },
+    {
+      "intent" : "discard:3",
+      "seat" : 0,
+      "version" : 153
+    },
+    {
+      "intent" : "discard:9",
+      "seat" : 1,
+      "version" : 154
+    },
+    {
+      "intent" : "discard:6",
+      "seat" : 1,
+      "version" : 155
+    },
+    {
+      "intent" : "play:4",
+      "seat" : 0,
+      "version" : 156
+    },
+    {
+      "intent" : "play:7",
+      "seat" : 1,
+      "version" : 157
+    },
+    {
+      "intent" : "play:1",
+      "seat" : 0,
+      "version" : 158
+    },
+    {
+      "intent" : "play:11",
+      "seat" : 1,
+      "version" : 159
+    },
+    {
+      "intent" : "play:0",
+      "seat" : 0,
+      "version" : 160
+    },
+    {
+      "intent" : "play:10",
+      "seat" : 1,
+      "version" : 161
+    },
+    {
+      "intent" : "play:2",
+      "seat" : 0,
+      "version" : 162
+    },
+    {
+      "intent" : "play:8",
+      "seat" : 1,
+      "version" : 163
+    },
+    {
+      "intent" : "discard:3",
+      "seat" : 0,
+      "version" : 164
+    },
+    {
+      "intent" : "discard:4",
+      "seat" : 0,
+      "version" : 165
+    },
+    {
+      "intent" : "discard:11",
+      "seat" : 1,
+      "version" : 166
+    },
+    {
+      "intent" : "discard:10",
+      "seat" : 1,
+      "version" : 167
+    },
+    {
+      "intent" : "play:9",
+      "seat" : 1,
+      "version" : 168
+    },
+    {
+      "intent" : "play:0",
+      "seat" : 0,
+      "version" : 169
+    },
+    {
+      "intent" : "play:6",
+      "seat" : 1,
+      "version" : 170
+    },
+    {
+      "intent" : "play:1",
+      "seat" : 0,
+      "version" : 171
+    },
+    {
+      "intent" : "play:7",
+      "seat" : 1,
+      "version" : 172
+    },
+    {
+      "intent" : "play:2",
+      "seat" : 0,
+      "version" : 173
+    },
+    {
+      "intent" : "play:8",
+      "seat" : 1,
+      "version" : 174
+    },
+    {
+      "intent" : "play:5",
+      "seat" : 0,
+      "version" : 175
+    },
+    {
+      "intent" : "discard:5",
+      "seat" : 0,
+      "version" : 176
+    },
+    {
+      "intent" : "discard:3",
+      "seat" : 0,
+      "version" : 177
+    },
+    {
+      "intent" : "discard:8",
+      "seat" : 1,
+      "version" : 178
+    },
+    {
+      "intent" : "discard:7",
+      "seat" : 1,
+      "version" : 179
+    },
+    {
+      "intent" : "play:0",
+      "seat" : 0,
+      "version" : 180
+    },
+    {
+      "intent" : "play:11",
+      "seat" : 1,
+      "version" : 181
+    },
+    {
+      "intent" : "play:1",
+      "seat" : 0,
+      "version" : 182
+    },
+    {
+      "intent" : "play:9",
+      "seat" : 1,
+      "version" : 183
+    },
+    {
+      "intent" : "play:4",
+      "seat" : 0,
+      "version" : 184
+    }
+  ],
+  "finalStateHash" : "f89b1e3e9b36a60dd89f0448611e609e865793653a30f0a99f0bc666bc2f1697",
+  "format" : "parlor.replay\/1",
+  "rulesetHash" : "173972eb006bd203ff85832487efb68e55d0a85176b641b1491f7f28f8b84e8b",
+  "seatCount" : 2,
+  "seed" : 99
+}

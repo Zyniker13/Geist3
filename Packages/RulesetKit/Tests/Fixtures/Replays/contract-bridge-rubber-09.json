@@ -1,0 +1,204 @@
+{
+  "actions" : [
+    {
+      "intent" : "call:5D",
+      "seat" : 1,
+      "version" : 0
+    },
+    {
+      "intent" : "call:7NT",
+      "seat" : 2,
+      "version" : 1
+    },
+    {
+      "intent" : "call:pass",
+      "seat" : 3,
+      "version" : 2
+    },
+    {
+      "intent" : "call:pass",
+      "seat" : 0,
+      "version" : 3
+    },
+    {
+      "intent" : "call:pass",
+      "seat" : 1,
+      "version" : 4
+    },
+    {
+      "intent" : "play:43",
+      "seat" : 3,
+      "version" : 5
+    },
+    {
+      "intent" : "play:12",
+      "seat" : 2,
+      "version" : 6
+    },
+    {
+      "intent" : "play:17",
+      "seat" : 1,
+      "version" : 7
+    },
+    {
+      "intent" : "play:28",
+      "seat" : 2,
+      "version" : 8
+    },
+    {
+      "intent" : "claim:12",
+      "seat" : 2,
+      "version" : 9
+    },
+    {
+      "intent" : "acceptClaim:false",
+      "seat" : 1,
+      "version" : 10
+    },
+    {
+      "intent" : "claim:12",
+      "seat" : 2,
+      "version" : 11
+    },
+    {
+      "intent" : "acceptClaim:true",
+      "seat" : 1,
+      "version" : 12
+    },
+    {
+      "intent" : "acceptClaim:true",
+      "seat" : 3,
+      "version" : 13
+    },
+    {
+      "intent" : "call:2C",
+      "seat" : 2,
+      "version" : 14
+    },
+    {
+      "intent" : "call:4NT",
+      "seat" : 3,
+      "version" : 15
+    },
+    {
+      "intent" : "call:6NT",
+      "seat" : 0,
+      "version" : 16
+    },
+    {
+      "intent" : "call:pass",
+      "seat" : 1,
+      "version" : 17
+    },
+    {
+      "intent" : "call:7NT",
+      "seat" : 2,
+      "version" : 18
+    },
+    {
+      "intent" : "call:double",
+      "seat" : 3,
+      "version" : 19
+    },
+    {
+      "intent" : "call:pass",
+      "seat" : 0,
+      "version" : 20
+    },
+    {
+      "intent" : "call:pass",
+      "seat" : 1,
+      "version" : 21
+    },
+    {
+      "intent" : "call:redouble",
+      "seat" : 2,
+      "version" : 22
+    },
+    {
+      "intent" : "call:pass",
+      "seat" : 3,
+      "version" : 23
+    },
+    {
+      "intent" : "call:pass",
+      "seat" : 0,
+      "version" : 24
+    },
+    {
+      "intent" : "call:pass",
+      "seat" : 1,
+      "version" : 25
+    },
+    {
+      "intent" : "play:16",
+      "seat" : 1,
+      "version" : 26
+    },
+    {
+      "intent" : "play:37",
+      "seat" : 0,
+      "version" : 27
+    },
+    {
+      "intent" : "play:45",
+      "seat" : 3,
+      "version" : 28
+    },
+    {
+      "intent" : "play:8",
+      "seat" : 0,
+      "version" : 29
+    },
+    {
+      "intent" : "claim:12",
+      "seat" : 0,
+      "version" : 30
+    },
+    {
+      "intent" : "acceptClaim:false",
+      "seat" : 1,
+      "version" : 31
+    },
+    {
+      "intent" : "claim:12",
+      "seat" : 0,
+      "version" : 32
+    },
+    {
+      "intent" : "acceptClaim:false",
+      "seat" : 1,
+      "version" : 33
+    },
+    {
+      "intent" : "claim:12",
+      "seat" : 0,
+      "version" : 34
+    },
+    {
+      "intent" : "acceptClaim:false",
+      "seat" : 1,
+      "version" : 35
+    },
+    {
+      "intent" : "claim:12",
+      "seat" : 0,
+      "version" : 36
+    },
+    {
+      "intent" : "acceptClaim:true",
+      "seat" : 1,
+      "version" : 37
+    },
+    {
+      "intent" : "acceptClaim:true",
+      "seat" : 3,
+      "version" : 38
+    }
+  ],
+  "finalStateHash" : "4403f92393d51bd84402b1c6dc3466eed74e75bb37f366e628decd40b0802d86",
+  "format" : "parlor.replay\/1",
+  "rulesetHash" : "44d86a091419d2baa134262da884f21f4a36c5522545193df0640e81257acd7f",
+  "seatCount" : 4,
+  "seed" : 2024
+}

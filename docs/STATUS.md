@@ -819,3 +819,58 @@ All eight JSON rulesets are written and decode/validate; the 500-seed simulation
   suite's reach; the 100% rule-ID criterion is the binding one. The pairs
   royal / mid-show win / skunk scripts are queued for the P3.5–P3.7 polish
   pass rather than blocking P3.4.
+
+## P3.5 — Golden replays: generator, fixtures, cross-platform pass (2026-11-22, branch phase/P3-first-four-games)
+
+- **Generator:** `Packages/RulesetKit/GoldenGen/main.swift` (`RulesetKitGoldenGen`
+  executable target in `RulesetKit/Package.swift`) loads a ruleset via
+  `Schema.decodeRuleset` + `Resolver.resolve`, builds an engine via
+  `EngineBuilder.build`, deals `seatCount` players from a fixed seed (1–20 per
+  game; the deck shuffle is the engine's seeded deal, never host-shuffled), and
+  drives play with a seeded uniform random-legal bot. It records one action
+  entry per applied action (`seat`, `intent` encoding, `version` the action
+  applied against) and the terminal state's SHA-256, then **self-verifies** by
+  replaying the recorded list through `engine.replay` and failing on any hash
+  mismatch before writing. Fixture format: `parlor.replay/1`
+  (`rulesetHash` = the resolved ruleset's canonical hash; `seed`; `seatCount`;
+  `actions[]`; `finalStateHash`).
+- **Fixtures:** 80 committed files at
+  `Packages/RulesetKit/Tests/Fixtures/Replays/<game-slug>-NN.json` — 20 each
+  for hearts-standard, euchre-standard, contract-bridge-rubber,
+  cribbage-six-card. Action counts: hearts 552–860, euchre 166–268, bridge
+  ~60–90, cribbage 140–190.
+- **Test:** `GameReplayTests.swift` (Swift Testing, parameterized over the
+  four games) re-resolves the live ruleset, asserts the fixture's
+  `rulesetHash` equals `resolved.hash` (canonical hash, "identifies a game
+  everywhere" — ARCHITECTURE §10; note `engine.rulesetHash` is a separate
+  engine-configuration digest), replays the logged actions through a freshly
+  built engine, and compares the recomputed terminal hash with the fixture's
+  `finalStateHash`. Fixtures are located by a `#filePath`-anchored directory
+  walk, so the same files run under macOS `swift test` and the iOS simulator
+  sandbox.
+- **macOS evidence:** `swift test --filter GameReplayTests` (RulesetKit) →
+  `Test twentyGoldenReplaysMatch(game:) with 4 test cases passed after
+  6.532 seconds` — all 80 replays reproduce their recorded finalStateHash.
+- **iOS evidence:** `~/.hermes/bin/sim-lock xcodebuild test -scheme
+  RulesetKit-Package -destination 'platform=iOS Simulator,name=zGeist3_bot-iPhone-17'`
+  → `** TEST SUCCEEDED **`, `Test run with 214 tests in 24 suites passed`,
+  including `twentyGoldenReplaysMatch(game:) with 4 test cases passed after
+  7.296 seconds` — cross-platform hash match confirmed (CONVENTIONS §Gates:
+  "golden replays … 100% pass on iOS simulator, macOS, and Linux-free swift
+  test on macOS").
+- **CI wiring:** `make test-replays-ios` extended to run the RulesetKit
+  package suite after the existing RulesEngine leg (same simulator
+  destination); ci.yml already calls `make test-replays-ios`, so the four-game
+  replays are now in the CI iOS leg without touching the workflow file.
+- **Generator script:** `Tools/make-game-replays.sh` builds the GoldenGen
+  executable and regenerates the fixtures (default: the four base game stems);
+  re-running it after this commit produced byte-identical fixtures
+  (determinism check).
+- **CONFORMANCE:** `rules-cli conformance`'s golden-replay column now counts
+  the committed fixtures per game and prints `20 ok` for all four (previously
+  `0 (pending P3.5)`); trailing note updated. Regenerated `docs/CONFORMANCE.md`
+  — Hearts/Euchre/Bridge/Cribbage all `20 ok`.
+- `swift-format --in-place` applied to touched Swift files; `make lint` to be
+  re-run before commit.
+- Next: P3.6 redaction suites, then P3.7 dev play UI, then the G3 review
+  package (STATUS review-request section + HANDOFF refresh).

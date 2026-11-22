@@ -17,6 +17,12 @@ let package = Package(
             name: "RulesetKit",
             dependencies: ["CardExpr", "CardModel", .product(name: "RulesEngine", package: "RulesEngine")],
             path: "Sources"),
+        // Golden-replay generator for the four base games (P3.5); run via
+        // Tools/make-game-replays.sh.
+        .executableTarget(
+            name: "RulesetKitGoldenGen",
+            dependencies: ["RulesetKit", "CardModel", .product(name: "RulesEngine", package: "RulesEngine")],
+            path: "GoldenGen"),
         .testTarget(
             name: "RulesetKitTests",
             dependencies: ["RulesetKit", "CardModel", .product(name: "RulesEngine", package: "RulesEngine")],
