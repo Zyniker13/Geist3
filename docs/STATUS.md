@@ -874,3 +874,22 @@ All eight JSON rulesets are written and decode/validate; the 500-seed simulation
   re-run before commit.
 - Next: P3.6 redaction suites, then P3.7 dev play UI, then the G3 review
   package (STATUS review-request section + HANDOFF refresh).
+
+## P3.5 — make test-replays-ios full pass (2026-11-22, commit 120a595)
+
+- `make test-replays-ios` (both legs: RulesEngine + RulesetKit on
+  zGeist3_bot-iPhone-17) → `** TEST SUCCEEDED **`, exit 0. Both `p99`
+  PERF lines inside budget (apply 412 µs < 1 ms; observation 23 µs <
+  0.5 ms). Two earlier attempts failed only in the PRE-EXISTING
+  RulesEngine PerfTests leg on a cold simulator (apply 14.9 ms /
+  observation 5.5 ms vs thresholds 1 ms / 0.5 ms); a warm isolated
+  re-run passed (96 µs / 81 µs) and the third full run passed both
+  legs — cold-start flakiness, not a regression; no threshold change.
+- Merged origin/main (84d58d8: P0-era stub exit codes for fuzz-quick/
+  snapshot) into the branch; conflict resolved keeping the real
+  conformance runner AND the stub exits. `rules-cli conformance`,
+  `fuzz-quick`, `snapshot` all verified post-merge.
+- Pushed 120a595; CI run on 120a595 in progress at write time.
+- Next: P3.6 redaction suites (2000-game property tests per game:
+  Hearts pass knowledge, Euchre up-card/discard, bridge dummy
+  before/after opening lead, cribbage crib before the show).
