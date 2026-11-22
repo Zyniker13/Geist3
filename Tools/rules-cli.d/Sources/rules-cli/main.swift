@@ -282,7 +282,7 @@ func simulate(_ urls: [URL], seeds: Int, firstSeed: UInt64, quiet: Bool) -> Int 
 
 let args = Array(CommandLine.arguments.dropFirst())
 guard let command = args.first else {
-    print("usage: rules-cli validate [--corpus DIR] [FILE...] | fmt [--write] FILE...")
+    print("usage: rules-cli validate [--corpus DIR] [FILE...] | fmt [--write] FILE... | conformance [--check]")
     exit(2)
 }
 let rest = Array(args.dropFirst())
@@ -378,9 +378,13 @@ case "schema":
     }
     exit(Int32(runSchema(out: out, check: check)))
 case "conformance":
-    // The conformance runner lands with P3 (recorded engine sessions).
-    print("'conformance' arrives with P3.")
-    exit(0)
+    var check = false
+    for arg in rest where arg == "--check" { check = true }
+    if !rest.isEmpty && !check {
+        print("usage: rules-cli conformance [--check]")
+        exit(2)
+    }
+    exit(Int32(runConformance(check: check)))
 case "fuzz-quick":
     // Fuzz harness lands with P8.
     print("'fuzz-quick' arrives with P8.")
