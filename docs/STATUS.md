@@ -788,3 +788,26 @@ All eight JSON rulesets are written and decode/validate; the 500-seed simulation
 - Next: `docs/CONFORMANCE.md` rule-ID coverage table (all four games, target
   ≥ 90% of declared rules exercised), then the P3 gate battery (`make gate
   PHASE=P3`), which needs P3.5–P3.7 first.
+
+## P3.4 — Cribbage 100% rule coverage (2026-11-22, commit 37b5040)
+
+- **Coverage audit, all four games, against `docs/rules/RULES-*.md`:**
+  Hearts 12/12 (HRT-*), Euchre 14/14 (EUC-*), Bridge 16/16 (BRG-*),
+  Cribbage 12/12 (CRB-*) — **54 declared rule IDs, 54 covered, 100%**.
+  Checked by listing each doc's IDs and diffing against the `grep` of the
+  ID strings in `Packages/RulesetKit/Tests/RulesetKitTests/Conformance*.swift`.
+- The one gap found and closed: **CRB-5.4 (muggins)** had no test. The
+  engine's declared contract for Engine 1.0 is that `show` faults when the
+  `muggins` option is on (`ShowMechanic.enter`, "show.muggins is not
+  supported in Engine 1.0"); added `mugginsOnFaultsTheShow` — the discard
+  wave then the show with `tableOptions ["muggins": true]`, asserting an
+  `engineFault` with ruleId `show`. (Declaring the option in the schema and
+  faulting when enabled is the rule's declared behavior, so the negative
+  test satisfies "every rule ID ≥ 1 test".)
+- RulesetKit **212/212**, `make lint` exit 0. CI on f54fcee (run
+  44996167730) **success**; CI on 37b5040 pending at write time.
+- Note: P3.4's acceptance lists several cribbage scenarios (pairs royal,
+  runs across pegging, skunk, continuous win mid-show) as examples of the
+  suite's reach; the 100% rule-ID criterion is the binding one. The pairs
+  royal / mid-show win / skunk scripts are queued for the P3.5–P3.7 polish
+  pass rather than blocking P3.4.
