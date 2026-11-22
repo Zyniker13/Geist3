@@ -753,3 +753,8 @@ All eight JSON rulesets are written and decode/validate; the 500-seed simulation
 - `make lint` exit 0; RulesetKit suite **202/202** (incl. Hearts 14, Euchre 13, Bridge
   18); RulesEngine suite green.
 - Next: Cribbage conformance suite, then coverage re-check toward the 90% line.
+- CI on phase/P3-first-four-games: run 44980095945 FAILED at coverage — SILGenCleanup
+  crash in `followerWithSuitCannotDiscard` under the coverage-instrumented build (the
+  same Xcode 26.6 typed-catch crash the harness documents); fixed by the harness's
+  untyped-catch + body-downcast pattern (commit 8003645). Re-run 44982527490 **success**
+  on 8003645 (build-test-lint incl. `make coverage`).
