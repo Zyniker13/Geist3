@@ -457,6 +457,42 @@ struct ConformanceCribbage {
         #expect(state.winners.isEmpty)
     }
 
+    // MARK: CRB-5.4 — muggins is declared but not supported
+
+    /// The `muggins` option is carried by the schema and wired to the
+    /// show mechanic, which faults when it is on (Engine 1.0 limit,
+    /// CRB-5.4's declared scope). A negative conformance test pins that
+    /// contract: with muggins on, entering the show throws the
+    /// engine fault instead of silently ignoring the option.
+    @Test func mugginsOnFaultsTheShow() throws {
+        let (engine, start) = try Self.started(options: ["muggins": JSON.bool(true)])
+        var state = start
+        for (seat, faces) in [(0, ["AC", "KC"]), (1, ["8C", "7C"])] {
+            for face in faces {
+                state = try engine.apply(
+                    Action(
+                        seat: Seat(seat), intent: .discard([Self.card(face, in: state, seat)]),
+                        expectedVersion: state.version),
+                    to: state
+                ).state
+            }
+        }
+        // The pegged helper's wave ends both hands → the show enters.
+        do {
+            _ = try Self.peggedState(engine, state)
+            Issue.record("show with muggins on was accepted")
+        } catch {
+            // Untyped catch + downcast: typed-catch bindings crash the CI
+            // coverage build's SILGenCleanup pass (see ConformanceHarness).
+            let violation = error as? RuleViolation
+            guard case .engineFault(let ruleId, _)? = violation else {
+                Issue.record("expected an engine fault, got \(violation)")
+                return
+            }
+            #expect(ruleId == "show")
+        }
+    }
+
     // MARK: helper re-derivation guard
 
     /// The pegging wave's per-play points, asserted through the engine's
