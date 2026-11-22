@@ -429,7 +429,14 @@ struct ConformanceBridge {
                     expectedVersion: voidPlay.version),
                 to: voidPlay)
             Issue.record("BRG-4.1 did not reject the off-suit play")
-        } catch RulesEngine.RuleViolation.illegal(let ruleId, _) {
+        } catch {
+            // Untyped catch + body downcast: Swift 6.3.3's SILGenCleanup
+            // crashes on a typed-catch enum-pattern binding (the same
+            // Xcode 26.6 crash documented in ConformanceHarness).
+            guard case .illegal(let ruleId, _) = error as RulesEngine.RuleViolation else {
+                Issue.record("expected a RuleViolation, got \(error)")
+                return
+            }
             #expect(ruleId == "BRG-4.1")
         }
     }
