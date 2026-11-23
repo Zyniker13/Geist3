@@ -956,3 +956,51 @@ All eight JSON rulesets are written and decode/validate; the 500-seed simulation
   actions + finalStateHash.
 - Next: full `make test` pass on the working tree, iOS leg
   (test-replays-ios), then commit P3.6 and move to P3.7.
+
+## P3.7 — dev play UI: acceptance green on all four games (2026-11-23, commit c43598f, branch phase/P3-first-four-games)
+
+- **Deliverable** (ROADMAP P3.7): plain SwiftUI screen running any
+  ruleset pass-and-play: `PlaySession` (human seat acts, random-legal
+  bots for the rest, seeded — same deal every run), `DevPlayView` with
+  event log, observation zones, legal intents as `intent_N` buttons,
+  violation text for illegal taps; `ParlorApp` launcher listing the four
+  base stems; rulesets bundled via a folder reference in project.yml.
+- **Two hang bugs found and fixed** (both reproduced headless first):
+  1. Engine: `TrickPlayMechanic.pendingSeats` advertised every claim
+     voter as pending — a voter that had already voted has empty
+     legalIntents, parking a bot lane forever (bridge stalled in play
+     on every seed; DevSessionBotLaneTests now guards this). Fix:
+     pending = un-voted voters; regression test
+     `pendingClaimWaitsOnlyOnUnvotedVoters` (TrickPlayV2Tests) added;
+     canned runtime got the `['S2', 'S3']` list.
+  2. App: `PlaySession.init` never ran the bot lane after `start`, so
+     an opening bots-only phase (euchre auction, left of dealer) showed
+     "Waiting…" forever until the human's first action. Fix: `runBots()`
+     at init.
+- **Acceptance evidence** — `xcodebuild test -only-testing:
+  Parlor-iOS-UITests/DevPlayUITests`, iPad simulator
+  zGeist3_bot-iPad-Pro-13: `DevPlayUITests/
+  testPlaysOneFullDealOfEachGame` **passed (112.534 s)**, TEST
+  SUCCEEDED (exit=0). Taps in the log: hearts at t=5.9 s, euchre at
+  50.2 s (≈16 intent_0 taps), bridge at 68.8 s, cribbage at 89.7 s;
+  final dealsCounter check holds (4 deals completed). Log:
+  $TMPDIR/p37-devtest10.log (session-local, not committed).
+- **Headless replica**: Packages/RulesetKit/Tests/
+  RulesetKitTests/DevSessionBotLaneTests.swift — the session bot lane
+  plays one full deal per base game; euchre across seeds 1–64, no
+  stalls. Swift Testing: RulesEngine 133 tests passed (12.4 s),
+  RulesetKit 222 tests passed (526 s, incl. the new suite).
+- **App build**: Parlor-iOS BUILD SUCCEEDED on zGeist3_bot-iPhone-17
+  (p37-build6.log) after the fixes.
+- **Screenshots** (docs/screenshots/, XCTAttachment exports from
+  ScreenshotUITests, all four verified by vision as real mid-deal
+  states with legal-move buttons visible): p37-dev-hearts.png (trick
+  JS 7S 4S in progress, 4 Play buttons), p37-dev-euchre.png (trick QH
+  AS, kitty + taken piles), p37-dev-bridge.png (16-card trick pile, a
+  pending claim with Accept/Reject buttons), p37-dev-cribbage.png
+  (pegging phase, starter 6H, crib, Play #4/#5).
+- Note: earlier probe/test artifacts (probe tree dumps, devtest2/6/7/8/9
+  logs) were debugging only; the committed UITests/ScreenshotUITests is
+  the four-screenshot evidence helper.
+- Next: P3.8 review package (HANDOFF + G3-REQUEST), then G3 stop.
+
