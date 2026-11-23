@@ -893,3 +893,66 @@ All eight JSON rulesets are written and decode/validate; the 500-seed simulation
 - Next: P3.6 redaction suites (2000-game property tests per game:
   Hearts pass knowledge, Euchre up-card/discard, bridge dummy
   before/after opening lead, cribbage crib before the show).
+
+## P3.6 — redaction suites: driver + first leak found and fixed (2026-11-23, in progress)
+
+- New `Packages/RulesetKit/Tests/RulesetKitTests/RedactionGameSuites.swift`:
+  generic driver (`run`) plays 2,000 seeded random-legal deals per game,
+  sharded across a TaskGroup (deal keyed only by seed ⇒ deterministic);
+  after every step it byte-scans the encoded `Observation` of every viewer
+  (four seats + table + spectator) for forbidden faces derived from the
+  knowledge store (ADR-0038), and runs a game-specific structure probe
+  (hearts passOut knowledge; euchre kitty/discard; bridge dummy timeline;
+  cribbage crib-before-show). Stop-at-first-failure per shard; failures
+  collected and asserted empty.
+- First euchre run surfaced real leaks (2,447 s single-threaded; sharded
+  repro runs in ~2 s). Diagnosis: `lastEvents` survives the deal boundary
+  — the automatic advance that ends deal N and deals deal N+1 keeps deal
+  N's `.cardPlayed`/`.trickWon` events, redacted against deal N+1's wiped
+  and refilled knowledge store, where the reassigned CardIDs name hidden
+  hand cards (face from deal N rides an ID that deal N+1 reassigns).
+- Fix 1 (`Observation.swift`): `.cardPlayed` now filters through
+  `Redactor.maySee` like every other card-carrying event (it previously
+  passed the face through unfiltered); hidden form keeps the seat, drops
+  the face. Fix 2 (`Engine+Match.swift` + `GameState` + `Engine.swift`):
+  event-log deal boundary — `finishDeal`/`redealDeal` record
+  `firstDealEvent` (events buffered before the boundary are stale);
+  `applyUnchecked` maintains the offset through the suffix trim;
+  `observation` drops the stale prefix before redacting. `firstDealEvent`
+  is engine bookkeeping: excluded from hash/equality/coding (golden
+  replays unaffected).
+- euchreRedaction: 2,000 deals, 0 leaks, 297.957 s (macOS). hearts/
+  bridge/cribbage runs and the iOS leg pending; delete temporary
+  euchreLeakRepro before commit; STATUS evidence to follow at suite
+  completion.
+
+## P3.6 — redaction suites: all four games green (2026-11-23)
+
+- Temporary diagnostics (`euchreLeakRepro`, `bridgeLeakRepro`) deleted
+  from RedactionGameSuites.swift after root-causing; the committed file
+  is the driver + probes + four suites only.
+- Bridge "4,033 failures" were a scan artifact, not a leak: the early
+  whole-JSON `contains` scan collided with auction bid strings ("7C",
+  "5D" are legal calls). The field-wise scan (zone payloads + card-
+  carrying event payloads only) finds zero leaks; verified by driving
+  the suite's exact scan over seeds 0/1169 across 12 steps.
+- Cribbage probe: pre-show crib cards are known to at most one seat
+  (the contributor — attribution to *which* contributor is not
+  recoverable post-hoc, so the count is the invariant); a `done` deal
+  may leave crib entries unrevealed because CRB-6.1 ends the match
+  mid-show when the target is pegged — correct play, not a leak.
+- Combined run (one process, all six tests):
+  `swift test --filter RedactionGameSuites` (RulesetKit) —
+  **6 tests passed, 559.3 s, exit=0**; heartsRedaction 412.3 s,
+  euchreRedaction 559.3 s, bridgeRedaction 16.5 s (separate run),
+  cribbageRedaction 48.3 s (separate run). Deals: 2,000 per game,
+  byte-scan checks > 100,000 per suite.
+- Engine delta vs c36dc7b: GameState.firstDealEvent (+12), deal-boundary
+  marking in Engine+Match (+18), suffix-trim offset maintenance +
+  observation prefix drop in Engine (+18/-2), .cardPlayed maySee filter
+  in Observation (+14). Comment corrected: firstDealEvent is excluded
+  from hash/equality; it IS serialized by the synthesized Codable, but
+  nothing in-repo persists GameState JSON and golden replays store only
+  actions + finalStateHash.
+- Next: full `make test` pass on the working tree, iOS leg
+  (test-replays-ios), then commit P3.6 and move to P3.7.
