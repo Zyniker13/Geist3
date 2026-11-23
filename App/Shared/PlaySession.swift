@@ -49,7 +49,8 @@ public final class PlaySession: ObservableObject {
         self.engine = engine
         self.rulesetName = ruleset.document.id
         self.humanSeat = humanSeat
-        self.seatNames = engine.seatNames.isEmpty
+        self.seatNames =
+            engine.seatNames.isEmpty
             ? (0..<engine.seatCount).map { "S\($0 + 1)" }
             : engine.seatNames
         let start = try engine.start(seed: seed)
@@ -116,10 +117,11 @@ public final class PlaySession: ObservableObject {
             let pick = legal[botRNG.below(legal.count)]
             // A bot only plays legal intents, so this cannot throw; if the
             // engine disagrees the match stops advancing rather than looping.
-            guard let transition = try? engine.apply(
-                Action(seat: seat, intent: pick, expectedVersion: state.version),
-                to: state
-            )
+            guard
+                let transition = try? engine.apply(
+                    Action(seat: seat, intent: pick, expectedVersion: state.version),
+                    to: state
+                )
             else { break }
             state = transition.state
         }

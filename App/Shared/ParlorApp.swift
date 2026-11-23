@@ -1,6 +1,6 @@
+import CardModel
 // Schema/Resolver are HostOnly SPI: the app is a host process (see PlaySession).
 @_spi(HostOnly) import RulesetKit
-import CardModel
 import SwiftUI
 
 /// Parlor app entry point, shared by the iOS and macOS targets (P0.2).
@@ -64,9 +64,10 @@ struct LauncherView: View {
     /// `Resources/Rulesets` as a folder reference, so files live under
     /// `Rulesets/` inside the bundle.
     static func resolve(_ name: String) -> ResolvedRuleset? {
-        let url = Bundle.main.url(
-            forResource: name, withExtension: "ruleset.json",
-            subdirectory: "Rulesets")
+        let url =
+            Bundle.main.url(
+                forResource: name, withExtension: "ruleset.json",
+                subdirectory: "Rulesets")
             ?? Bundle.main.url(forResource: name, withExtension: "ruleset.json")
         guard let url else { return nil }
         guard let text = try? String(contentsOf: url, encoding: .utf8) else { return nil }

@@ -104,8 +104,15 @@ final class DevPlayModel: ObservableObject {
     let session: PlaySession
     @Published private(set) var revision = 0
 
+    /// Throws only for a ruleset that fails to build or start; the dev
+    /// launcher only hands over validated stems, so failure here is a bug,
+    /// not a user-input case — but no force-try (lint policy).
     init(ruleset: ResolvedRuleset, seed: UInt64, humanSeat: Seat) {
-        session = try! PlaySession(ruleset: ruleset, seed: seed, humanSeat: humanSeat)
+        do {
+            session = try PlaySession(ruleset: ruleset, seed: seed, humanSeat: humanSeat)
+        } catch {
+            fatalError("DevPlayModel: ruleset \(ruleset.document.id) failed to start: \(error)")
+        }
     }
 
     init(session: PlaySession) {

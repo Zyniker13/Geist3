@@ -1,8 +1,8 @@
 import CardModel
+import Foundation
 import RulesEngine
 @_spi(HostOnly) import RulesEngine
 @_spi(HostOnly) import RulesetKit
-import Foundation
 import Testing
 
 /// P3.7 debugging: the dev play session's exact algorithm — a fixed human
@@ -15,11 +15,11 @@ struct DevSessionBotLaneTests {
     /// is five levels up.
     func resolvedRuleset(_ id: String) throws -> ResolvedRuleset {
         let root = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent() // RulesetKitTests
-            .deletingLastPathComponent() // Tests
-            .deletingLastPathComponent() // RulesetKit
-            .deletingLastPathComponent() // Packages
-            .deletingLastPathComponent() // repo root
+            .deletingLastPathComponent()  // RulesetKitTests
+            .deletingLastPathComponent()  // Tests
+            .deletingLastPathComponent()  // RulesetKit
+            .deletingLastPathComponent()  // Packages
+            .deletingLastPathComponent()  // repo root
         let url = root.appendingPathComponent("Resources/Rulesets/\(id).ruleset.json")
         let text = try String(contentsOf: url, encoding: .utf8)
         let document = try RulesetDocument(json: try JSONParser.parse(text), path: "$")
@@ -43,7 +43,8 @@ struct DevSessionBotLaneTests {
         while !state.matchOver && actions < cap {
             var progressed = false
             if engine.pendingSeats(in: state).contains(human),
-                let intent = engine.legalIntents(for: human, in: state).first {
+                let intent = engine.legalIntents(for: human, in: state).first
+            {
                 let t = try engine.apply(
                     Action(seat: human, intent: intent, expectedVersion: state.version),
                     to: state)
@@ -60,15 +61,20 @@ struct DevSessionBotLaneTests {
                     let desc = pending.map { "S\($0.raw)" }.joined(separator: ",")
                     return (
                         state, actions, true, state.phase.phaseID,
-                        "empty-legals for S\(seat.raw); pending=[\(desc)] opts=\(state.phaseOptions)") }
+                        "empty-legals for S\(seat.raw); pending=[\(desc)] opts=\(state.phaseOptions)"
+                    )
+                }
                 let pick = legal[botRNG.below(legal.count)]
-                guard let t = try? engine.apply(
-                    Action(seat: seat, intent: pick, expectedVersion: state.version),
-                    to: state)
+                guard
+                    let t = try? engine.apply(
+                        Action(seat: seat, intent: pick, expectedVersion: state.version),
+                        to: state)
                 else {
                     return (
                         state, actions, true, state.phase.phaseID,
-                        "apply threw for S\(seat.raw)") }
+                        "apply threw for S\(seat.raw)"
+                    )
+                }
                 state = t.state
                 progressed = true
             }
@@ -77,7 +83,8 @@ struct DevSessionBotLaneTests {
                     .map { "S\($0.raw)" }.joined(separator: ",")
                 return (
                     state, actions, true, state.phase.phaseID,
-                    "no-progress: pending=[\(pend)] opts=\(state.phaseOptions)")
+                    "no-progress: pending=[\(pend)] opts=\(state.phaseOptions)"
+                )
             }
         }
         return (state, actions, false, state.phase.phaseID, "")
@@ -89,7 +96,10 @@ struct DevSessionBotLaneTests {
         var debug = ""
         for seed: UInt64 in 1...64 {
             let (_, _, stalled, phase, d) = try playSessionLike(ruleset, seed: seed)
-            if stalled { stalledSeeds.append(seed); debug = "phase=\(phase ?? "-") \(d)" }
+            if stalled {
+                stalledSeeds.append(seed)
+                debug = "phase=\(phase ?? "-") \(d)"
+            }
         }
         #expect(stalledSeeds.isEmpty, "euchre stalls on seeds \(stalledSeeds): \(debug)")
     }

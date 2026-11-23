@@ -3,13 +3,15 @@ DEVELOPER_DIR ?= /Applications/Xcode.app/Contents/Developer
 export DEVELOPER_DIR
 PROJECT := Parlor.xcodeproj
 DERIVED_DATA := .build/xcode
-IOS_SIM ?= iPhone 17
-IPAD_SIM ?= iPad Pro 13-inch (M5)
+# Local bot devices take precedence (shared CoreSimulatorService: only
+# simulators named with this profile may be booted); CI runners have only
+# the stock devices and no sim-lock, so they keep the stock names.
+SIM_LOCK := $(shell test -x "$(HOME)/.hermes/bin/sim-lock" && echo "$(HOME)/.hermes/bin/sim-lock")
+SIM_LOCKED := $(if $(SIM_LOCK),1,0)
+IOS_SIM ?= $(if $(SIM_LOCKED),zGeist3_bot-iPhone-17,iPhone 17)
+IPAD_SIM ?= $(if $(SIM_LOCKED),zGeist3_bot-iPad-Pro-13,iPad Pro 13-inch (M5))
 PACKAGES := CardModel CardExpr RulesEngine RulesetKit GameLibrary CardAI Teaching TableNet TableUI Library A11yKit Persistence Platform
 COVERAGE_MIN ?= 90
-
-# Host-local simulator lock (no-op on CI where the lock does not exist).
-SIM_LOCK := $(shell test -x "$(HOME)/.hermes/bin/sim-lock" && echo "$(HOME)/.hermes/bin/sim-lock")
 
 .PHONY: help bootstrap gen build test test-packages test-packages-ios test-replays-ios test-apps lint format validate schema-check rules-check conformance sim fuzz-quick snapshot coverage coverage-check perf gate
 
@@ -156,6 +158,7 @@ gate:
 	@case "$(PHASE)" in \
 		P0|P1) $(MAKE) bootstrap lint test-packages coverage-check coverage conformance validate sim N=200 fuzz-quick snapshot build test-apps test-replays-ios ;; \
 		P2) $(MAKE) bootstrap lint test-packages coverage-check schema-check validate sim N=200 coverage fuzz-quick snapshot build test-apps test-replays-ios ;; \
+		P3) $(MAKE) bootstrap lint test-packages coverage-check schema-check rules-check validate conformance sim N=200 fuzz-quick snapshot build test-apps test-replays-ios ;; \
 		*) echo "gate: PHASE=$(PHASE) checks land with that phase" >&2; exit 1 ;; \
 	esac
 	@echo "gate: PHASE=$(PHASE) PASSED"

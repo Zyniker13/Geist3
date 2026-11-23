@@ -82,14 +82,15 @@ done
 
 # --- 3. @_spi(HostOnly) allow-list (ARCHITECTURE §3 SPI rule) --------------
 # Only RulesEngine (its tests), RulesetKit (simulator), TableNet (SessionHost),
-# Persistence (SaveStore), Tools/rules-cli, and test targets may write the
-# HostOnly SPI import of RulesEngine. Everywhere else fails.
+# Persistence (SaveStore), Tools/rules-cli, test targets, and the app's host
+# side (ADR-0039: PlaySession drives the engine like rules-cli does) may
+# write the HostOnly SPI import of RulesEngine. Everywhere else fails.
 while IFS= read -r f; do
     rel="${f#"$ROOT"/}"
     case "$rel" in
         Tools/check-imports.sh)
             ;;
-        Packages/RulesEngine/* | Packages/RulesetKit/* | Packages/TableNet/* | Packages/Persistence/* | Tools/rules-cli/* | Tools/rules-cli.d/* | *Tests/* | Tests/*)
+        Packages/RulesEngine/* | Packages/RulesetKit/* | Packages/TableNet/* | Packages/Persistence/* | Tools/rules-cli/* | Tools/rules-cli.d/* | *Tests/* | Tests/* | App/Shared/*)
             ;;
         *)
             violation "SPI: $rel uses @_spi(HostOnly) (not in the ARCHITECTURE §3 allow-list)"
