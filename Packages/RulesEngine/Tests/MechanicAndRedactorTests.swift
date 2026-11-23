@@ -318,12 +318,24 @@ struct RedactorUnitTests {
         } else {
             Issue.record("expected revealed event")
         }
-        // cardPlayed and non-card events pass through unchanged
+        // cardPlayed: the hidden form keeps the seat and blanks the face
+        // (§9.6: a cardPlayed the viewer may not see must not carry the
+        // face — suit AND rank are redacted so no byte of the face id
+        // leaks); public cards pass through unchanged.
+        let hiddenPlay = Redactor.redact(
+            .cardPlayed(seat: Seat(0), card: instance(2)),
+            viewer: .spectator, knowledge: ks)
+        if case .cardPlayed(let seat, let card) = hiddenPlay {
+            #expect(seat == Seat(0))
+            #expect(card.face.suit == nil && card.face.rank == Rank(""))
+        } else {
+            Issue.record("expected cardPlayed event")
+        }
         #expect(
             Redactor.redact(
-                .cardPlayed(seat: Seat(0), card: instance(2)),
+                .cardPlayed(seat: Seat(0), card: instance(1)),
                 viewer: .spectator, knowledge: ks)
-                == .cardPlayed(seat: Seat(0), card: instance(2)))
+                == .cardPlayed(seat: Seat(0), card: instance(1)))
         #expect(Redactor.redact(.dealEnded, viewer: .spectator, knowledge: ks) == .dealEnded)
     }
 
