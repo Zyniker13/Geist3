@@ -1004,3 +1004,30 @@ All eight JSON rulesets are written and decode/validate; the 500-seed simulation
   the four-screenshot evidence helper.
 - Next: P3.8 review package (HANDOFF + G3-REQUEST), then G3 stop.
 
+## G3 gate run — in progress; two infra fixes landed (2026-11-23, commits e57d648 + b3ac9dc)
+
+- First `make gate PHASE=P3` attempt failed at **lint** (force_try in the
+  new DevPlayModel; duplicate-import warnings in new files) — fixed, and
+  the P3 gate case was added to the Makefile with `rules-check` included.
+  ADR-0039 records the app host side joining the HostOnly SPI allow-list.
+- Second attempt failed at **coverage-check: RulesEngine 84.6% < 90%**.
+  Root cause is the measurement, not a coverage regression: the engine's
+  real exercisers live in the RulesetKit suites (conformance, redaction,
+  golden replays — ADR-0037), which coverage-check never included.
+  Merging the RulesetKit test binary's profdata measures RulesEngine at
+  **92.1%** (verified locally with the four-binary merge before changing
+  the target). `coverage-check` now runs RulesetKit with coverage and
+  passes all five specs to the report; RulesetKit itself is measured
+  against a 70% threshold (86.8% today; overall 89.1%).
+- CI on this branch failed for a Makefile reason (run 45243709233): the
+  `SIM_LOCKED=0` intermediate is truthy to GNU Make `$(if)`, so CI was
+  told to build against `zGeist3_bot-iPhone-17`. Fixed by gating
+  IOS_SIM/IPAD_SIM on `SIM_LOCK` directly; both branches verified by
+  HOME substitution (`/Users/runner` → stock names, local → bot names).
+  Everything before the build step in that run passed (lint, package
+  tests, coverage, conformance, validate, schema-check, sim, fuzz).
+- Next: re-run `make gate PHASE=P3` to completion locally; watch CI on
+  b3ac9dc. When green, paste the full gate evidence under `## G3`, then
+  P3.8 (HANDOFF + G3-REQUEST), then the G3 stop.
+
+
