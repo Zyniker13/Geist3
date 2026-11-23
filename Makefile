@@ -6,10 +6,12 @@ DERIVED_DATA := .build/xcode
 # Local bot devices take precedence (shared CoreSimulatorService: only
 # simulators named with this profile may be booted); CI runners have only
 # the stock devices and no sim-lock, so they keep the stock names.
+# NOTE: gate on SIM_LOCK directly — an intermediate SIM_LOCKED=0 string is
+# truthy to $(if …) and would select the bot devices on CI (regression seen
+# in CI run 45243709233).
 SIM_LOCK := $(shell test -x "$(HOME)/.hermes/bin/sim-lock" && echo "$(HOME)/.hermes/bin/sim-lock")
-SIM_LOCKED := $(if $(SIM_LOCK),1,0)
-IOS_SIM ?= $(if $(SIM_LOCKED),zGeist3_bot-iPhone-17,iPhone 17)
-IPAD_SIM ?= $(if $(SIM_LOCKED),zGeist3_bot-iPad-Pro-13,iPad Pro 13-inch (M5))
+IOS_SIM ?= $(if $(SIM_LOCK),zGeist3_bot-iPhone-17,iPhone 17)
+IPAD_SIM ?= $(if $(SIM_LOCK),zGeist3_bot-iPad-Pro-13,iPad Pro 13-inch (M5))
 PACKAGES := CardModel CardExpr RulesEngine RulesetKit GameLibrary CardAI Teaching TableNet TableUI Library A11yKit Persistence Platform
 COVERAGE_MIN ?= 90
 
@@ -130,7 +132,11 @@ coverage:
 	@echo "coverage: profraw files in reports/coverage/"
 
 # Threshold enforcement: >= 90% line coverage in CardModel and RulesEngine,
-# >= 95% in CardExpr (G2 requirement).
+# >= 95% in CardExpr (G2 requirement). The RulesetKit test binary is part of
+# the RulesEngine measurement: its conformance/redaction/replay suites are
+# the engine's real exercisers (ADR-0037), and without it RulesEngine
+# measures ~84% even though the merged truth is ~91% (regression caught at
+# the P3 gate — RulesEngine grew, its own package tests no longer cover it).
 coverage-check:
 	@mkdir -p reports/coverage
 	@set -e; \
@@ -143,7 +149,12 @@ coverage-check:
 		BIN="$$BUNDLE/Contents/MacOS/$$(basename "$$BUNDLE" .xctest)"; \
 		SPECS="$$SPECS $$BIN:$$PROF"; \
 	done; \
-	RESULT=$$(COVERAGE_THRESHOLDS="CardExpr=95" bash Tools/coverage-report.sh $$SPECS || true); \
+	echo "=== coverage RulesetKit (engine exerciser) ==="; \
+	swift test --package-path Packages/RulesetKit --enable-code-coverage --build-path ".build/coverage-RulesetKit" >/dev/null; \
+	RKPROF=".build/coverage-RulesetKit/out/Products/Debug/codecov/default.profdata"; \
+	RKBUNDLE=$$(find ".build/coverage-RulesetKit" -name '*Tests.xctest' -type d | head -1); \
+	RKBIN="$$RKBUNDLE/Contents/MacOS/$$(basename "$$RKBUNDLE" .xctest)"; \
+	RESULT=$$(COVERAGE_THRESHOLDS="CardExpr=95,CardModel=90,RulesEngine=90,RulesetKit=70" bash Tools/coverage-report.sh $$SPECS "$$RKBIN:$$RKPROF" || true); \
 	echo "$$RESULT" | tee reports/coverage/summary.txt; \
 	if echo "$$RESULT" | grep -q BELOW; then \
 		echo "coverage-check: FAILED (thresholds: CardModel/RulesEngine 90%, CardExpr 95%)" >&2; exit 1; \
