@@ -41,6 +41,20 @@ extension Engine {
         }
         state.zones = ZoneStore()
         state.knowledge = KnowledgeStore()
+        // §9.6: the event log is deal-scoped in effect. The previous deal's
+        // events reference CardIDs that the next deal reassigns, so a stale
+        // `.cardPlayed`/`.trickWon` redacted against the fresh knowledge
+        // store can name a face the viewer must not see (found by the P3.6
+        // euchre redaction suite). The buffer cannot simply be dropped
+        // here: the transition that ends the deal is still accumulating
+        // events, and applyUnchecked merges old-log + transition events at
+        // its end. Instead, mark the boundary: everything buffered so far
+        // (log + in-flight events) is stale, and the log itself is wiped —
+        // applyUnchecked then knows the first `firstDealEvent` entries of
+        // the merged array belong to the old deal and observation drops
+        // that prefix before redacting.
+        state.recentEvents = []
+        state.firstDealEvent = events.count
         // Phase options are deal-scoped mechanic scratch: §5.7 clears all
         // deal-scoped state, and a stale `done`/`taken:N` from the previous
         // deal would otherwise complete a phase before its action ran.
@@ -74,6 +88,10 @@ extension Engine {
         state.dealIndex += 1
         state.zones = ZoneStore()
         state.knowledge = KnowledgeStore()
+        // §9.6: mark the deal boundary for event redaction (see finishDeal —
+        // stale events name CardIDs the fresh deal reassigns).
+        state.recentEvents = []
+        state.firstDealEvent = events.count
         // Phase options are deal-scoped mechanic scratch: §5.7 clears all
         // deal-scoped state, and a stale `done`/`taken:N` from the previous
         // deal would otherwise complete a phase before its action ran.

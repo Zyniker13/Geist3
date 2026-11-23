@@ -465,7 +465,15 @@ public struct Engine: Sendable {
         try checkContinuousEnd(&state, &events)
         try advanceIfAutomatic(&state, &events)
         applyZoneEntryGrants(&state)  // ADR-0038: any transition that moved cards
-        state.recentEvents = (state.recentEvents + events).suffix(GameState.recentEventLimit).map { $0 }
+        let merged = state.recentEvents + events
+        let pre = merged.count
+        state.recentEvents = Array(merged.suffix(GameState.recentEventLimit))
+        // §9.6: the deal boundary shifts left by however many events the
+        // suffix trim dropped from the front, clamped at zero (a long
+        // current deal pushing its own prefix out of the window leaves no
+        // stale events at all).
+        let droppedFront = pre - state.recentEvents.count
+        state.firstDealEvent = max(0, state.firstDealEvent - droppedFront)
         return Transition(state: state, events: events)
     }
 
@@ -493,7 +501,13 @@ public struct Engine: Sendable {
             let observed = ObservedZone.redactCards(cards, key: key, viewer: viewer, knowledge: state.knowledge)
             zones[key.storageKey] = observed
         }
-        let events = state.recentEvents.map { Redactor.redact($0, viewer: viewer, knowledge: state.knowledge) }
+        // §9.6: events from before the last deal boundary name CardIDs the
+        // current deal has reassigned; redacting them against the current
+        // knowledge store would leak the wrong faces. Drop the stale
+        // prefix first (see GameState.firstDealEvent).
+        let dealEvents = state.recentEvents.dropFirst(
+            max(0, min(state.firstDealEvent, state.recentEvents.count)))
+        let events = dealEvents.map { Redactor.redact($0, viewer: viewer, knowledge: state.knowledge) }
         let legal: [ActionIntent]
         switch viewer {
         case .seat(let s):

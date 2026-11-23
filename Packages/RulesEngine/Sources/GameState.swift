@@ -31,6 +31,17 @@ public struct GameState: Codable, Hashable, Sendable {
     public var phase: PhaseCursor
     public var history: [LoggedAction]
     public var recentEvents: [GameEvent]
+    /// Index of the first event of the current deal inside `recentEvents`
+    /// (§9.6): events before it belong to the previous deal, whose card
+    /// IDs this deal has reassigned — redacting them against the current
+    /// knowledge store can name a face the viewer must not see. Event
+    /// redaction and observation therefore drop the stale prefix. The
+    /// index is maintained by the deal boundary (Engine+Match) and is
+    /// engine-internal bookkeeping, not rule state: it is excluded from
+    /// hashing and equality (it is a function of the event log and deal
+    /// count, not independent state) and nothing in-repo persists
+    /// GameState JSON.
+    public var firstDealEvent: Int
     public var version: UInt64
     /// Per-phase options set by mechanics (e.g., "passed_0", "passed_1").
     public var phaseOptions: [String: String]
@@ -64,6 +75,7 @@ public struct GameState: Codable, Hashable, Sendable {
         phase: PhaseCursor = PhaseCursor(phaseID: "setup"),
         history: [LoggedAction] = [],
         recentEvents: [GameEvent] = [],
+        firstDealEvent: Int = 0,
         version: UInt64 = 0,
         phaseOptions: [String: String] = [:],
         dealt: [Int: [CardInstance]] = [:],
@@ -81,6 +93,7 @@ public struct GameState: Codable, Hashable, Sendable {
         self.phase = phase
         self.history = history
         self.recentEvents = recentEvents
+        self.firstDealEvent = firstDealEvent
         self.version = version
         self.phaseOptions = phaseOptions
         self.dealt = dealt

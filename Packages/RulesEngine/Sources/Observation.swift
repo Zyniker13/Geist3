@@ -128,6 +128,26 @@ public enum Redactor {
             if case .seat(let s) = viewer, to == s || from == s { return .passed(from: from, to: to, cards: list) }
             return .passed(from: from, to: to, cards: cards(list))
         case .cardPlayed(let seat, let card):
+            // Played cards are normally public by the time they are
+            // observed (the trick zone's grant publishes them before the
+            // observation is built), but `lastEvents` survives a deal
+            // change: the automatic advance that ends deal N and deals N+1
+            // carries deal N's play events into a state whose knowledge
+            // store was wiped and refilled, where those card IDs now name
+            // hidden hand cards. Filter like every other card-carrying
+            // event (ADR-0038: the knowledge store is the single redaction
+            // authority); within a deal this changes nothing. The hidden
+            // form keeps the seat (who played is public) and drops the
+            // face (suit+rank), so no byte of the face ID can leak.
+            guard
+                maySee(
+                    card.id, viewer: viewer, knowledge: knowledge,
+                    publicCard: knowledge.isPublic(card.id))
+            else {
+                return .cardPlayed(
+                    seat: seat,
+                    card: CardInstance(id: card.id, face: CardFace(suit: nil, rank: Rank(""))))
+            }
             return .cardPlayed(seat: seat, card: card)
         case .trickWon(let seat, let list):
             return .trickWon(seat: seat, cards: cards(list))

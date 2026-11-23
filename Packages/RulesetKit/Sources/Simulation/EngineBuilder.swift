@@ -11,6 +11,10 @@ import CardModel
 @_spi(HostOnly) import RulesEngine
 
 @_spi(HostOnly)
+// swiftlint:disable type_body_length
+// (the builder enum is one linear assembly of document-to-Engine wiring;
+// its helpers carry the real logic and splitting the enum would break the
+// @_spi boundary organization.)
 public enum EngineBuilder {
     /// Builds an engine for `ruleset`. Throws `SimulationError` when the
     /// document uses something the simulator does not model yet.
@@ -22,6 +26,9 @@ public enum EngineBuilder {
     /// suites): when non-nil, the deal phase injects exactly these faces in
     /// dealing order and suppresses its shuffle; zones, vars, and
     /// first-dealer picking stay as the ruleset declares them.
+    // swiftlint:disable cyclomatic_complexity function_body_length
+    // (one linear assembly of builder inputs; splitting it would scatter
+    // the document-to-Engine wiring across helpers with no reuse.)
     @_spi(HostDealOverride)
     public static func build(from ruleset: ResolvedRuleset, dealOverride: [CardFace]?) throws -> Engine {
         let document = ruleset.document
@@ -194,6 +201,7 @@ public enum EngineBuilder {
             dealPhaseID: dealPhaseID, end: endSpec, rebuild: rebuild,
             dealerRotation: rotation, zoneVisibility: zoneVisibility)
     }
+    // swiftlint:enable cyclomatic_complexity function_body_length type_body_length
 
     // MARK: - deal
 
