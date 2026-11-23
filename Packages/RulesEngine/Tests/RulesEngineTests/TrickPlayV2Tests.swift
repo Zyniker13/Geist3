@@ -191,6 +191,33 @@ struct TrickPlayV2Tests {
         #expect(!legal0.isEmpty, "play resumes after a rejected claim")
     }
 
+    /// A voter that has already voted is no longer pending (regression: a
+    /// multi-voter claim advertised every voter as pending, and a bot lane
+    /// parked on a voted seat whose legalIntents are empty — the P3.7 UI
+    /// hang). While a claim is pending, only un-voted voters appear.
+    @Test static func pendingClaimWaitsOnlyOnUnvotedVoters() throws {
+        let engine = euchreEngine(
+            claims: TrickPlayParams.ClaimsSpec(
+                enabled: ExprRef(pointer: "/test/claims", source: "true"),
+                by: .seat(Seat(0)),
+                acceptedBy: ExprRef(pointer: "/test/claims/acceptedBy", source: "['S2', 'S3']"),
+                ruleId: "euch.claims"))
+        var state = try engine.start(seed: 7).state
+        state = try engine.apply(
+            Action(seat: Seat(0), intent: .claim(6), expectedVersion: state.version), to: state
+        ).state
+        // Both voters are pending before any vote.
+        var pending = engine.pendingSeats(in: state)
+        #expect(pending.contains(Seat(1)) && pending.contains(Seat(2)))
+        // Seat 1 votes accept; now only Seat 2 is pending.
+        state = try engine.apply(
+            Action(seat: Seat(1), intent: .acceptClaim(true), expectedVersion: state.version), to: state
+        ).state
+        pending = engine.pendingSeats(in: state)
+        #expect(!pending.contains(Seat(1)), "a voted seat is no longer pending")
+        #expect(pending.contains(Seat(2)), "the remaining voter is still pending")
+    }
+
     // MARK: - untilHandsEmpty completion
 
     /// A two-hand game with `untilHandsEmpty` completes when both hands

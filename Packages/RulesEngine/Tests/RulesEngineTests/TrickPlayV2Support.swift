@@ -102,6 +102,8 @@ extension TrickPlayV2Tests {
             return .list([.string("S2"), .string("S3"), .string("S4")])
         case "['S2']":
             return .list([.string("S2")])
+        case "['S2', 'S3']":
+            return .list([.string("S2"), .string("S3")])
         case "dealTrump":
             return .string("s")
         case "fixedS4":

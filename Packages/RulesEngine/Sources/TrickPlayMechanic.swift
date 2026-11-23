@@ -434,7 +434,13 @@ public enum TrickPlayMechanic: Mechanic {
 
     public static func pendingSeats(_ params: Params, state: GameState, ctx: EvalContext) -> SeatSet {
         let sub = state.trickSubstate()
-        if sub.pendingClaim != nil { return SeatSet(sub.claimVoters) }
+        // A pending claim waits on the voters who have NOT yet voted: a voter
+        // that already voted has empty legalIntents (its accept is consumed),
+        // so advertising it as pending would park a bot lane on a seat with
+        // nothing to do. legalIntents/applyAccept mirror exactly this set.
+        if sub.pendingClaim != nil {
+            return SeatSet(sub.claimVoters.filter { !sub.claimVotes.contains($0) })
+        }
         guard let turn = nextToAct(params, state: state, ctx: ctx) else { return SeatSet() }
         return SeatSet(actor(for: turn, sub: sub))
     }

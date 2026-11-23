@@ -47,6 +47,9 @@ targets:
     sources:
       - App/Shared
       - App/iOS
+      - path: Resources/Rulesets
+        type: folder
+        buildPhase: resources
     dependencies:
       - package: CardModel
       - package: CardExpr
@@ -68,12 +71,20 @@ targets:
         INFOPLIST_FILE: App/iOS/Info.plist
         GENERATE_INFOPLIST_FILE: YES
         TARGETED_DEVICE_FAMILY: "1,2"
+    scheme:
+      testTargets:
+        - Parlor-iOS-Tests
+        - Parlor-iOS-UITests
+      gatherCoverageData: false
   Parlor-macOS:
     type: application
     platform: macOS
     sources:
       - App/Shared
       - App/macOS
+      - path: Resources/Rulesets
+        type: folder
+        buildPhase: resources
     dependencies:
       - package: CardModel
       - package: CardExpr
