@@ -1,13 +1,18 @@
 # G3 Review Request — First Four Games (Hearts, Euchre, Bridge, Cribbage)
 
 Parlor P3 is complete and every automated check passes (`make gate PHASE=P3`
-exit 0 at commit `6fa7f41`; CI run 45300519846 green). This request asks three
+exit 0 at commit `6fa7f41`; CI green at branch head `7994ece` — run
+45654745210, every step success). This request asks three
 reviewers for the sign-offs ROADMAP.md blocks G3 on: `REVIEW: CLAUDE`,
 `REVIEW: GROK`, `REVIEW: MAHLER`. Record each verdict in `docs/STATUS.md`
 under `## G3 reviews` as `REVIEW: <name> — PASS` (or FAIL with findings);
 GLM resumes only when all three PASS entries exist.
 
-Branch: `phase/P3-first-four-games` · Head: `4245dfe` · Gate commit: `6fa7f41`
+Branch: `phase/P3-first-four-games` · Review head: `4245dfe` · Gate commit: `6fa7f41`
+
+Note: commits after `4245dfe` (up to `7994ece`) touch only test
+measurement, CI wiring and docs (ADR-0040, 0040a, 0041, 0042) — the
+engine, rulesets, rules documents and app are exactly as reviewed here.
 
 ---
 

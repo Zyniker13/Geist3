@@ -4,7 +4,7 @@ Purpose: the handoff package required at every 🛑 stop (`docs/plan/CONVENTIONS
 
 ## 1. State
 
-- **Last passed gate:** G2 (merged to `main`, tag `gate-G2-pass`). P3 work is on branch `phase/P3-first-four-games`, head `4245dfe` (gate evidence at `6fa7f41`, `docs/STATUS.md` §G3). CI green on the branch (run 45300519846, all steps).
+- **Last passed gate:** G2 (merged to `main`, tag `gate-G2-pass`). P3 work is on branch `phase/P3-first-four-games`, head `f91a63d` (gate evidence at `6fa7f41`, CI re-verified green at `7994ece` — run 45654745210, all steps; `docs/STATUS.md` §G3). Only test measurement, CI wiring and docs changed after `4245dfe` (ADR-0040, 0040a, 0041, 0042) — no engine, ruleset or app changes.
 - **How to build and run:**
   - Toolchain: Xcode 27.2 (`DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer`), xcodegen, SwiftLint 0.65.1, swift-format (see `docs/plan/CONVENTIONS.md` §7). `make bootstrap` verifies.
   - Regenerate the project after editing `project.yml`: `make gen`.
