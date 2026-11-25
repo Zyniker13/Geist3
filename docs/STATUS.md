@@ -1030,6 +1030,21 @@ All eight JSON rulesets are written and decode/validate; the 500-seed simulation
   b3ac9dc. When green, paste the full gate evidence under `## G3`, then
   P3.8 (HANDOFF + G3-REQUEST), then the G3 stop.
 
+## G3 CI saga RESOLVED (2026-11-25, run 45654745210 GREEN at 7994ece)
+
+Every step success on the branch head 7994ece (ADR-0042, ADR-0041,
+ADR-0040a): bootstrap, lint, Package tests with coverage, coverage
+threshold (summary from the single coverage pass), conformance,
+validate, schema, sim N=200, fuzz-quick, gen+build (warnings as
+errors), UI tests on iPhone/iPad, golden replays on the iOS simulator,
+snapshot. Conclusion **success** at 18:10 UTC. The three cancellations
+were the job-level `timeout-minutes: 120` (all died at ~2h05m), not a
+random reaper; ADR-0042 removed the double coverage pass and raised
+the limit to 180. ADR-0041 absorbs the UI cold-launch timeout;
+ADR-0040a the perf-ratio flake. The G3 automated-checks evidence below
+(6fa7f41 local + CI 45300519846) stands, now backed by a green branch
+head on CI.
+
 ## G3 CI saga, part 2 (2026-11-25) — flake #3 was NOT a code bug
 
 - Run 45569547433 (d7a2668): failed in **Package tests** —
