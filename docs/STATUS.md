@@ -1166,3 +1166,7 @@ MAHLER`.
   run 45675966753 at `69188fc` (the review-package-final STATUS commit) —
   every step success, 2026-11-25 20:33 UTC. The branch tip is CI-verified;
   the G3 stop stands.
+
+## G3 reviews
+
+REVIEW: CLAUDE — PASS (2026-11-25) — required before P4: R1, per-deal random CardID permutation (see docs/reviews/G3-CLAUDE.md); recommendations 1–5 in the same file.
