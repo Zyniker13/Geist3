@@ -63,7 +63,7 @@ Every ambiguity met during P0–P3 is logged in `docs/OPEN_QUESTIONS.md` (13 ent
 - **Conformance:** 54/54 rule IDs covered, `docs/CONFORMANCE.md` all pass, 20 golden replays per game all match.
 - **Redaction:** 0 leaks over 2,000 deals × 4 games (>100,000 byte-scan checks per suite).
 - **Simulation:** 8 rulesets × 500 seeds clean (P3.3); `make sim N=200` clean.
-- **Perf** (`docs/PERF.md`): apply p99 10.8 µs (budget 1 ms), observation p99 13.4 µs (budget 0.5 ms) on the host Mac; real-game/device numbers are P4.10.
+- **Perf** (`docs/PERF.md`): apply p99 10.8 µs (budget 1 ms), observation p99 13.4 µs (budget 0.5 ms) on the host Mac; the XCTest budgets scale ×5 on shared CI runners (ADR-0040 — run 45560935986 measured 597 µs on a throttled runner). Real-game/device numbers are P4.10.
 - **UI:** dev play full-deal UI test 110 s on iPad; app-launch smoke green on iPhone and iPad.
 - **Lint:** `make lint` exit 0 (SwiftLint warnings advisory; swift-format strict; check-imports OK).
 

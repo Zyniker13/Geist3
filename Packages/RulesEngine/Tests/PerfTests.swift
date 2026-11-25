@@ -64,6 +64,15 @@ final class PerfTests: XCTestCase {
         samples[(samples.count * 99) / 100]
     }
 
+    /// The budgets below are calibrated on the host Mac (docs/PERF.md).
+    /// Shared CI runners (8 GB, thermal-throttled) run the same code up to
+    /// ~5× slower, so the threshold is scaled there (ADR-0040): the gate
+    /// still catches real regressions on CI while not flaking on runner
+    /// noise; the strict host budget is enforced by every local run.
+    private var budgetScale: Int {
+        ProcessInfo.processInfo.environment["CI"] != nil ? 5 : 1
+    }
+
     /// p99 of `apply` must stay under 1 ms on this machine.
     func testApplyP99UnderOneMillisecond() throws {
         let (engine, state, seat) = try midDealState()
@@ -79,7 +88,8 @@ final class PerfTests: XCTestCase {
         }
         samples.sort()
         let p99 = p99Nanos(samples)
-        XCTAssertLessThan(p99, 1_000_000, "p99 apply = \(p99) ns (threshold 1_000_000 ns)")
+        let applyBudget = 1_000_000 * budgetScale
+        XCTAssertLessThan(p99, applyBudget, "p99 apply = \(p99) ns (threshold \(applyBudget) ns)")
         print("PERF: apply p99 = \(p99 / 1_000) µs (\(samples.count) samples)")
     }
 
@@ -94,7 +104,11 @@ final class PerfTests: XCTestCase {
         }
         samples.sort()
         let p99 = p99Nanos(samples)
-        XCTAssertLessThan(p99, 500_000, "p99 observation = \(p99) ns (threshold 500_000 ns)")
+        let observationBudget = 500_000 * budgetScale
+        XCTAssertLessThan(
+            p99, observationBudget,
+            "p99 observation = \(p99) ns (threshold \(observationBudget) ns)"
+        )
         print("PERF: observation p99 = \(p99 / 1_000) µs (\(samples.count) samples)")
     }
 }

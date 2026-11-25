@@ -8,3 +8,13 @@ Purpose: performance measurements against the budgets in `docs/plan/CONVENTIONS.
 | `Engine.observation` p99 (P1.8) | < 0.5 ms | **13.4 µs** (2,000 samples) | CI Mac (M-series, host) | macOS 27.2, Swift 6.4.2 -O debug tests | `a3c9f0d`+ | 2026-11-18 |
 
 XCTest `measure` steady-state agrees (~13 µs apply, ~15 µs observation). Toy game (10 cards, 2 seats) is the smallest workload; P4 records the same measurements on real games and devices. Source: `Packages/RulesEngine/Tests/PerfTests.swift`.
+
+## CI budget scaling (ADR-0040)
+
+The p99 budgets above are calibrated on the host Mac and enforced strictly
+by every local run (`PerfTests`, `make coverage` on this machine). On
+shared CI runners the same code can run ~5× slower under co-tenancy, so
+the XCTest budgets multiply by 5 when `CI` is set in the environment (run
+45560935986 flaked at 597 µs vs the 500 µs host budget). CI therefore
+guards against order-of-magnitude regressions; exact budgets are a
+local/P9 concern.

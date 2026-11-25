@@ -1077,3 +1077,24 @@ MAHLER`.
 
 
 
+
+## CI note — run 45560935986 FAILED (2026-11-25, commit dea2e18): CI-runner perf flake, fixed by ADR-0040
+
+- `make coverage` failed: RulesEngine's XCTest leg measured
+  **observation p99 = 597,791 ns > 500,000 ns** on the shared runner.
+  The Swift Testing leg (133 tests / 16 suites) passed in the same run;
+  the green run 45300519846 on the same tree measured **122 µs**
+  observation and 431 µs apply. Failure detail published on branch
+  `ci-failure-run-45560935986` (no crash reports; runner had 8 GB).
+- Root cause: absolute perf budgets calibrated on the host Mac do not
+  transfer to throttled shared runners — runner noise, not a regression.
+- Fix (this push): `budgetScale` (×5 when `CI` is set) in PerfTests;
+  ADR-0040; docs/PERF.md + HANDOFF notes. Local strict budgets
+  unchanged (verified: apply 13 µs, observation 50 µs pass with scale 1;
+  CI=1 run passes with scale 5).
+- Also: two cancelled runs (45318008716 on 4245dfe, 45321767093 on
+  e5c3daa) were retriggers; e5c3daa is the P3.8 review package
+  (docs/HANDOFF.md §10 rewrite + docs/reviews/G3-REQUEST.md).
+- Next: watch CI on this fix; when green, the G3 🛑 stop stands —
+  awaiting `REVIEW: CLAUDE`, `REVIEW: GROK`, `REVIEW: MAHLER` in this
+  file.
