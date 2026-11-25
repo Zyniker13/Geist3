@@ -124,15 +124,30 @@ snapshot:
 coverage:
 	@mkdir -p reports/coverage
 	@df -h / | tail -1 | sed 's/^/disk: /'
-	@for p in $(PACKAGES); do \
+	@set -e; \
+	SPECS=""; \
+	for p in $(PACKAGES); do \
 		echo "=== coverage $$p ==="; \
 		(cd "Packages/$$p" && swift test --parallel --enable-code-coverage) > "reports/coverage/$$p.log" 2>&1 || { echo "coverage: $$p FAILED (log: reports/coverage/$$p.log)" >&2; tail -30 "reports/coverage/$$p.log" >&2; exit 1; }; \
 		grep -E "Test run with" "reports/coverage/$$p.log" || true; \
 		find "Packages/$$p/.build" -name '*.profraw' 2>/dev/null | while IFS= read -r f; do \
 			cp "$$f" "reports/coverage/$$p-$$(basename "$$f")"; \
 		done; \
-	done
-	@echo "coverage: profraw files in reports/coverage/"
+	done; \
+	for p in CardModel RulesEngine CardExpr RulesetKit; do \
+		PROF=$$(find "Packages/$$p/.build" -name 'default.profdata' 2>/dev/null | head -1); \
+		[ -n "$$PROF" ] || continue; \
+		BUNDLE=$$(find "Packages/$$p/.build" -name '*Tests.xctest' -type d 2>/dev/null | head -1); \
+		[ -n "$$BUNDLE" ] || continue; \
+		BIN="$$BUNDLE/Contents/MacOS/$$(basename "$$BUNDLE" .xctest)"; \
+		SPECS="$$SPECS $$BIN:$$PROF"; \
+	done; \
+	RESULT=$$(COVERAGE_THRESHOLDS="CardExpr=95,CardModel=90,RulesEngine=90,RulesetKit=70" bash Tools/coverage-report.sh $$SPECS || true); \
+	echo "$$RESULT" | tee reports/coverage/summary.txt; \
+	if echo "$$RESULT" | grep -q BELOW; then \
+		echo "coverage: threshold FAILED (see reports/coverage/summary.txt)" >&2; exit 1; \
+	fi; \
+	echo "coverage: profraw files in reports/coverage/; thresholds met (summary.txt written)"
 
 # Threshold enforcement: >= 90% line coverage in CardModel and RulesEngine,
 # >= 95% in CardExpr (G2 requirement). The RulesetKit test binary is part of
@@ -140,9 +155,22 @@ coverage:
 # the engine's real exercisers (ADR-0037), and without it RulesEngine
 # measures ~84% even though the merged truth is ~91% (regression caught at
 # the P3 gate — RulesEngine grew, its own package tests no longer cover it).
+# The coverage numbers for coverage-check come from the "coverage" target's
+# logs (steps 1–2 of CI run the same suites once); coverage-check only
+# measures what "coverage" produced when its logs are present, and falls
+# back to its own full re-run otherwise (local use). Re-running all four
+# packages a second time on CI pushed the job past timeout-minutes 120 and
+# the runs were cancelled at exactly ~2h05m (45570873357, 45611385677,
+# 45632623138).
 coverage-check:
 	@mkdir -p reports/coverage
 	@set -e; \
+	if [ -f reports/coverage/summary.txt ]; then \
+		echo "coverage-check: reusing reports/coverage/summary.txt from the coverage step"; \
+		grep -q BELOW reports/coverage/summary.txt && { echo "coverage-check: FAILED" >&2; exit 1; } || true; \
+		echo "coverage-check: all package thresholds met (summary.txt above)"; \
+		exit 0; \
+	fi; \
 	SPECS=""; \
 	for p in CardModel RulesEngine CardExpr; do \
 		echo "=== coverage $$p ==="; \

@@ -18,7 +18,7 @@ jobs:
   ci:
     name: build-test-lint
     runs-on: macos-latest
-    timeout-minutes: 120
+    timeout-minutes: 180
     steps:
       - name: Checkout
         uses: actions/checkout@v4
