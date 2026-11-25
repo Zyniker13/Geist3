@@ -61,9 +61,12 @@ test-packages:
 		(cd "Packages/$$p" && swift test) || exit 1; \
 	done
 
+# UI-test legs wrap xcodebuild in Tools/xcodebuild-retry.sh: the runner's
+# cold app launch can exceed XCUIApplication's ~60 s ceiling under
+# co-tenancy (run 45589664158); the wrapper retries that one symptom once.
 test-apps:
-	$(SIM_LOCK) xcodebuild -project $(PROJECT) -scheme Parlor-iOS -destination 'platform=iOS Simulator,name=$(IOS_SIM)' -derivedDataPath $(DERIVED_DATA) test
-	$(SIM_LOCK) xcodebuild -project $(PROJECT) -scheme Parlor-iOS -destination 'platform=iOS Simulator,name=$(IPAD_SIM)' -derivedDataPath $(DERIVED_DATA) test
+	$(SIM_LOCK) Tools/xcodebuild-retry.sh xcodebuild -project $(PROJECT) -scheme Parlor-iOS -destination 'platform=iOS Simulator,name=$(IOS_SIM)' -derivedDataPath $(DERIVED_DATA) test
+	$(SIM_LOCK) Tools/xcodebuild-retry.sh xcodebuild -project $(PROJECT) -scheme Parlor-iOS -destination 'platform=iOS Simulator,name=$(IPAD_SIM)' -derivedDataPath $(DERIVED_DATA) test
 
 # Package unit tests on the iOS simulator (package schemes via xcodebuild).
 test-packages-ios:
