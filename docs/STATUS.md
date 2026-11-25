@@ -1170,3 +1170,7 @@ MAHLER`.
 ## G3 reviews
 
 REVIEW: CLAUDE — PASS (2026-11-25) — required before P4: R1, per-deal random CardID permutation (see docs/reviews/G3-CLAUDE.md); recommendations 1–5 in the same file.
+
+REVIEW: GROK — PASS (2026-11-25) — required in P4.0 before the rules are treated as signed: G-R1 euchre trumps do not win the trick, G-R2 cribbage pegging pairs and runs, G-R3 rubber honors scored per partnership instead of per hand, G-R4 cribbage starter cut can leave one card below, G-R5 Chicago scoring and dealer do not match BRG-C.1 (see docs/reviews/G3-GROK.md). Recommendations 1–7 in the same file. Agrees Claude R1 is also a Hearts/Cribbage information-rule defect.
+
+Reviewed-by: GROK, 2026-11-25, PASS
