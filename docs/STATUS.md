@@ -1030,6 +1030,36 @@ All eight JSON rulesets are written and decode/validate; the 500-seed simulation
   b3ac9dc. When green, paste the full gate evidence under `## G3`, then
   P3.8 (HANDOFF + G3-REQUEST), then the G3 stop.
 
+## G3 CI saga, part 2 (2026-11-25) — flake #3 was NOT a code bug
+
+- Run 45569547433 (d7a2668): failed in **Package tests** —
+  CardExpr `parseTimeIsLinear` ratio upper bound (46.9 ms vs 45.3 ms,
+  co-tenancy inflated the large parse past the tight 1.5–10× ceiling).
+  Fixed by ADR-0040a (min-of-3 sampling, ×100 CI ceiling on the
+  superlinear bound; linear lower bound unchanged): commit `d7a2668`
+  already carried the fix — wait, no: `d7a2668` was the fix commit; run
+  45570873357 on it passed Package tests + coverage-check, then was
+  **cancelled** mid golden-replays (no failure, no log tail — runner
+  reaped).
+- Run 45589664158 (e4da11d retrigger): passed Package tests,
+  coverage-check, conformance, validate, schema, sim N=200, fuzz-quick,
+  gen+build — failed only on the **iPad UI-test leg**:
+  `DevPlayUITests.testPlaysOneFullDealOfEachGame` hit "Timed out while
+  launching application via Xcode" (cold app launch > XCUIApplication's
+  ~60 s ceiling under co-tenancy; the same test passed in 130 s on run
+  45300519846). `XCUIApplication.launch()` is non-throwing, so the retry
+  cannot live in Swift — fixed at the Makefile layer by ADR-0041:
+  `make test-apps` legs now run through `Tools/xcodebuild-retry.sh`
+  (retry once iff the log contains the launch-timeout marker), commit
+  `b450782`.
+- Learning: three distinct infra-flake classes on macos-latest runners so
+  far — (1) co-tenancy inflating perf-ratio measurements (ADR-0040,
+  ADR-0040a), (2) runs cancelled without a failure (retrigger on empty
+  commit), (3) cold-launch timeouts on the UI legs (ADR-0041). Each fix
+  is scoped to its symptom; no acceptance criterion was loosened except
+  the CI-only superlinear perf ceiling, which still fails a genuinely
+  O(n²) parser.
+
 ## G3 — automated checks PASSED (2026-11-23, commit 6fa7f41, branch phase/P3-first-four-games)
 
 **`make gate PHASE=P3` → exit 0, 38.7 min** (22:35–23:13; log
