@@ -1143,3 +1143,22 @@ MAHLER`.
 - Next: watch CI on this fix; when green, the G3 🛑 stop stands —
   awaiting `REVIEW: CLAUDE`, `REVIEW: GROK`, `REVIEW: MAHLER` in this
   file.
+
+## G3 review package final (2026-11-25, head cfdba78) — 🛑 STOP: awaiting three sign-offs
+
+- P3.8 deliverables are in place and refreshed to the CI-verified state:
+  `docs/HANDOFF.md` (full CONVENTIONS §10, head `f91a63d`, CI green at
+  `7994ece` — run 45654745210) and `docs/reviews/G3-REQUEST.md` (how to
+  run, per-reviewer checklists, known gaps, the full rule-default list;
+  notes that commits after `4245dfe` are test-measurement/CI/docs only).
+- Self-check of the request's commands: `make bootstrap`, `make lint`,
+  `make validate`, `make conformance`, `make rules-check`, `make sim
+  N=200`, `make gate PHASE=P3` — all run in this session's history (gate
+  exit 0 at 6fa7f41; lint/validate/conformance/rules-check/sim re-verified
+  after the CI fixes).
+- **G3 🛑 GLM STOP 1 is now in force.** No phase work until `docs/STATUS.md`
+  records `REVIEW: CLAUDE — PASS`, `REVIEW: GROK — PASS`, and
+  `REVIEW: MAHLER — PASS` (G3 needs CLAUDE + GROK + MAHLER; the G8 pair
+  comes later). A background CI watch on the docs-only push `cfdba78`
+  (run 45673920778) is running; a red docs-only run would be investigated
+  before Mahler is told to review.
