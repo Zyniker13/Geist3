@@ -1162,3 +1162,7 @@ MAHLER`.
   comes later). A background CI watch on the docs-only push `cfdba78`
   (run 45673920778) is running; a red docs-only run would be investigated
   before Mahler is told to review.
+- Docs-only pushes after `cfdba78` also re-ran CI and are green:
+  run 45675966753 at `69188fc` (the review-package-final STATUS commit) —
+  every step success, 2026-11-25 20:33 UTC. The branch tip is CI-verified;
+  the G3 stop stands.
